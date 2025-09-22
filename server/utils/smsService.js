@@ -30,14 +30,12 @@ function sanitizeNumericOriginator(originator) {
 // Resolve and sanitize the originator once so we know exactly what we send
 const RESOLVED_ORIGINATOR = sanitizeNumericOriginator(SMS_CONFIG.bulksms.fromNumber);
 
-// Enhanced configuration logging
+// Enhanced configuration logging (reduced for Railway)
 console.log('🔍 SMS Configuration Check:');
 console.log('  Provider:', SMS_CONFIG.provider);
 console.log('  Username:', SMS_CONFIG.bulksms.username ? '✅ Set' : '❌ NOT SET');
 console.log('  Password:', SMS_CONFIG.bulksms.password ? '✅ Set' : '❌ NOT SET');
 console.log('  From Number:', SMS_CONFIG.bulksms.fromNumber || '❌ NOT SET');
-console.log('  Sender Type: REPLIABLE (dashboard default)');
-console.log('  Reply Support: ✅ ENABLED via dashboard settings');
 
 if (SMS_CONFIG.bulksms.username && SMS_CONFIG.bulksms.password) {
   bulksmsConfigured = true;

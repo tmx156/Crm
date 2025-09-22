@@ -219,9 +219,8 @@ async function findLeadByPhone(phone) {
     }
   }
 
-  console.log(`❌ SMS Phone Match TOTAL FAILURE: No lead found for phone "${phone}"`);
-  console.log(`   Tried ${variations.length} variations`);
-  console.log(`   🔧 This SMS will be skipped - consider adding lead or fixing phone format`);
+  // Reduced logging for Railway rate limits
+  console.log(`❌ SMS Phone Match FAILURE: No lead found for phone "${phone}" (tried ${variations.length} variations)`);
   return null;
 }
 
@@ -305,7 +304,8 @@ router.post('/webhook', async (req, res) => {
 
       // Skip messages from unknown senders (no matching lead)
       if (!lead) {
-        console.log(`📱 SMS Webhook: ❌ SKIPPING - No lead found for sender "${sender}"`);
+        // Reduced logging for Railway rate limits
+        console.log(`📱 SMS Webhook: SKIPPING - No lead found for sender "${sender}"`);
         console.log(`📱 SMS Webhook: Message "${text}" will NOT appear in CRM`);
         return res.status(200).json({ status: 'unknown_sender_skipped' });
       }
