@@ -1,0 +1,29 @@
+{
+  "watch": [
+    "*.js",
+    "routes/",
+    "models/",
+    "middleware/"
+  ],
+  "ignore": [
+    "node_modules/",
+    "uploads/",
+    "*.log",
+    "*.txt",
+    "*.csv",
+    "*.json",
+    ".git/",
+    "README.md"
+  ],
+  "ext": "js,json",
+  "delay": 2500,
+  "verbose": false,
+  "restartable": "rs",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "events": {
+    "restart": "echo '🔄 Server restarting due to file changes...'",
+    "crash": "echo '❌ Server crashed! Check logs for details.'"
+  }
+} 

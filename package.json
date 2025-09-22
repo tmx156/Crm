@@ -1,0 +1,31 @@
+{
+  "name": "modelling-studio-crm",
+  "version": "1.0.0",
+  "description": "Complete CRM system for modelling portfolio studio",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-deps": "cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": [
+    "crm",
+    "modelling",
+    "portfolio",
+    "studio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "axios": "^1.10.0",
+    "bcryptjs": "^3.0.2",
+    "ngrok": "^5.0.0-beta.2",
+    "node-fetch": "^3.3.2",
+    "sharp": "^0.34.3"
+  }
+}
