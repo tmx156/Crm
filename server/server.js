@@ -33,7 +33,7 @@ process.env.JWT_SECRET = config.JWT_SECRET;
 // Database configuration - Now using centralized config
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(config.supabase.url, config.supabase.anonKey);
-console.log('✅ Supabase client initialized using centralized config');
+// console.log('✅ Supabase client initialized using centralized config');
 
 const authRoutes = require('./routes/auth-simple');
 const leadRoutes = require('./routes/leads');

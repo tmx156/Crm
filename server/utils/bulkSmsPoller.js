@@ -8,6 +8,7 @@ const config = require('../config');
 // Simple BulkSMS reply poller that periodically fetches recent messages
 // and forwards new inbound (MO) items into our unified webhook so that
 // storage, booking_history and realtime events are handled centrally.
+// LOGGING DISABLED FOR RAILWAY RATE LIMITS
 
 let pollingTimer = null;
 let lastProcessedIso = null; // ISO timestamp cutoff
@@ -31,9 +32,9 @@ function loadProcessedMessages() {
       if (data.processedIds && Array.isArray(data.processedIds)) {
         data.processedIds.forEach(id => processedIds.add(id));
       }
-      console.log(`📂 SMS Poller: Loaded ${processedIds.size} processed message IDs, last processed: ${lastProcessedIso}`);
+      // console.log(`📂 SMS Poller: Loaded ${processedIds.size} processed message IDs, last processed: ${lastProcessedIso}`);
     } else {
-      console.log('📂 SMS Poller: No existing processed messages file found, starting fresh');
+      // console.log('📂 SMS Poller: No existing processed messages file found, starting fresh');
     }
   } catch (error) {
     console.error('❌ Failed to load processed messages:', error.message);
@@ -70,7 +71,7 @@ function cleanupOldProcessedIds() {
   }
   
   if (removedCount > 0) {
-    console.log(`🧹 SMS Poller: Cleaned up ${removedCount} old processed message IDs`);
+    // console.log(`🧹 SMS Poller: Cleaned up ${removedCount} old processed message IDs`);
     saveProcessedMessages();
   }
 }
@@ -121,8 +122,8 @@ function getMessageId(msg) {
 function getMessageText(msg) {
   // Debug: log the message structure to see what fields are available
   if (msg && !msg._logged) {
-    console.log('🔍 BulkSMS message structure:', Object.keys(msg));
-    console.log('🔍 BulkSMS message sample:', JSON.stringify(msg, null, 2));
+    // console.log('🔍 BulkSMS message structure:', Object.keys(msg));
+    // console.log('🔍 BulkSMS message sample:', JSON.stringify(msg, null, 2));
     msg._logged = true; // Only log once per message
   }
 
@@ -218,7 +219,7 @@ async function pollOnce() {
         // Save processed messages after each successful processing
         saveProcessedMessages();
         
-        console.log(`✅ BulkSMS poller ingested SMS from ${getSender(item)} via ${url}`);
+        // console.log(`✅ BulkSMS poller ingested SMS from ${getSender(item)} via ${url}`);
       } catch (err) {
         console.error('❌ BulkSMS poller webhook forward failed:', err?.message || err);
       }
@@ -234,7 +235,7 @@ function startBulkSmsPolling() {
   if (pollingTimer) return; // already running
   const enabled = config.sms.pollEnabled;
   if (!enabled) {
-    console.log('⏸️ BulkSMS polling disabled');
+    // console.log('⏸️ BulkSMS polling disabled');
     return;
   }
   
@@ -245,8 +246,8 @@ function startBulkSmsPolling() {
   cleanupOldProcessedIds();
   
   const intervalMs = config.sms.pollInterval;
-  console.log(`🚀 Starting BulkSMS reply poller (every ${Math.round(intervalMs / 1000)}s)`);
-  console.log(`📊 SMS Poller: Will skip ${processedIds.size} previously processed messages`);
+  // console.log(`🚀 Starting BulkSMS reply poller (every ${Math.round(intervalMs / 1000)}s)`);
+  // console.log(`📊 SMS Poller: Will skip ${processedIds.size} previously processed messages`);
   
   // Initial fetch
   pollOnce();
@@ -257,7 +258,7 @@ function stopBulkSmsPolling() {
   if (pollingTimer) {
     clearInterval(pollingTimer);
     pollingTimer = null;
-    console.log('🛑 BulkSMS reply poller stopped');
+    // console.log('🛑 BulkSMS reply poller stopped');
   }
 }
 
