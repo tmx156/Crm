@@ -288,13 +288,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start email poller after socket is initialized
-try {
-  const { setupEmailPoller } = require('./email-poller-setup');
-  setupEmailPoller(io);
-} catch (e) {
-  console.error('❌ Failed to start email poller:', e?.message || e);
-}
+// Email poller setup removed during cleanup
 
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
