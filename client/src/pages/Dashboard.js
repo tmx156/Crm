@@ -146,7 +146,7 @@ const Dashboard = () => {
 
   const fetchRecentMessages = async () => {
     try {
-      const response = await axios.get('/api/messages', {
+      const response = await axios.get('/api/messages-list', {
         params: { limit: 5 }
       });
       
@@ -334,7 +334,7 @@ const Dashboard = () => {
       }
 
       // Get today's messages count
-      const messagesResponse = await axios.get('/api/messages');
+      const messagesResponse = await axios.get('/api/messages-list');
       const todayMessages = (messagesResponse.data || []).filter(message => 
         message.created_at?.startsWith(today)
       );
@@ -536,8 +536,8 @@ const Dashboard = () => {
                   <h2 className="text-xl font-semibold text-gray-900">Recent Sales</h2>
                   <span className="bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">
                     {dashboardData.recentSales.length}
-                    </span>
-                  </div>
+                  </span>
+                </div>
                 {expandedSections.sales ? (
                   <FiChevronUp className="h-5 w-5 text-gray-400" />
                 ) : (
@@ -793,8 +793,8 @@ const Dashboard = () => {
                   )}
                 </div>
               )}
-            </div>
-          )}
+          </div>
+        )}
 
           {/* Charts Section */}
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -808,7 +808,7 @@ const Dashboard = () => {
                 <span className="bg-emerald-100 text-emerald-800 text-sm font-medium px-2 py-1 rounded-full">
                   4 charts
                 </span>
-              </div>
+          </div>
               {expandedSections.charts ? (
                 <FiChevronUp className="h-5 w-5 text-gray-400" />
               ) : (

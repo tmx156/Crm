@@ -7,10 +7,9 @@ const MessagingService = require('../utils/messagingService');
 const dbManager = require('../database-connection-manager');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase
-const supabaseUrl = process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase using centralized config
+const config = require('../config');
+const supabase = createClient(config.supabase.url, config.supabase.anonKey);
 
 // Import SMS service for sending
 const { sendSMS } = require('../utils/smsService');

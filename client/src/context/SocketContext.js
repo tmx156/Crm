@@ -29,7 +29,9 @@ export const SocketProvider = ({ children }) => {
       isConnectingRef.current = true;
       
       // Enhanced WebSocket connection configuration
-      const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+      const serverUrl = process.env.NODE_ENV === 'production' 
+        ? window.location.origin 
+        : 'http://localhost:5000';
       console.log('🔌 Connecting to WebSocket server:', serverUrl);
       
       const newSocket = io(serverUrl, {
