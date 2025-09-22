@@ -5,7 +5,8 @@ const multer = require('multer');
 const { auth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
 const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const config = require('../config');
+const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
 const router = express.Router();
 
