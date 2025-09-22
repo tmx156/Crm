@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Configure axios base URL
 axios.defaults.baseURL = process.env.NODE_ENV === 'production' 
-  ? '/api' 
+  ? '' 
   : 'http://localhost:5000';
 
 const AuthContext = createContext();
