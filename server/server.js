@@ -299,8 +299,19 @@ try {
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
 
-// Security middleware
-app.use(helmet());
+// Security middleware with relaxed CSP for API connections
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", "https://*.railway.app", "https://*.supabase.co", "wss://*.railway.app"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "data:"],
+    },
+  },
+}));
 
 // Rate limiting with proper configuration - more lenient for retry scenarios
 const limiter = rateLimit({
