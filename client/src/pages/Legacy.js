@@ -16,6 +16,7 @@ const Legacy = () => {
   const [searchType, setSearchType] = useState('all');
   const [showStats, setShowStats] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     fetchLegacyStats();
@@ -390,12 +391,12 @@ const Legacy = () => {
               {/* Table Header */}
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <div className="col-span-1">Photo</div>
                   <div className="col-span-3">Name</div>
                   <div className="col-span-3">Contact</div>
                   <div className="col-span-2">Location</div>
                   <div className="col-span-1">Age</div>
                   <div className="col-span-2">Quality</div>
-                  <div className="col-span-1">Image</div>
                 </div>
               </div>
 
@@ -439,6 +440,31 @@ const Legacy = () => {
                   legacyLeads.map((lead) => (
                     <li key={lead.id} className="px-6 py-4 hover:bg-gray-50">
                       <div className="grid grid-cols-12 gap-4 items-center">
+                        {/* Photo Thumbnail */}
+                        <div className="col-span-1">
+                          {lead.image_url ? (
+                            <div className="relative">
+                              <img
+                                src={lead.image_url}
+                                alt={lead.name || 'Lead photo'}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                                onClick={() => setSelectedImage({ url: lead.image_url, name: lead.name })}
+                              />
+                              <div className="w-12 h-12 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center hidden">
+                                <FiImage className="h-5 w-5 text-gray-400" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+                              <FiImage className="h-5 w-5 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+
                         {/* Name */}
                         <div className="col-span-3">
                           <div className="text-sm font-medium text-gray-900 truncate">
@@ -495,17 +521,6 @@ const Legacy = () => {
                           </div>
                         </div>
 
-                        {/* Image */}
-                        <div className="col-span-1">
-                          {lead.image_url ? (
-                            <div className="flex items-center">
-                              <FiImage className="h-4 w-4 text-green-500" />
-                              <span className="ml-1 text-xs text-green-600">Yes</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">No</span>
-                          )}
-                        </div>
                       </div>
                     </li>
                   ))
@@ -565,6 +580,47 @@ const Legacy = () => {
           )}
         </div>
       </div>
+
+      {/* Image Preview Modal */}
+      {selectedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={() => setSelectedImage(null)}>
+          <div className="relative max-w-4xl max-h-full p-4">
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-2 right-2 text-white hover:text-gray-300 z-10"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="bg-white rounded-lg overflow-hidden shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="p-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {selectedImage.name || 'Lead Photo'}
+                </h3>
+              </div>
+              <div className="p-4">
+                <img
+                  src={selectedImage.url}
+                  alt={selectedImage.name || 'Lead photo'}
+                  className="max-w-full max-h-96 object-contain mx-auto"
+                  onError={(e) => {
+                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzZiNzI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBmb3VuZDwvdGV4dD48L3N2Zz4=';
+                  }}
+                />
+              </div>
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={() => window.open(selectedImage.url, '_blank')}
+                  className="text-blue-600 hover:text-blue-500 text-sm font-medium"
+                >
+                  Open in new tab
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
