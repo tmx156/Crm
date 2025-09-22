@@ -40,12 +40,9 @@ console.log('  From Number:', SMS_CONFIG.bulksms.fromNumber || '❌ NOT SET');
 if (SMS_CONFIG.bulksms.username && SMS_CONFIG.bulksms.password) {
   bulksmsConfigured = true;
   const originator = RESOLVED_ORIGINATOR || '(provider default)';
-  console.log('✅ BulkSMS client configured');
-  console.log(`📨 BulkSMS originator set to: ${originator}`);
+  console.log('✅ BulkSMS configured');
 } else {
-  console.warn('⚠️ BulkSMS credentials not fully configured.');
-  console.warn('   Please set BULKSMS_USERNAME and BULKSMS_PASSWORD environment variables.');
-  console.warn('   SMS sending will be DISABLED until credentials are provided.');
+  console.warn('⚠️ BulkSMS credentials not configured - SMS disabled');
 }
 
 /**

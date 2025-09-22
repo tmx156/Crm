@@ -1,7 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 console.log('📧 Email Service: Initializing...');
-console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
-console.log('📧 EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '[HIDDEN]' : 'undefined');
+console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
 const nodemailer = require('nodemailer');
 
 // Create a simple SMTP transporter for Gmail
@@ -24,7 +23,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // Log when the transporter is created
-console.log('📧 Email transporter created with service: gmail');
+console.log('📧 Email transporter ready');
 
 // Verify connection configuration
 transporter.verify(function(error, success) {
