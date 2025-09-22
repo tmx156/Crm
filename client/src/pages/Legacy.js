@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { FiArchive, FiSearch, FiDownload, FiUpload, FiEye, FiBarChart, FiDatabase, FiUsers, FiImage, FiMail, FiPhone } from 'react-icons/fi';
@@ -15,11 +15,24 @@ const Legacy = () => {
   const [pagination, setPagination] = useState(null);
   const [searchType, setSearchType] = useState('all');
   const [showStats, setShowStats] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     fetchLegacyStats();
     fetchLegacyLeads();
   }, [currentPage]);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      const timeoutId = setTimeout(() => {
+        setSearchLoading(true);
+        fetchLegacyLeads();
+      }, 500); // 500ms delay
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [searchTerm]);
 
   const fetchLegacyStats = async () => {
     try {
@@ -33,20 +46,24 @@ const Legacy = () => {
   const fetchLegacyLeads = async () => {
     try {
       setLoading(true);
+      setError('');
       let url = `/api/legacy/leads?page=${currentPage}&limit=50`;
 
       if (searchTerm.trim()) {
         url += `&search=${encodeURIComponent(searchTerm.trim())}`;
       }
 
+      console.log('🔍 Fetching legacy leads:', url);
       const response = await axios.get(url);
       setLegacyLeads(response.data.leads || []);
       setPagination(response.data.pagination);
+      console.log('✅ Legacy leads fetched:', response.data.leads?.length || 0);
     } catch (error) {
-      console.error('Error fetching legacy leads:', error);
-      setError('Failed to fetch legacy data');
+      console.error('❌ Error fetching legacy leads:', error);
+      setError('Failed to fetch legacy data: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
+      setSearchLoading(false);
     }
   };
 
@@ -294,15 +311,24 @@ const Legacy = () => {
                     type="search"
                     value={searchTerm}
                     onChange={handleSearch}
+                    disabled={searchLoading}
                   />
                 </div>
               </div>
               <div className="ml-4 flex items-center space-x-4">
                 <button
                   type="submit"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={searchLoading}
                 >
-                  Search
+                  {searchLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Searching...
+                    </>
+                  ) : (
+                    'Search'
+                  )}
                 </button>
                 {searchTerm && (
                   <button
@@ -321,6 +347,23 @@ const Legacy = () => {
             </form>
           </div>
         </div>
+
+        {/* Search Results Info */}
+        {searchTerm && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+            <div className="flex items-center">
+              <FiSearch className="h-5 w-5 text-blue-500 mr-2" />
+              <span className="text-sm text-blue-700">
+                {searchLoading ? 'Searching...' : `Search results for "${searchTerm}"`}
+              </span>
+              {!searchLoading && pagination && (
+                <span className="ml-2 text-sm text-blue-600">
+                  ({pagination.total_records} found)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Legacy Leads Table */}
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
@@ -361,10 +404,36 @@ const Legacy = () => {
                 {legacyLeads.length === 0 ? (
                   <li className="px-6 py-12 text-center">
                     <FiArchive className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No legacy leads found</h3>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">
+                      {searchTerm ? 'No results found' : 'No legacy leads found'}
+                    </h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      {searchTerm ? 'Try adjusting your search terms.' : 'No legacy data has been imported yet.'}
+                      {searchTerm ? (
+                        <>
+                          No legacy leads match "{searchTerm}". Try:
+                          <br />
+                          • Different spelling or keywords
+                          <br />
+                          • Searching by email, phone, or postcode
+                          <br />
+                          • Clearing the search to see all leads
+                        </>
+                      ) : (
+                        'No legacy data has been imported yet.'
+                      )}
                     </p>
+                    {searchTerm && (
+                      <button
+                        onClick={() => {
+                          setSearchTerm('');
+                          setCurrentPage(1);
+                          fetchLegacyLeads();
+                        }}
+                        className="mt-4 text-blue-600 hover:text-blue-500 text-sm"
+                      >
+                        Clear search
+                      </button>
+                    )}
                   </li>
                 ) : (
                   legacyLeads.map((lead) => (

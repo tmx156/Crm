@@ -40,8 +40,13 @@ router.get('/leads', auth, async (req, res) => {
     }
 
     if (req.query.search) {
-      // Search in name, email, phone
-      query = query.or(`name.ilike.%${req.query.search}%,email.ilike.%${req.query.search}%,phone.ilike.%${req.query.search}%`);
+      const searchTerm = req.query.search.trim();
+      if (searchTerm.length > 0) {
+        // Search in name, email, phone, postcode
+        const searchPattern = `%${searchTerm}%`;
+        query = query.or(`name.ilike.${searchPattern},email.ilike.${searchPattern},phone.ilike.${searchPattern},postcode.ilike.${searchPattern}`);
+        console.log(`🔍 Legacy search applied: "${searchTerm}"`);
+      }
     }
 
     if (req.query.has_image === 'true') {
@@ -55,7 +60,12 @@ router.get('/leads', auth, async (req, res) => {
 
     if (error) {
       console.error('❌ Legacy leads fetch error:', error);
-      return res.status(500).json({ message: 'Failed to fetch legacy leads' });
+      console.error('❌ Query details:', { page, limit, search: req.query.search });
+      return res.status(500).json({ 
+        message: 'Failed to fetch legacy leads',
+        error: error.message,
+        details: 'Check server logs for more information'
+      });
     }
 
     // Calculate pagination info
@@ -173,7 +183,11 @@ router.get('/stats', auth, async (req, res) => {
       stats.data_completeness[key] = Math.round((stats.data_completeness[key] / sampleSize) * 100);
     });
 
-    console.log('✅ Legacy statistics calculated');
+    console.log('✅ Legacy statistics calculated:', {
+      total_leads: stats.total_leads,
+      sample_size: sampleSize,
+      completeness: stats.data_completeness
+    });
     res.json(stats);
 
   } catch (error) {
