@@ -6,8 +6,14 @@ const { createClient } = require('@supabase/supabase-js');
 // Import centralized configuration
 const config = require('../config');
 
-// Use centralized Supabase configuration
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+// Use centralized Supabase configuration with service role key for auth operations
+const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
+
+// Debug: Log configuration status
+console.log('🔐 Auth Route Configuration:');
+console.log('SUPABASE_URL:', config.supabase.url ? '✅ Set' : '❌ NOT SET');
+console.log('SUPABASE_SERVICE_ROLE_KEY:', config.supabase.serviceRoleKey ? '✅ Set' : '❌ NOT SET');
+console.log('SUPABASE_ANON_KEY:', config.supabase.anonKey ? '✅ Set' : '❌ NOT SET');
 
 const router = express.Router();
 
