@@ -51,6 +51,7 @@ const uploadRoutes = require('./routes/upload');
 const smsRoutes = require('./routes/sms');
 const legacyRoutes = require('./routes/legacy');
 const bookerAnalyticsRoutes = require('./routes/booker-analytics');
+const emailTestRoutes = require('./routes/email-test');
 // TEMPORARILY DISABLED: const scheduler = require('./utils/scheduler');
 const { startEmailPoller } = require('./utils/emailPoller');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
