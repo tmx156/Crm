@@ -6,19 +6,20 @@ const { auth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
+const supabaseStorage = require('../utils/supabaseStorage');
 const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
 const router = express.Router();
 
-// Setup uploads folder for template attachments
-const attachmentsDir = path.join(__dirname, '..', 'uploads', 'template_attachments');
-if (!fs.existsSync(attachmentsDir)) {
-  fs.mkdirSync(attachmentsDir, { recursive: true });
+// Setup temporary uploads folder for template attachments (will be uploaded to Supabase)
+const tempAttachmentsDir = path.join(__dirname, '..', 'uploads', 'temp_attachments');
+if (!fs.existsSync(tempAttachmentsDir)) {
+  fs.mkdirSync(tempAttachmentsDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, attachmentsDir);
+    cb(null, tempAttachmentsDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -35,16 +36,57 @@ router.post('/:id/attachments', auth, upload.single('file'), async (req, res) =>
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
-    const fileUrl = `/uploads/template_attachments/${req.file.filename}`;
+
+    console.log('📎 Uploading template attachment:', {
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
+    // Upload to Supabase Storage
+    const uploadResult = await supabaseStorage.uploadFile(
+      req.file.path,
+      req.file.filename,
+      req.file.mimetype
+    );
+
+    if (!uploadResult.success) {
+      console.error('❌ Failed to upload to Supabase Storage:', uploadResult.error);
+      return res.status(500).json({ 
+        message: 'Failed to upload file to storage',
+        error: uploadResult.error
+      });
+    }
+
+    // Clean up temporary file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      console.warn('⚠️ Failed to clean up temporary file:', cleanupError.message);
+    }
+
+    console.log('✅ Template attachment uploaded successfully:', uploadResult.url);
+
     return res.json({
       filename: req.file.filename,
       originalName: req.file.originalname,
-      url: fileUrl,
+      url: uploadResult.url,
       mimetype: req.file.mimetype,
       size: req.file.size
     });
   } catch (error) {
-    console.error('Error uploading attachment:', error);
+    console.error('❌ Error uploading attachment:', error);
+    
+    // Clean up temporary file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.warn('⚠️ Failed to clean up temporary file on error:', cleanupError.message);
+      }
+    }
+    
     res.status(500).json({ message: 'Server error' });
   }
 });
