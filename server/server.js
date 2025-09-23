@@ -417,6 +417,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/legacy', legacyRoutes);
 app.use('/api/booker-analytics', bookerAnalyticsRoutes);
+app.use('/api/email-test', emailTestRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
 // --- Lightweight short link storage for long booking confirmations ---
