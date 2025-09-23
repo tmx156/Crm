@@ -33,14 +33,9 @@ const transporter = nodemailer.createTransport({
 // Log when the transporter is created
 console.log('📧 Email transporter ready');
 
-// Verify connection configuration
-transporter.verify(function(error, success) {
-  if (error) {
-    console.error('❌ Email transporter verification failed:', error);
-  } else {
-    console.log('✅ Email transporter is ready to send messages');
-  }
-});
+// Skip automatic verification to prevent startup timeouts
+// Verification will happen during actual email sending
+console.log('✅ Email transporter created (verification skipped for Railway compatibility)');
 
 /**
  * Send an email using Gmail
@@ -139,6 +134,15 @@ async function sendEmail(to, subject, text, attachments = []) {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           console.log(`📧 [${emailId}] ${config.name} - Attempt ${attempt}/${maxRetries} - Sending email via Railway Pro SMTP...`);
+          
+          // Test connection first (Railway-compatible verification)
+          try {
+            await testTransporter.verify();
+            console.log(`📧 [${emailId}] ${config.name} - Connection verified`);
+          } catch (verifyError) {
+            console.log(`📧 [${emailId}] ${config.name} - Connection verification failed: ${verifyError.message}`);
+            // Continue anyway - sometimes verification fails but sending works
+          }
           
           // Send the email
           const info = await testTransporter.sendMail(mailOptions);
