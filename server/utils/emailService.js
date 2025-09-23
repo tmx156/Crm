@@ -3,32 +3,31 @@ console.log('📧 Email Service: Initializing...');
 console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
 const nodemailer = require('nodemailer');
 
-// Create SMTP transporter optimized for Railway deployment
+// Create SMTP transporter optimized for Railway Pro deployment
 const transporter = nodemailer.createTransport({
-  // Use explicit SMTP configuration instead of 'gmail' service for better Railway compatibility
+  // Try port 465 with SSL first (more reliable on Railway Pro)
   host: 'smtp.gmail.com',
-  port: 587, // Use port 587 with STARTTLS for Railway compatibility
-  secure: false, // false for port 587, true for port 465
+  port: 465, // Use port 465 with SSL for Railway Pro compatibility
+  secure: true, // true for port 465, false for port 587
   auth: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
     pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS
   },
   logger: false, // Disable verbose logging for better performance
   debug: false,  // Disable debug mode to speed up email sending
-  requireTLS: true, // Require TLS encryption
-  connectionTimeout: 30000, // 30 seconds - Railway optimized
-  greetingTimeout: 15000,   // 15 seconds - Railway optimized
-  socketTimeout: 30000,    // 30 seconds - Railway optimized
+  connectionTimeout: 60000, // 60 seconds - increased for Railway Pro
+  greetingTimeout: 30000,   // 30 seconds - increased for Railway Pro
+  socketTimeout: 60000,    // 60 seconds - increased for Railway Pro
   tls: {
     rejectUnauthorized: false, // Allow self-signed certificates
-    ciphers: 'SSLv3' // Use SSLv3 for Railway compatibility
+    ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA' // Modern cipher suite
   },
-  // Railway-optimized connection settings
-  pool: false, // Disable connection pooling for Railway
-  maxConnections: 1, // Single connection for Railway
-  maxMessages: 1, // One message per connection for Railway
-  rateDelta: 1000, // Faster rate limiting for Railway
-  rateLimit: 1 // One message per second for Railway
+  // Railway Pro optimized settings
+  pool: true, // Enable connection pooling for Railway Pro
+  maxConnections: 3, // Multiple connections for Railway Pro
+  maxMessages: 50, // More messages per connection for Railway Pro
+  rateDelta: 10000, // 10 second rate limiting
+  rateLimit: 10 // 10 messages per 10 seconds for Railway Pro
 });
 
 // Log when the transporter is created
@@ -101,47 +100,87 @@ async function sendEmail(to, subject, text, attachments = []) {
       }
     };
 
-    // Railway-optimized retry logic for email sending
-    const maxRetries = 5; // Increased retries for Railway
+    // Railway Pro retry logic with port fallback
+    const maxRetries = 3; // Reduced retries since we'll try different ports
     let lastError;
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`📧 [${emailId}] Attempt ${attempt}/${maxRetries} - Sending email via Railway SMTP...`);
-        
-        // Send the email
-        const info = await transporter.sendMail(mailOptions);
-        
-        console.log(`✅ [${emailId}] Email sent successfully - ID: ${info.messageId}`);
-        
-        return { 
-          success: true, 
-          response: info.response,
-          messageId: info.messageId
-        };
-        
-      } catch (error) {
-        lastError = error;
-        console.warn(`⚠️ [${emailId}] Attempt ${attempt} failed: ${error.message} (Code: ${error.code})`);
-        
-        // Don't retry for certain errors
-        if (error.code === 'EAUTH' || error.code === 'EENVELOPE' || error.code === 'EINVAL') {
-          console.error(`❌ [${emailId}] Authentication, envelope, or invalid error - not retrying`);
-          break;
-        }
-        
-        // Special handling for Railway network issues
-        if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ENOTFOUND') {
-          console.log(`📧 [${emailId}] Railway network issue detected - will retry`);
-        }
-        
-        // Wait before retrying (Railway-optimized backoff)
-        if (attempt < maxRetries) {
-          const waitTime = Math.min(2000 * attempt, 15000); // Railway-optimized: 2s, 4s, 6s, 8s, max 15s
-          console.log(`📧 [${emailId}] Waiting ${waitTime}ms before retry (Railway network optimization)...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+    // Try port 465 first (SSL), then fallback to port 587 (STARTTLS)
+    const portConfigs = [
+      { port: 465, secure: true, name: 'SSL (465)' },
+      { port: 587, secure: false, name: 'STARTTLS (587)' }
+    ];
+    
+    for (const config of portConfigs) {
+      console.log(`📧 [${emailId}] Trying ${config.name} configuration...`);
+      
+      // Create transporter with current port configuration
+      const testTransporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: config.port,
+        secure: config.secure,
+        auth: {
+          user: process.env.EMAIL_USER || process.env.GMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS
+        },
+        logger: false,
+        debug: false,
+        connectionTimeout: 60000,
+        greetingTimeout: 30000,
+        socketTimeout: 60000,
+        tls: {
+          rejectUnauthorized: false,
+          ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
+        },
+        pool: false, // Disable pooling for testing
+        maxConnections: 1,
+        maxMessages: 1
+      });
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`📧 [${emailId}] ${config.name} - Attempt ${attempt}/${maxRetries} - Sending email via Railway Pro SMTP...`);
+          
+          // Send the email
+          const info = await testTransporter.sendMail(mailOptions);
+          
+          console.log(`✅ [${emailId}] Email sent successfully via ${config.name} - ID: ${info.messageId}`);
+          
+          return { 
+            success: true, 
+            response: info.response,
+            messageId: info.messageId,
+            port: config.port
+          };
+          
+        } catch (error) {
+          lastError = error;
+          console.warn(`⚠️ [${emailId}] ${config.name} - Attempt ${attempt} failed: ${error.message} (Code: ${error.code})`);
+          
+          // Don't retry for certain errors
+          if (error.code === 'EAUTH' || error.code === 'EENVELOPE' || error.code === 'EINVAL') {
+            console.error(`❌ [${emailId}] Authentication, envelope, or invalid error - not retrying ${config.name}`);
+            break;
+          }
+          
+          // Special handling for Railway network issues
+          if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ENOTFOUND') {
+            console.log(`📧 [${emailId}] Railway network issue detected on ${config.name} - will retry`);
+          }
+          
+          // Wait before retrying
+          if (attempt < maxRetries) {
+            const waitTime = Math.min(2000 * attempt, 10000);
+            console.log(`📧 [${emailId}] Waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
         }
       }
+      
+      // Close the test transporter
+      testTransporter.close();
+      
+      // If we get here, this port configuration failed, try the next one
+      console.log(`📧 [${emailId}] ${config.name} failed, trying next configuration...`);
     }
     
     // All retries failed
