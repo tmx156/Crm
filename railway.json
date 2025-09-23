@@ -8,5 +8,27 @@
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
     "numReplicas": 1
+  },
+  "networking": {
+    "outboundConnections": {
+      "allowed": [
+        {
+          "host": "smtp.gmail.com",
+          "ports": [465, 587]
+        },
+        {
+          "host": "imap.gmail.com", 
+          "ports": [993]
+        },
+        {
+          "host": "tnltvfzltdeilanxhlvy.supabase.co",
+          "ports": [443]
+        }
+      ]
+    }
+  },
+  "environment": {
+    "NODE_ENV": "production",
+    "NODE_OPTIONS": "--max-old-space-size=1024"
   }
 }
