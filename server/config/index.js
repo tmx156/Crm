@@ -36,7 +36,10 @@ const config = {
     user: process.env.EMAIL_USER || 'avensismodels.co.uk.crm.bookings@gmail.com',
     password: process.env.EMAIL_PASSWORD || 'gvfq hyue iyqg ryzj',
     gmailUser: process.env.GMAIL_USER || 'avensismodels.co.uk.crm.bookings@gmail.com',
-    gmailPass: process.env.GMAIL_PASS || 'gvfq hyue iyqg ryzj'
+    gmailPass: process.env.GMAIL_PASS || 'gvfq hyue iyqg ryzj',
+    // Resend API Configuration (Railway-compatible)
+    resendApiKey: process.env.RESEND_API_KEY || null,
+    resendFromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@avensismodels.co.uk'
   },
 
   // Client Configuration

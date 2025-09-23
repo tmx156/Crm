@@ -3,23 +3,32 @@ console.log('📧 Email Service: Initializing...');
 console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
 const nodemailer = require('nodemailer');
 
-// Create a simple SMTP transporter for Gmail
+// Create SMTP transporter optimized for Railway deployment
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  // Use explicit SMTP configuration instead of 'gmail' service for better Railway compatibility
+  host: 'smtp.gmail.com',
+  port: 587, // Use port 587 with STARTTLS for Railway compatibility
+  secure: false, // false for port 587, true for port 465
   auth: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
     pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS
   },
   logger: false, // Disable verbose logging for better performance
   debug: false,  // Disable debug mode to speed up email sending
-  secure: true,  // Use TLS
-  requireTLS: true,
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,   // 10 seconds
-  socketTimeout: 10000,    // 10 seconds
+  requireTLS: true, // Require TLS encryption
+  connectionTimeout: 30000, // 30 seconds - Railway optimized
+  greetingTimeout: 15000,   // 15 seconds - Railway optimized
+  socketTimeout: 30000,    // 30 seconds - Railway optimized
   tls: {
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false, // Allow self-signed certificates
+    ciphers: 'SSLv3' // Use SSLv3 for Railway compatibility
+  },
+  // Railway-optimized connection settings
+  pool: false, // Disable connection pooling for Railway
+  maxConnections: 1, // Single connection for Railway
+  maxMessages: 1, // One message per connection for Railway
+  rateDelta: 1000, // Faster rate limiting for Railway
+  rateLimit: 1 // One message per second for Railway
 });
 
 // Log when the transporter is created
@@ -92,20 +101,54 @@ async function sendEmail(to, subject, text, attachments = []) {
       }
     };
 
-    // Send the email
-    const info = await transporter.sendMail(mailOptions);
+    // Railway-optimized retry logic for email sending
+    const maxRetries = 5; // Increased retries for Railway
+    let lastError;
     
-    console.log(`✅ [${emailId}] Email sent successfully - ID: ${info.messageId}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📧 [${emailId}] Attempt ${attempt}/${maxRetries} - Sending email via Railway SMTP...`);
+        
+        // Send the email
+        const info = await transporter.sendMail(mailOptions);
+        
+        console.log(`✅ [${emailId}] Email sent successfully - ID: ${info.messageId}`);
+        
+        return { 
+          success: true, 
+          response: info.response,
+          messageId: info.messageId
+        };
+        
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ [${emailId}] Attempt ${attempt} failed: ${error.message} (Code: ${error.code})`);
+        
+        // Don't retry for certain errors
+        if (error.code === 'EAUTH' || error.code === 'EENVELOPE' || error.code === 'EINVAL') {
+          console.error(`❌ [${emailId}] Authentication, envelope, or invalid error - not retrying`);
+          break;
+        }
+        
+        // Special handling for Railway network issues
+        if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ENOTFOUND') {
+          console.log(`📧 [${emailId}] Railway network issue detected - will retry`);
+        }
+        
+        // Wait before retrying (Railway-optimized backoff)
+        if (attempt < maxRetries) {
+          const waitTime = Math.min(2000 * attempt, 15000); // Railway-optimized: 2s, 4s, 6s, 8s, max 15s
+          console.log(`📧 [${emailId}] Waiting ${waitTime}ms before retry (Railway network optimization)...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
     
-    return { 
-      success: true, 
-      response: info.response,
-      messageId: info.messageId
-    };
-    
+    // All retries failed
+    throw lastError;
 
   } catch (error) {
-    console.error(`❌ [${emailId}] Email send failed: ${error.message}`);
+    console.error(`❌ [${emailId}] Email send failed after all retries: ${error.message}`);
     
     return { 
       success: false, 

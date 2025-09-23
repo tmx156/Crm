@@ -24,6 +24,8 @@ process.env.EMAIL_USER = config.email.user;
 process.env.EMAIL_PASSWORD = config.email.password;
 process.env.GMAIL_USER = config.email.gmailUser;
 process.env.GMAIL_PASS = config.email.gmailPass;
+process.env.RESEND_API_KEY = config.email.resendApiKey;
+process.env.RESEND_FROM_EMAIL = config.email.resendFromEmail;
 
 // Set environment variables programmatically (backward compatibility)
 process.env.SUPABASE_URL = config.supabase.url;

@@ -16,7 +16,15 @@ class FinanceReminderService {
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASSWORD
-        }
+        },
+        connectionTimeout: 60000, // 60 seconds - increased for Gmail
+        greetingTimeout: 30000,   // 30 seconds - increased for Gmail
+        socketTimeout: 60000,    // 60 seconds - increased for Gmail
+        pool: true, // Use connection pooling
+        maxConnections: 5, // Maximum number of connections
+        maxMessages: 100, // Maximum messages per connection
+        rateDelta: 20000, // Rate limiting
+        rateLimit: 5 // Maximum messages per rateDelta
       });
       console.log('✅ Finance reminder email service initialized');
     } catch (error) {
