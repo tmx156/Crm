@@ -31,8 +31,8 @@ const app = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-domain.vercel.app'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? true // Allow all origins in production (Vercel will set proper headers)
     : true,
   credentials: true
 }));

@@ -8,8 +8,8 @@
     "server": "cd server && npm run dev",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
-    "install-deps": "cd server && npm install && cd ../client && npm install",
-    "vercel-build": "cd client && npm run build",
+    "install-deps": "npm install && cd server && npm install && cd ../client && npm install",
+    "vercel-build": "echo 'Building client...' && cd client && npm run build && echo 'Build completed'",
     "start": "cd server && npm start"
   },
   "keywords": [

@@ -18,19 +18,19 @@ const transporter = nodemailer.createTransport({
   },
   logger: false, // Disable verbose logging for better performance
   debug: false,  // Disable debug mode to speed up email sending
-  connectionTimeout: 60000, // 60 seconds - increased for Railway Pro
-  greetingTimeout: 30000,   // 30 seconds - increased for Railway Pro
-  socketTimeout: 60000,    // 60 seconds - increased for Railway Pro
+  connectionTimeout: 30000, // 30 seconds - suitable for serverless
+  greetingTimeout: 15000,   // 15 seconds - suitable for serverless
+  socketTimeout: 30000,    // 30 seconds - suitable for serverless
   tls: {
     rejectUnauthorized: false, // Allow self-signed certificates
     ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA' // Modern cipher suite
   },
-  // Railway Pro optimized settings
-  pool: true, // Enable connection pooling for Railway Pro
-  maxConnections: 3, // Multiple connections for Railway Pro
-  maxMessages: 50, // More messages per connection for Railway Pro
-  rateDelta: 10000, // 10 second rate limiting
-  rateLimit: 10 // 10 messages per 10 seconds for Railway Pro
+  // Serverless optimized settings
+  pool: false, // Disable connection pooling for serverless
+  maxConnections: 1, // Single connection for serverless
+  maxMessages: 1, // One message per connection for serverless
+  rateDelta: 1000, // 1 second rate limiting
+  rateLimit: 1 // 1 message per second for serverless
 });
 
 // Log when the transporter is created
@@ -128,9 +128,9 @@ async function sendEmail(to, subject, text, attachments = []) {
         },
         logger: false,
         debug: false,
-        connectionTimeout: 60000,
-        greetingTimeout: 30000,
-        socketTimeout: 60000,
+        connectionTimeout: 30000,
+        greetingTimeout: 15000,
+        socketTimeout: 30000,
         tls: {
           rejectUnauthorized: false,
           ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
@@ -180,9 +180,9 @@ async function sendEmail(to, subject, text, attachments = []) {
             console.log(`📧 [${emailId}] Railway network issue detected on ${config.name} - will retry`);
           }
           
-          // Wait before retrying
+          // Wait before retrying (shorter for serverless)
           if (attempt < maxRetries) {
-            const waitTime = Math.min(2000 * attempt, 10000);
+            const waitTime = Math.min(1000 * attempt, 5000); // Max 5 seconds for serverless
             console.log(`📧 [${emailId}] Waiting ${waitTime}ms before retry...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
           }

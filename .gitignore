@@ -117,3 +117,4 @@ migration-*
 setup-*
 create-*
 fix-*
+.vercel
