@@ -1,0 +1,141 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp1453828ecs;
+        Wed, 24 Sep 2025 04:40:48 -0700 (PDT)
+X-Received: by 2002:a17:907:c99e:b0:b31:5c9e:7ad7 with SMTP id a640c23a62f3a-b315c9e7f53mr352955466b.40.1758714048081;
+        Wed, 24 Sep 2025 04:40:48 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758714048; cv=none;
+        d=google.com; s=arc-20240605;
+        b=hTZ7/AMLKRQyKPU0U8A6X04YK10JvhF9nbi/zrBZ7DLR1XqaInUwQmKXQYeCqYHB3R
+         Tu1jrkhTN8wr5C6rq0JJYqKBO+GFNCPNVyi+MgKbPHgBUeqRVRSSAs4kPlFTI0vOMmcB
+         0gvotoVFRVi7Ibj9sNtsNVDOXojl5CnDdMCgPg4onNwq6maR9+ilUVZZ2zSitMqM05He
+         3KcOIUOokQAjOaIyVU8yAnztjFMbTq841Tsz13kzpbGReeB/bRRNKN/nlzaZmD4eJSwS
+         2h3brNPCgnz5wYw9KbOSpMpIqZdquGudl6AUPvHw8FJpfEJDoJdFFWfnWtEQxe+4Prg+
+         0O5g==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:in-reply-to:references:message-id:date:subject:mime-version:from
+         :content-transfer-encoding:dkim-signature;
+        bh=6W1B0sPoRqGwUMajL9gUqxFBgRE8zHlu2cjQkWSOG4c=;
+        fh=y7h+yB7sjHZMVA/hkkfQy0c6b2dNmo20704lVdiqOb8=;
+        b=L/HNvdwi1z1X8C8X6sxEM19XDKvg9TWGFanA2mUwID5IuYfHwbtu751Jeka3rFJkmf
+         X5Bn28WKGLxiqgprxXUI7PJxrlLp8cLVqsI1aUPc6zPClDb7lXZR6fYpIaVMPLFpurnp
+         7r6rcyaxk6KYzrk888e2QDl3TNlgp6LKOx60FSCUnmyX2AuvuPmk4rUbYhg9XqgNktBm
+         brpJRZtng9JRccqlc5GAj2J3g8D1ysnBDn0FJ7Pk2x5A6tTJn8oVN8wq9xgPk6FVAspN
+         SP78YWNZLLvTiAPkSomxyxiIKw47N/PL4JF5aND3MfcZwxlfkrwWN4TPiTFE2bjS2JbW
+         A0Lg==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=AvejFKCb;
+       spf=pass (google.com: domain of carterdenise18@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=carterdenise18@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <carterdenise18@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id a640c23a62f3a-b3176094a71sor143435766b.2.2025.09.24.04.40.48
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (Google Transport Security);
+        Wed, 24 Sep 2025 04:40:48 -0700 (PDT)
+Received-SPF: pass (google.com: domain of carterdenise18@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=AvejFKCb;
+       spf=pass (google.com: domain of carterdenise18@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=carterdenise18@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1758714047; x=1759318847; dara=google.com;
+        h=to:in-reply-to:references:message-id:date:subject:mime-version:from
+         :content-transfer-encoding:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=6W1B0sPoRqGwUMajL9gUqxFBgRE8zHlu2cjQkWSOG4c=;
+        b=AvejFKCbMnb48elIkkiQRZ/ZPGb6woi+87AFMXxZnPjBcsPCae/nJM6ujY/xrq+fMQ
+         A5LKj2vQz4pQsfB5d66KDOqn0xE6vsEdOBmXAnkrC+46E75UVLwyO0PCi1xIJnNANhmo
+         4MAIeNxK0SEsale00MN+hu4CWDgHEIsieOclQOTlZkpNuo+UbeMQLzL8r2vZJMaCoAop
+         If6OeneJWJU01gd7niTBlUn6n1N5VRh1vcv0wqli5vIJoqqmc8p8nCh666Z8kpTeRU1R
+         91eXQt5A4Hiu7BrQj7qbIjJzzIV/xrcE+0NQkHTWAnAY9fQymNbgJsF/EuEZ2BZH0cu0
+         myWA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758714047; x=1759318847;
+        h=to:in-reply-to:references:message-id:date:subject:mime-version:from
+         :content-transfer-encoding:x-gm-message-state:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=6W1B0sPoRqGwUMajL9gUqxFBgRE8zHlu2cjQkWSOG4c=;
+        b=ajYMglwEYvnvs78fMxBgHe8x34yxTnAGtz/E/W38teuMPEyi4qVRt5MC9nXOABSHQj
+         DUYPf4Pqh4IJbesDXjQuGd8RPmsRsszj8B3UhlKZJinFj5NQWlN+3eN1ilXp63pcvMLn
+         fzk/ddFZNJVAIwpMFy6hNICLPDwOo09pJoHI9ccdBSPpKU6gUOpIWSonTXobtEkpU6W0
+         fXHuQdluWsR5LTMT/YZCBKvRykH0bf9e0Ao2EggwQEn45Ym/cXwUeIlX1HGiJZTD6wUV
+         kT8bEr6KEYQSAVQoEQrW/ORN/ja4BpCgM6t6K37mA52w0UJK7B/LtyNgVqCP7aJZGUOS
+         bo7w==
+X-Gm-Message-State: AOJu0YyIWZIeHJ7X8Yc7rEJ/Xp8QvQvjILLq2/mQJLHacDXtBa8flQYx
+	lPXt7ZFnOyo0D9kqxVUkL0XJQk2bo3yMUUMsuMBWQNZ8qzVmDBnKuvTppYxE+A==
+X-Gm-Gg: ASbGncuZXojmVrfAduNkuRnRX3rQyBZzuHd6bWn+1i7k7P907G4lmfks5LmGqulRCU8
+	8I6jgwd14N+tcov/pNCoi2qSBCySXg1NPxy+ycyc55JE3OLx/Tfx8wfP+6NhmgBXku3J7/tvcs+
+	zr4/5RDqRNol6cc4HA+6LHMGAQuX6eWj2HnPTp6omyCEtw/4nJ7z/SqdJYwntizxKBvS3CKrM5Z
+	bg6BadqfHarZuKNtVWNalR4YAVl82qN4oe8kPnLWq18KwjID+jwbWEv7wpcBL86b0yxhJ+K3G0V
+	0r3lz3CHVqlq9vYFAOZRyjVFi3kJ6Xe1O1QlU1mCag7uHDmBaHu+C68TNBzQNqQh62DOv61a9vt
+	E7fL00JirQCbuUcQY3i0SePbnGyZQyVOJjc5PPUwkjpCRcQ/zhPCLoj/w5TrffuB2qw==
+X-Google-Smtp-Source: AGHT+IHSlzXvgeCh6/SNN/j3g9GgTzUgj+gRmIiZu9RBYglz3vUfXm3oEIE3bdwLgToWXBWk24MwrQ==
+X-Received: by 2002:a17:907:1c19:b0:b07:c1df:875 with SMTP id a640c23a62f3a-b302c2033d3mr598881266b.56.1758714047288;
+        Wed, 24 Sep 2025 04:40:47 -0700 (PDT)
+Return-Path: <carterdenise18@gmail.com>
+Received: from smtpclient.apple (82-132-231-42.dab.02.net. [82.132.231.42])
+        by smtp.gmail.com with ESMTPSA id a640c23a62f3a-b2761cb52a2sm1082043666b.53.2025.09.24.04.40.46
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Wed, 24 Sep 2025 04:40:46 -0700 (PDT)
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+From: carterdenise18@gmail.com
+Mime-Version: 1.0 (1.0)
+Subject: Re: Booking Confirmation
+Date: Wed, 24 Sep 2025 12:40:35 +0100
+Message-Id: <2C7E4963-A70C-4752-81C1-E39C204B0C62@gmail.com>
+References: <25f4b627-5d2f-9b36-8ebf-05863a22c197@gmail.com>
+In-Reply-To: <25f4b627-5d2f-9b36-8ebf-05863a22c197@gmail.com>
+To: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+X-Mailer: iPhone Mail (22G100)
+
+Hi,=20
+
+I have just carried out some checks on Avensis and your reviews are poor, so=
+ I would like to cancel my appointment. Thank you for your time and trouble a=
+nd sorry for any inconvenience caused.=20
+
+Kind regards
+Denise=20
+Sent from my iPhone
+
+> On 24 Sep 2025, at 12:30, Avensismodels <avensismodels.co.uk.crm.bookings@=
+gmail.com> wrote:
+>=20
+> =EF=BB=BFClient: Denise Carter
+> Photoshoot Date: 04/10/2025
+> Photoshoot Time: 12:00:00
+> Studio Address: 60 Higher Ardwick, Manchester, M12 6DA
+>=20
+> Dear Denise Carter
+>=20
+> Avensis Models UK has confirmed your consultation assessment. This will be=
+ an exciting opportunity to see if you have model potential.
+>=20
+> Summary of your day with us,
+> When you arrive at the studio, you will be greeted by our in-house industr=
+y experts, who will guide you through your consultation. After which, our te=
+am of photographers will carry out your test shoot assessment. And finally, y=
+ou will be given your assessment feedback!
+>=20
+> What you will need to bring,
+> We require you to bring 3 outfits, ranging from smart-casual.
+> We also ask that you come photoshoot ready, with hair and make-up already d=
+one. We also require you to bring two forms of ID. For example, a driver's l=
+icence/provisional, passport, or bank card. This is to verify you are who yo=
+u say you are ( this also applies to parents of any children who have an app=
+ointment booked with us)
+>=20
+> If you have any more questions, please don't hesitate to contact us. If, f=
+or any reason, you need to reschedule/cancel your appointment, you will need=
+ to give us at least 72 hours' notice. However, this is not advised as you w=
+ill be added to our unreliable list.
+>=20
+> Applicants under the age of 18  must be accompanied by a parent
+>=20
+> https://www.avensismodels.co.uk/
+> <AvensismodelsWelcomePack.pdf>

@@ -1,0 +1,147 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp1117582ecs;
+        Tue, 23 Sep 2025 14:07:03 -0700 (PDT)
+X-Received: by 2002:a17:907:9446:b0:b09:2331:f150 with SMTP id a640c23a62f3a-b302726e485mr442325666b.16.1758661622797;
+        Tue, 23 Sep 2025 14:07:02 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758661622; cv=none;
+        d=google.com; s=arc-20240605;
+        b=DJyxdZpfZ0hN+R8jJNsWYBUfFPr8RwUt+wCYJbywXW1s0c90OIvjEk+TaIpPVxhrBI
+         LRRoLiFnzyiRcX1L9I1ZrkZiC+//D2ONpDhQ6bTad4p5fTvHt7GX/22GuY+ud6gkM8Q8
+         FK2LAParZa4FHML5jLkaBS8d0aTYfXMfID+40YtM4v01AjGDjBxZ/zdbaeJgizEAzEts
+         aIt4mByZ1HbGaFJjPJDoxCh9XQSPRc7gkxcGeNvlmuQI8tkciyaQgtaGRLiBWZ7xEJBz
+         BybcQ5iTDxv0Hrh3RVzje8AAOxcywPwjvfGm0JItPT96lS5TqlyULHRFBTRg4Tg86Slk
+         oPBg==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:mime-version:dkim-signature;
+        bh=iAUeSy1yllwBXW7BZPx0SQomV2pbefvpEb1MYbm85Kw=;
+        fh=XD0hVRmVPeMWhCW2cIWGAl2yIjFjST6ryt4PWd1EzRk=;
+        b=UlmADwBYnPefq9LVQhtkLw/qdKdNOu0z+UUNP/oGJdyh+u9ucyXkZHxqLpEGH763Ta
+         0vWvorQ3HcQr7iUBdUW4tv/RvxLjZqUzquiJr6lR/Yz5An2csG4O/eXpD8bTBqGtz5RO
+         8hwVt6oI0FVcEgW63jsUZFWdyG9hg8DYJDTV9cLndUVcgxpkw+Ke5PmlU1G3l0vbnwYW
+         zg5jSm7xUqRXHwaR5wKyV5F3KlNj0YyDFjrLsmpStY8GI9Y/oyHscpxfjTpTPDM6nCcS
+         HY34WEGot6vo+WN2m8lYOwrPWgIFAz31065xFKGcAnvNd3tWj7KAkZF4QmaWRsIVA56t
+         Fbww==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=TFVAXxIb;
+       spf=pass (google.com: domain of musabboono98716@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=musabboono98716@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <musabboono98716@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id a640c23a62f3a-b2f37168495sor184407766b.7.2025.09.23.14.07.02
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (Google Transport Security);
+        Tue, 23 Sep 2025 14:07:02 -0700 (PDT)
+Received-SPF: pass (google.com: domain of musabboono98716@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=TFVAXxIb;
+       spf=pass (google.com: domain of musabboono98716@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=musabboono98716@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1758661622; x=1759266422; dara=google.com;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=iAUeSy1yllwBXW7BZPx0SQomV2pbefvpEb1MYbm85Kw=;
+        b=TFVAXxIbff/ESAd2/Wz0xxjE+vNVeUOnXPCurUeOgI4BK64yTl9t3HHW7/TPE2MUDu
+         H6yjsun4G6C4WaG8qmu/7RrWFOhuD1olLsrGGjvE+oIqk1euVeM8yWv0MhAsnXbktod5
+         M4/IZjED7MJFJhQG4WODt/FfufqpXTqRLedpdpqwoeCAf84yfNViKzTK8qSPQXCUxbRS
+         VI58sYuKoUwwWTZ8s5hJ7Q7g1PZiae92FGsbWAf7MSwFbdkxugG+xf1rwN2CjXEybWZ3
+         nAOidFo9tuUN1Iq+TM4osOZmvBARq+PZWh5AykQRV8ZHPR12AM4YP6nmx+a77Z1T5Vr2
+         omNQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758661622; x=1759266422;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=iAUeSy1yllwBXW7BZPx0SQomV2pbefvpEb1MYbm85Kw=;
+        b=lWfyion4WZDsDmGki7vIscXJmRBKEyKHrcFvPt7nPCseNDzfPezm4Hha00PNHoYASY
+         l+1DRslm0cfxEcRrdjudNmPbJHZ13ltCvZskrMosUlOjvumq93h00avH/NdbDCLZP01J
+         jSU9z6py8RcrYz4N4k7kueagqo05OfKLDMoIcr5AIdudAgJt1lHTxxHszQfzOiVYTXPR
+         Do294ItISCLG+O6GxA7ruJYJwSuQrxGIP1C/igtyZGHwHBvhpWXVlL6r7q0YF6A59buO
+         +88C5BQgCR6FIOdphKZ/upYKr6x5GA8LO3tVD7mBtYkNU2zQuruueZoKrojg3v/WXqk7
+         xj4g==
+X-Gm-Message-State: AOJu0Yxrdy36cZvU7BVNcTor0mUrtR5rGcKDrjAXCeYI+e3zmgId8lcx
+	HfPWv+ik+oyAa3hl9/H6+UBIvIDsUpPmzNxRxHrnHwz8t8KJNVsLua7QiToCuMVhXi8ZZzfkbLh
+	BgbhPnwBrxn7smo9tZY452SGN5HINLkrIEw==
+X-Gm-Gg: ASbGncuAmGmwpj6ySv+wsWGZb2lQabGXfA64CvBBe8op2pkyBuNK0LrrULxyLkulpMx
+	7oXYpV1kdoyYzmx9FcfX0fIgxUFimj/6oV9u/EaLEYZkGchH35Ka+cocCPSRuEu4jIpiH0gIfZQ
+	KE4SIjKAL1xzHrqodD9OB1yHfP1sEuPsW+d5Y1tLPw04llMjwEQgwLkyakiX9RjdFhfpD992hpg
+	YOwVfVi1By98rhb
+X-Google-Smtp-Source: AGHT+IF6l1VeJMuGOxNB/FpdlW2rXO3Bt39bTud7pifbqHBKnf+K6l/54KleixrrYwUmMHc9bJ+Fuyo0M6N6eTmD5TI=
+X-Received: by 2002:a17:907:971e:b0:b2e:a284:467b with SMTP id
+ a640c23a62f3a-b30272677e2mr399945866b.14.1758661621698; Tue, 23 Sep 2025
+ 14:07:01 -0700 (PDT)
+MIME-Version: 1.0
+From: Musab Boono <musabboono98716@gmail.com>
+Date: Tue, 23 Sep 2025 22:06:49 +0100
+X-Gm-Features: AS18NWAL1donOTO3PnykXYvmherQZ3IXauf13DjPZxJveWasSR8a3_--OeHPSqQ
+Message-ID: <CAF+h4LpucGK_So3ghbHCDqz=E4Ru7q2YboqfUMnBuPM-pEe8yQ@mail.gmail.com>
+Subject: Request to Reschedule Appointment
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Content-Type: multipart/alternative; boundary="0000000000003dd4ff063f7e512f"
+
+--0000000000003dd4ff063f7e512f
+Content-Type: text/plain; charset="UTF-8"
+
+Dear Avensis Models UK,
+
+
+I hope this message finds you well.
+
+
+Unfortunately, my personal advisor will not be available on Saturday, so I
+will not be able to attend the consultation scheduled for Saturday,
+27/09/2025 at 15:45.
+
+
+I sincerely apologize for any inconvenience this may cause. I would like to
+kindly request if it would be possible to reschedule my appointment to
+Thursday, 02/10/2025, at any time during the day that works best for your
+team.
+
+
+On Thursday, I will attend the consultation together with my personal
+advisor, and I will make sure to be fully prepared with everything required.
+
+
+I kindly ask you to please confirm the new appointment via email once it
+has been rescheduled.
+
+
+Thank you very much for your understanding and support. I greatly
+appreciate your flexibility and look forward to your confirmation.
+
+
+Kind regards
+
+MUSAB ABDULHAMED
+
+Email: musabboono98716@gmail.com
+
+--0000000000003dd4ff063f7e512f
+Content-Type: text/html; charset="UTF-8"
+
+<div>
+<div>
+<p>Dear Avensis Models UK,</p>
+<p><br></p>
+<p>I hope this message finds you well.</p>
+<p><br></p>
+<p>Unfortunately, my personal advisor will not be available on Saturday, so I will not be able to attend the consultation scheduled for Saturday, 27/09/2025 at 15:45.</p>
+<p><br></p>
+<p>I sincerely apologize for any inconvenience this may cause. I would like to kindly request if it would be possible to reschedule my appointment to Thursday, 02/10/2025, at any time during the day that works best for your team.</p>
+<p><br></p>
+<p>On Thursday, I will attend the consultation together with my personal advisor, and I will make sure to be fully prepared with everything required.</p>
+<p><br></p>
+<p>I kindly ask you to please confirm the new appointment via email once it has been rescheduled.</p>
+<p><br></p>
+<p>Thank you very much for your understanding and support. I greatly appreciate your flexibility and look forward to your confirmation.</p>
+<p><br></p>
+<p dir="auto">Kind regards</p>
+<p>MUSAB ABDULHAMED</p>
+<p>Email: <a href="mailto:musabboono98716@gmail.com">musabboono98716@gmail.com</a></p>
+</div>
+</div>
+
+--0000000000003dd4ff063f7e512f--

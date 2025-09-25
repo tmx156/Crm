@@ -1,0 +1,36 @@
+Return-Path: <avensismodels.co.uk.crm.bookings@gmail.com>
+Received: from [127.0.0.1] (92.40.173.120.threembb.co.uk. [92.40.173.120])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-464f5a286edsm245877365e9.16.2025.09.22.16.56.51
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 22 Sep 2025 16:56:51 -0700 (PDT)
+X-Email-ID: oiw0j8
+X-Application: CRM System
+From: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Subject: Test Email - Timeout Fix Verification
+Message-ID: <48a7ab64-99f1-4ca6-074d-1fe6a531be24@gmail.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Mon, 22 Sep 2025 23:56:51 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+
+This is a test email to verify that the Gmail SMTP timeout issues have =
+been resolved.
+
+Changes made:
+- Increased connectionTimeout from 10s to 60s
+- Increased greetingTimeout from 10s to 30s =20
+- Increased socketTimeout =
+from 10s to 60s
+- Added connection pooling and rate limiting
+- Added retry logic with exponential backoff
+
+If you receive this email, =
+the timeout fixes are working correctly!
+
+Timestamp: 2025-09-22T23:56:51.=
+493Z
+Test ID: 3hsrvz
+ =20

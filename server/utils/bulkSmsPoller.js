@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // Load centralized configuration
 const config = require('../config');
@@ -155,6 +156,19 @@ function getTimestamp(ms) {
   return new Date().toISOString();
 }
 
+// Phone number normalization (same as SMS webhook)
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[^\d]/g, '');
+  return cleaned;
+}
+
+// Build deterministic deduplication ID (same as SMS webhook)
+function buildDeterministicId(sender, text, timestampIso) {
+  const base = `${normalizePhone(sender)}|${(timestampIso || '').trim()}|${(text || '').trim()}`;
+  return 'sms_' + crypto.createHash('sha1').update(base).digest('hex');
+}
+
 async function pollOnce() {
   if (!isConfigured()) {
     // Avoid spamming logs: only log once every 2 minutes
@@ -191,8 +205,20 @@ async function pollOnce() {
 
     for (const item of sorted) {
       if (!isInboundMessage(item)) continue;
-      const msgId = String(getMessageId(item) || getTimestamp(item) + '|' + getSender(item)).trim();
-      if (processedIds.has(msgId)) continue;
+
+      // Use the same deduplication key as the SMS webhook for consistency
+      const sender = getSender(item);
+      const text = getMessageText(item);
+      const tsIso = getTimestamp(item);
+      const providerId = getMessageId(item);
+
+      // Build the same deduplication key used by SMS webhook
+      const dedupKey = (providerId && String(providerId).trim()) || buildDeterministicId(sender, text, tsIso);
+
+      if (processedIds.has(dedupKey)) {
+        // console.log(`⚠️ SMS poller: Message already processed (key: ${dedupKey})`);
+        continue;
+      }
 
       const tsIso = getTimestamp(item);
       if (lastProcessedIso && new Date(tsIso).getTime() <= new Date(lastProcessedIso).getTime()) {
@@ -211,11 +237,11 @@ async function pollOnce() {
           messageId: getMessageId(item) || undefined,
           timestamp: tsIso,
         }, { timeout: 8000 });
-        processedIds.add(msgId);
+        processedIds.add(dedupKey);
         if (!lastProcessedIso || new Date(tsIso) > new Date(lastProcessedIso)) {
           lastProcessedIso = tsIso;
         }
-        
+
         // Save processed messages after each successful processing
         saveProcessedMessages();
         

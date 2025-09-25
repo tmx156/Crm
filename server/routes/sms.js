@@ -293,6 +293,35 @@ function buildDeterministicId(sender, text, timestampIso) {
 // @access  Public (called by provider)
 router.post('/webhook', async (req, res) => {
   try {
+    // Initialize in-memory deduplication cache if not exists
+    // Restore from persistent storage if available
+    if (!global.__recentInboundSms) {
+      global.__recentInboundSms = new Map();
+
+      // Try to restore from BulkSMS poller persistent file
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const PROCESSED_MSGS_FILE = path.join(__dirname, '..', 'data', 'processed_sms_messages.json');
+
+        if (fs.existsSync(PROCESSED_MSGS_FILE)) {
+          const data = JSON.parse(fs.readFileSync(PROCESSED_MSGS_FILE, 'utf8'));
+          if (data.processedIds && Array.isArray(data.processedIds)) {
+            // Add recent entries to in-memory cache (last 24 hours)
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            data.processedIds.forEach(id => {
+              // Only add IDs that look like they might be recent (contain timestamps)
+              if (id.includes('|') || id.startsWith('sms_')) {
+                global.__recentInboundSms.set(id, Date.now());
+              }
+            });
+            console.log(`📱 SMS Webhook: Restored ${global.__recentInboundSms.size} deduplication keys from persistent storage`);
+          }
+        }
+      } catch (restoreError) {
+        console.warn('📱 SMS Webhook: Could not restore deduplication cache:', restoreError.message);
+      }
+    }
     // Accept both JSON and x-www-form-urlencoded with various key names
     const body = req.body || {};
 
