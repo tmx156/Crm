@@ -1,7 +1,6 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "nixpacks",
     "buildCommand": "npm run railway:build",
     "startCommand": "npm run railway:start"
   },

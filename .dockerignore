@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs (but keep client build)
+client/build/
+
+# Debug and test files
+server/email_debug_logs/
+test-*
+debug-*
+check-*
+
+# Documentation (keep Railway docs)
+*.md
+!RAILWAY-*.md
+!railway-*.md
+!*-setup.md
+!README.md
+
+# Temporary files
+*.tmp
+*.temp
+nul
