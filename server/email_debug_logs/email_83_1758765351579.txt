@@ -1,0 +1,173 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:3f05:0:b0:2ac:acbc:701 with SMTP id b5csp794892ecq;
+        Sat, 20 Sep 2025 07:04:04 -0700 (PDT)
+X-Received: by 2002:a05:6e02:17c9:b0:401:7e07:a5d9 with SMTP id e9e14a558f8ab-42481922f61mr110344415ab.2.1758377043997;
+        Sat, 20 Sep 2025 07:04:03 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758377043; cv=none;
+        d=google.com; s=arc-20240605;
+        b=K7TrSEszDW2Px5zk3QGBzd1oz2TPBzVeyvmG36CKedImnIwHu+C90kZjASAXC7lDDU
+         W5TjS6zkf1yUlb+JCM17+rJVwLBVW2AfMlDWexvHiMOugAFLhBtKZz9gOuTs5UG0uiEx
+         EPdUsZDRVlTQA4VDRNuPiwCv8jCVdZd+wP5yp2fsxrc9XaaAn0fblhIbMwJuPqCaYmpR
+         MRTKscLjtl4hq16yh16r4OI4hRCommkKrCHPTY6tJE0Rl87aMdBcuSxwZsBFGu7l57lW
+         R8liQGuCgFFuK5/FUNgJR9C62RE2MczoX0ozGbdbIIktH30gtCVc7qbwnpGuVLTJYeHz
+         VnBw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=WI1Pc8hIZ75jTnqJRIurAPN9guIr8/pRLODfwHhf4qo=;
+        fh=y7h+yB7sjHZMVA/hkkfQy0c6b2dNmo20704lVdiqOb8=;
+        b=QS/5ZEJ0mdfDf6BJ4gXHwCK6/ScDhP+8DVE+yHfc3vyltVq9tHIeWWw56i9GaAKIvY
+         TC/G8cT2G16D37KSHyHw3Vi1YPm8NrIDiXbyiluHyg5X2xFPS5SitcgnxG2NkJs2jzkz
+         kVwKay+HZl75wGPhLq2O9llPXKsvOD0832ufqW7qFTQH00ofiq7l0pIdwGgCR5Qk+sj5
+         0M9ZVqLBFZmA27TuCIh9WdosStrFcyOxKY2GGcFDC/mRvTHL1stFqNcGqaQLyeibwbaz
+         +GPtttmMKaU80LN7uAX1pgTIxpqJ//4u/FSnAhC3YIJWsW0iUgvcQ+VP3C31WLqWLifL
+         TFWQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=UYWrcsFF;
+       spf=pass (google.com: domain of graciejeanbrownuk@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=graciejeanbrownuk@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <graciejeanbrownuk@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 8926c6da1cb9f-53d4c2bb22asor3726396173.5.2025.09.20.07.04.03
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (Google Transport Security);
+        Sat, 20 Sep 2025 07:04:03 -0700 (PDT)
+Received-SPF: pass (google.com: domain of graciejeanbrownuk@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=UYWrcsFF;
+       spf=pass (google.com: domain of graciejeanbrownuk@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=graciejeanbrownuk@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1758377043; x=1758981843; dara=google.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=WI1Pc8hIZ75jTnqJRIurAPN9guIr8/pRLODfwHhf4qo=;
+        b=UYWrcsFFPT3yMhor/gzg8LEGwyiK61yz2oB2F3E6MUEvAZ8AVcKO7khhTsrd7JXLyo
+         dyWzGIFTZUgtaET4LbMpxmAkg7t9/F2CJ8vV5oTe6lGbtt3NYPe5uJHAgNDMlZRINKq4
+         fn9f5IARYsiqBW3eegAXiNlCIIB9GsYPxGkzt68HOXygQI2oR16KRPqM0JOwe11DcrhK
+         kDGrATFxv6qXpR7yEqB6UbnUbMb8Gnx56huOuEug9fcWPoA9DgW/Hd8IXy2dXZN6CA6p
+         fHvihnYvP0I82tm20kTZaDCZGqrcWV6ZX1nTA+SLe5v/0/N+FCEeoCi1EccOkAiG6vKt
+         7+zg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758377043; x=1758981843;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=WI1Pc8hIZ75jTnqJRIurAPN9guIr8/pRLODfwHhf4qo=;
+        b=QDuUCN6RWin/GALssKIDCvc5pywoiChEKdvORn8JaIs4Fp84mQsj5sgmfY3MR8lhg6
+         0QNK8CzXjgzPvWRACGvGquG3nS1cLo/i98hJkRovHpP0ewiqQedZaXqiga5t+ou05/my
+         y1gexb9CSpMqv99LINVm3eaGvHvOUpWFgzCn7NEngSU8k2XUg2spHb3zQ0sPbbo8tyH3
+         htwzKcy8vXYkQzQtNamQTPXvGDZ00BW8NLzdyQnx9/0gtrLJgCStua8QdKpU+mHHLtq5
+         hVXOH8E2gcGg5X8Nt7KM3awkE/3stJQFNxPW3dYo6taANWzo4dNALGrmashsCPlhs/jY
+         9a/A==
+X-Gm-Message-State: AOJu0YxFB3zCWd22qRe9P7vbyivu6YsSTdYQ5R13Do5hqDQ0wJ6LgjkC
+	NmteTKQ0jtaS+iDCrkE1pDqvnzdfpkgA9zRVEQ/EIO4h0KfAfEPk+VJHqh0+PKyQ1uYm1AtTRIo
+	VArHCTFb+wKuQMYLZi8UVN/FglMi48lAEGA==
+X-Gm-Gg: ASbGncsp8XvdhZQ0pdgsBkCqkHJTzbeC3+Ck1zDWvb630y2lOkEbb80+rshekSDBkCb
+	irXzsFCsVH17BkWkzbyc5Ui8wsatjTB/4JBHfapo3/KoDkagOErLOnugAyRruLNPqbr9YR1a3Gx
+	9aT4HIp1DJWtQ2Afk0LQf2q6BoHzp5uX8PvE7+GeW2qLFtuMNy8JKYiuOW3WgZROSwwVNaVVi2I
+	do=
+X-Google-Smtp-Source: AGHT+IGuhY+1iBdwqpQpgI5XgPQGl8CJsmSv8qLaU7v+anvgPHzSFV10jBXPsHrLsxyP1A3zsE5MIjrVX2m1YNGhQOA=
+X-Received: by 2002:a05:6e02:1fe3:b0:424:881b:ca76 with SMTP id
+ e9e14a558f8ab-424881bcbacmr63839305ab.22.1758377043184; Sat, 20 Sep 2025
+ 07:04:03 -0700 (PDT)
+MIME-Version: 1.0
+References: <0734a5a6-da5f-e534-5480-0e32ed96b017@gmail.com>
+In-Reply-To: <0734a5a6-da5f-e534-5480-0e32ed96b017@gmail.com>
+From: Gracie Jean Brown <graciejeanbrownuk@gmail.com>
+Date: Sat, 20 Sep 2025 15:03:50 +0100
+X-Gm-Features: AS18NWBAh7274dusRRpfLSIm9gLWsByFmgLliwPx5pLtqMHMqppE7egh-oX2yNE
+Message-ID: <CAFN1PKb9m=L0rYOFzMB3rSFV4yGiUrNdanZC_xzekPKeD21Kjw@mail.gmail.com>
+Subject: Re: Booking Confirmation
+To: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+Content-Type: multipart/alternative; boundary="0000000000000a5203063f3c0f3a"
+
+--0000000000000a5203063f3c0f3a
+Content-Type: text/plain; charset="UTF-8"
+
+We are here. However, I cannot find your building. I can see number 58.
+What signage do I look for?
+
+On Tue, 16 Sept 2025, 17:35 Avensismodels, <
+avensismodels.co.uk.crm.bookings@gmail.com> wrote:
+
+> Client: Gracie Jean Brown
+> Photoshoot Date: 13/09/2025
+> Photoshoot Time: 15:30:00
+> Studio Address: 60 Higher Ardwick, Manchester, M12 6DA
+>
+> Dear Gracie Jean Brown
+>
+> Avensis Models UK has confirmed your consultation assessment. This will be
+> an exciting opportunity to see if you have model potential.
+>
+> Summary of your day with us,
+> When you arrive at the studio, you will be greeted by our in-house
+> industry experts, who will guide you through your consultation. After
+> which, our team of photographers will carry out your test shoot assessment.
+> And finally, you will be given your assessment feedback!
+>
+> What you will need to bring,
+> We require you to bring 3 outfits, ranging from smart-casual.
+> We also ask that you come photoshoot ready, with hair and make-up already
+> done. We also require you to bring two forms of ID. For example, a driver's
+> licence/provisional, passport, or bank card. This is to verify you are who
+> you say you are ( this also applies to parents of any children who have an
+> appointment booked with us)
+>
+> If you have any more questions, please don't hesitate to contact us. If,
+> for any reason, you need to reschedule/cancel your appointment, you will
+> need to give us at least 72 hours' notice. However, this is not advised as
+> you will be added to our unreliable list.
+>
+> Applicants under the age of 18  must be accompanied by a parent
+>
+> https://www.avensismodels.co.uk/
+
+--0000000000000a5203063f3c0f3a
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto">We are here. However, I cannot find your building. I can =
+see number 58. What signage do I look for?</div><br><div class=3D"gmail_quo=
+te gmail_quote_container"><div dir=3D"ltr" class=3D"gmail_attr">On Tue, 16 =
+Sept 2025, 17:35 Avensismodels, &lt;<a href=3D"mailto:avensismodels.co.uk.c=
+rm.bookings@gmail.com">avensismodels.co.uk.crm.bookings@gmail.com</a>&gt; w=
+rote:<br></div><blockquote class=3D"gmail_quote" style=3D"margin:0 0 0 .8ex=
+;border-left:1px #ccc solid;padding-left:1ex">Client: Gracie Jean Brown<br>
+Photoshoot Date: 13/09/2025<br>
+Photoshoot Time: 15:30:00<br>
+Studio Address: 60 Higher Ardwick, Manchester, M12 6DA<br>
+<br>
+Dear Gracie Jean Brown<br>
+<br>
+Avensis Models UK has confirmed your consultation assessment. This will be =
+an exciting opportunity to see if you have model potential.<br>
+<br>
+Summary of your day with us,<br>
+When you arrive at the studio, you will be greeted by our in-house industry=
+ experts, who will guide you through your consultation. After which, our te=
+am of photographers will carry out your test shoot assessment. And finally,=
+ you will be given your assessment feedback!<br>
+<br>
+What you will need to bring,<br>
+We require you to bring 3 outfits, ranging from smart-casual.<br>
+We also ask that you come photoshoot ready, with hair and make-up already d=
+one. We also require you to bring two forms of ID. For example, a driver&#3=
+9;s licence/provisional, passport, or bank card. This is to verify you are =
+who you say you are ( this also applies to parents of any children who have=
+ an appointment booked with us)<br>
+<br>
+If you have any more questions, please don&#39;t hesitate to contact us. If=
+, for any reason, you need to reschedule/cancel your appointment, you will =
+need to give us at least 72 hours&#39; notice. However, this is not advised=
+ as you will be added to our unreliable list.<br>
+<br>
+Applicants under the age of 18=C2=A0 must be accompanied by a parent<br>
+<br>
+<a href=3D"https://www.avensismodels.co.uk/" rel=3D"noreferrer noreferrer" =
+target=3D"_blank">https://www.avensismodels.co.uk/</a></blockquote></div>
+
+--0000000000000a5203063f3c0f3a--

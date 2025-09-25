@@ -1,0 +1,607 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp190925ecs;
+        Mon, 22 Sep 2025 06:01:29 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IHneWyVcy9bUSJcAsNIebsYjQmCSsRdOFhtwECx2Jur/fwknDTC7GPyAmQ4Fv8AwhJT9Q1d
+X-Received: by 2002:a05:622a:1c06:b0:4b5:e7e4:ba74 with SMTP id d75a77b69052e-4c07285e75emr159153051cf.56.1758546088719;
+        Mon, 22 Sep 2025 06:01:28 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758546088; cv=none;
+        d=google.com; s=arc-20240605;
+        b=ZJQVB2bYSROc0TuDn7O2IPmE2R4m93+oIS/u2dPFnasRSP3WTQhBynJv4Vsx0TWGqn
+         vmzO80H1TVye3b9b/YmAAnOQsPoLGy5+W5On9M/AdqraXKx43DZc24Y/nJS+uWK8hoMv
+         VKMvBn1/frKWlw3H+JDmSbt0skjNWLTxPfCc5o3+sBdz2Q/Pwzw7ku+KSg93ATpvKJx6
+         SMe3HkgGrMxxpLvGURCXOCPtDX2KG02LrfqNgBSXtvbbXvu/PbTlmsaD7yqRcePbaiCp
+         eArxb8CI/05tIvtIOslY/nz5nNC7z2AsWKi3IoYEiuLQmvCa+uGzIlM06rIjRCM8GBjL
+         IyuQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=feedback-id:list-unsubscribe-post:list-unsubscribe
+         :content-transfer-encoding:mime-version:subject:message-id:to:from
+         :date:dkim-signature:dkim-signature;
+        bh=bTWywl8ve2UhWv5VNVd+fssNSvDr/xuHa649FT884RA=;
+        fh=XD0hVRmVPeMWhCW2cIWGAl2yIjFjST6ryt4PWd1EzRk=;
+        b=Ycid2aubOwmAcLeL5pXsgTm9jCMM2zTl4R9VKaK9lOFruDne1YTTddVfN07ixGwmc4
+         sPqAhZmsgOGz90hD4f4mXtOPO8vJr6oWFvaUPCC5tmfWEhq4aMhQYjnzwTStMg3T8rBi
+         6hMXblEKrxnbvoRE+wnp0ByDgkRrfLN7n4ioj68EPYDsuZEBKPODxei1YkfNyLdu0qN4
+         XZBJ1LB3xCFmG6TxdjRluvQibKQVO0NVzShn0GuBQJ8DHr5ErKJnpBF74WnlcmQBqSmM
+         dWEJEw72+8HZLTwccWuZUYMqjEESC4E9K2Usvo+HYRrmdfwzrD61f14Z3havJG67MH9R
+         dKUA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@warp.dev header.s=e4ar4hzh35ftoy7rbgebkwa4d4d634dn header.b=2oj47hn2;
+       dkim=pass header.i=@amazonses.com header.s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw header.b=MjhN9+J9;
+       spf=pass (google.com: domain of 010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com designates 54.240.11.137 as permitted sender) smtp.mailfrom=010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=warp.dev
+Return-Path: <010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com>
+Received: from a11-137.smtp-out.amazonses.com (a11-137.smtp-out.amazonses.com. [54.240.11.137])
+        by mx.google.com with ESMTPS id d75a77b69052e-4d15fca74f5si1245851cf.220.2025.09.22.06.01.28
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Mon, 22 Sep 2025 06:01:28 -0700 (PDT)
+Received-SPF: pass (google.com: domain of 010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com designates 54.240.11.137 as permitted sender) client-ip=54.240.11.137;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@warp.dev header.s=e4ar4hzh35ftoy7rbgebkwa4d4d634dn header.b=2oj47hn2;
+       dkim=pass header.i=@amazonses.com header.s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw header.b=MjhN9+J9;
+       spf=pass (google.com: domain of 010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com designates 54.240.11.137 as permitted sender) smtp.mailfrom=010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@amazonses.com;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=warp.dev
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=e4ar4hzh35ftoy7rbgebkwa4d4d634dn; d=warp.dev; t=1758546088;
+	h=Date:From:To:Message-ID:Subject:Mime-Version:Content-Type:Content-Transfer-Encoding:List-Unsubscribe:List-Unsubscribe-Post;
+	bh=wobTfEPBhowzw8x+qFpMZyOOB3XDcxR7jcCUuJaH8rI=;
+	b=2oj47hn2t446Ua126hY0HFO1a0i//0IySHFfAHXM1f08QLKc394oXNRLdT+xcqyJ
+	9nYe7vCveAzcsGm2J3z/HxnRBw3eu1ZrmSfSa9rZ1TJnG84vuOFjY9dMfNWbJkXSBwi
+	gx7bXuXAr/eSeJEE1K4/dg1jj3K5IZr2chdZtti7H/HGlvz8tTVW0x2TsoE4/3YTn9N
+	BdSKhTJnX8u8YDVkOQnh5N+l5BlmH7cqV3tYDUi7rHdTZje6tARN7bhlviSDRxgophq
+	n7pwVQ8JVgDoFW3bUu5H0ttuAoamd6JgqZFOPkS9QjNAFdbgc4eJnqBjpiKHhM86cZs
+	uHcdtDg81g==
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1758546088;
+	h=Date:From:To:Message-ID:Subject:Mime-Version:Content-Type:Content-Transfer-Encoding:List-Unsubscribe:List-Unsubscribe-Post:Feedback-ID;
+	bh=wobTfEPBhowzw8x+qFpMZyOOB3XDcxR7jcCUuJaH8rI=;
+	b=MjhN9+J9zLf2zVbLiDxEh3m1F0D5Alm/epQKmM744hdvQ8yqoj72H0NCbRXAI5yr
+	tb+mZWUowwueYMYsMyvPQqamtGtJ+gc27e9/ap6IMUpNHxE9cVcu7FSx32WOpS/eDVC
+	TXxYVcYzvHOw8lqjDw1ihdr0AcHJ1wbdJwATyHZA=
+Date: Mon, 22 Sep 2025 13:01:28 +0000
+From: Warp Team <feedback@warp.dev>
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Message-ID: <010001997183d160-c951386f-12f7-44bc-80e8-c5b0a7e73d8c-000000@email.amazonses.com>
+Subject: How likely are you to recommend Warp to a friend?
+Mime-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="--==_mimepart_68d148a83a400_2b47544d5d063215493";
+ charset=UTF-8
+Content-Transfer-Encoding: 7bit
+List-Unsubscribe: <https://delighted.com/e/en/u/Hf86c6BEt9NSB5hPCJId3KBT/1RTdOBBt>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+X-Entity-Ref-ID: 6019f51f-7c9a-4919-9920-51f0f5248604
+Feedback-ID: ::1.us-east-1.xPGOR70ogJUf3+shMLFbzHufra18V/Da5fMSx+e23WA=:AmazonSES
+X-SES-Outgoing: 2025.09.22-54.240.11.137
+
+
+----==_mimepart_68d148a83a400_2b47544d5d063215493
+Content-Type: text/plain;
+ charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+How likely are you to recommend Warp to a friend?
+
+10 - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/10/2UereHhF Very likely
+9  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/9/29ynepWn  
+8  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/8/0JlqcUND  
+7  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/7/4UGnfRwD  
+6  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/6/02YckaBS  
+5  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/5/3IF4FELP  
+4  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/4/1eHc1Kbd  
+3  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/3/2Xk6RXP0  
+2  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/2/3f6RWqfm  
+1  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/1/0qbMntmz  
+0  - https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/0/3pJZOZYY  Not likely
+
+--
+
+Powered by Delighted
+https://delighted.com/?utm_campaign=survey_powered1&utm_content=templates&utm_medium=email&utm_source=delighted_survey
+
+Unsubscribe
+https://delighted.com/e/en/u/Hf86c6BEt9NSB5hPCJId3KBT/1RTdOBBt
+
+----==_mimepart_68d148a83a400_2b47544d5d063215493
+Content-Type: text/html;
+ charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.o=
+rg/TR/xhtml1/DTD/xhtml1-strict.dtd">=0D
+<html xmlns=3D"http://www.w3.org/1999/xhtml"><head>=0D
+<!-- Copyright =EF=BF=BD=EF=BF=BD 2013-2025 Delighted, LLC All rights res=
+erved. -->=0D
+<meta content=3D"text/html; charset=3Dutf-8" http-equiv=3D"Content-Type" =
+/><meta content=3D"width=3Ddevice-width, initial-scale=3D1.0" name=3D"vie=
+wport" /><meta content=3D"address=3Dno" name=3D"format-detection" /><titl=
+e>Warp</title><style type=3D"text/css">*{text-rendering:optimizelegibilit=
+y;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.b=
+-nps .b1-nps td:active{background:#e3e3e3 !important;border-top-width:3px=
+ !important;border-bottom-width:1px !important;border-bottom-color:#ccccc=
+c !important;border-top-color:#cccccc !important;box-shadow:rgba(255, 255=
+, 255, 0.9) 0 1px 0 0 !important}.b-general .b1-general td:active{backgro=
+und:#e3e3e3 !important;border-top-width:3px !important;border-bottom-widt=
+h:1px !important;border-bottom-color:#cccccc !important;border-top-color:=
+#cccccc !important;box-shadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !importa=
+nt}.b-stars-five .b1-stars-five td:active{background:#e3e3e3 !important;b=
+order-top-width:3px !important;border-bottom-width:1px !important;border-=
+bottom-color:#cccccc !important;border-top-color:#cccccc !important;box-s=
+hadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !important}.b-csat .b1-csat td:a=
+ctive{background:#e3e3e3 !important;border-top-width:3px !important;borde=
+r-bottom-width:1px !important;border-bottom-color:#cccccc !important;bord=
+er-top-color:#cccccc !important;box-shadow:rgba(255, 255, 255, 0.9) 0 1px=
+ 0 0 !important}.b-csat3 .b1-csat3 td:active{background:#e3e3e3 !importan=
+t;border-top-width:3px !important;border-bottom-width:1px !important;bord=
+er-bottom-color:#cccccc !important;border-top-color:#cccccc !important;bo=
+x-shadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !important}.b-ces .b1-ces td:=
+active{background:#e3e3e3 !important;border-top-width:3px !important;bord=
+er-bottom-width:1px !important;border-bottom-color:#cccccc !important;bor=
+der-top-color:#cccccc !important;box-shadow:rgba(255, 255, 255, 0.9) 0 1p=
+x 0 0 !important}.b-ces7 .b1-ces7 td:active{background:#e3e3e3 !important=
+;border-top-width:3px !important;border-bottom-width:1px !important;borde=
+r-bottom-color:#cccccc !important;border-top-color:#cccccc !important;box=
+-shadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !important}.b-smileys .b1-smil=
+eys td:active{background:#e3e3e3 !important;border-top-width:3px !importa=
+nt;border-bottom-width:1px !important;border-bottom-color:#cccccc !import=
+ant;border-top-color:#cccccc !important;box-shadow:rgba(255, 255, 255, 0.=
+9) 0 1px 0 0 !important}.b-thumbs .b1-thumbs td:active{background:#e3e3e3=
+ !important;border-top-width:3px !important;border-bottom-width:1px !impo=
+rtant;border-bottom-color:#cccccc !important;border-top-color:#cccccc !im=
+portant;box-shadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !important}.b-enps =
+.b1-enps td:active{background:#e3e3e3 !important;border-top-width:3px !im=
+portant;border-bottom-width:1px !important;border-bottom-color:#cccccc !i=
+mportant;border-top-color:#cccccc !important;box-shadow:rgba(255, 255, 25=
+5, 0.9) 0 1px 0 0 !important}.b-pmf .b1-pmf td:active{background:#e3e3e3 =
+!important;border-top-width:3px !important;border-bottom-width:1px !impor=
+tant;border-bottom-color:#cccccc !important;border-top-color:#cccccc !imp=
+ortant;box-shadow:rgba(255, 255, 255, 0.9) 0 1px 0 0 !important}.b-csat .=
+b1-csat td:active{background:#e3e3e3 !important;border-top-width:3px !imp=
+ortant;border-bottom-width:1px !important;border-bottom-color:#cccccc !im=
+portant;border-top-color:#cccccc !important;box-shadow:rgba(255, 255, 255=
+, 0.9) 0 1px 0 0 !important}#outlook a{padding:0}.ExternalClass{width:100=
+%}.ExternalClass,.ExternalClass p,.ExternalClass span,.ExternalClass font=
+,.ExternalClass td,.ExternalClass div{line-height:24px}@media screen and =
+(max-width:480px){.i-nps{width:100% !important;min-width:0 !important;mar=
+gin:0 !important}=0D
+.i-general{width:100% !important;min-width:0 !important;margin:0 !importa=
+nt}.i-stars-five{width:100% !important;min-width:0 !important;margin:0 !i=
+mportant}.i-csat{width:100% !important;min-width:0 !important;margin:0 !i=
+mportant}.i-csat3{width:100% !important;min-width:0 !important;margin:0 !=
+important}.i-ces{width:100% !important;min-width:0 !important;margin:0 !i=
+mportant}.i-ces7{width:100% !important;min-width:0 !important;margin:0 !i=
+mportant}.i-smileys{width:100% !important;min-width:0 !important;margin:0=
+ !important}.i-thumbs{width:100% !important;min-width:0 !important;margin=
+:0 !important}.i-enps{width:100% !important;min-width:0 !important;margin=
+:0 !important}.i-pmf{width:100% !important;min-width:0 !important;margin:=
+0 !important}.i-csat{width:100% !important;min-width:0 !important;margin:=
+0 !important}.l12{width:240px !important;height:55px !important}.q{paddin=
+g-left:10px !important;padding-right:10px !important}.n1{padding-left:20p=
+x !important;padding-right:20px !important}.n2{font-size:16px !important}=
+.q1{width:100% !important}.q11{font-size:18px !important;line-height:26px=
+ !important;font-weight:bold !important}.h{display:none !important}.b-nps=
+{padding-left:10px !important;padding-bottom:4px !important;padding-right=
+:10px !important}.b1-nps{width:100% !important;padding-bottom:6px !import=
+ant}.b-general{padding-left:10px !important;padding-bottom:4px !important=
+;padding-right:10px !important}.b1-general{width:100% !important;padding-=
+bottom:6px !important}.b-stars-five{padding-left:10px !important;padding-=
+bottom:4px !important;padding-right:10px !important}.b1-stars-five{width:=
+100% !important;padding-bottom:6px !important}.b-csat{padding-left:10px !=
+important;padding-bottom:4px !important;padding-right:10px !important}.b1=
+-csat{width:100% !important;padding-bottom:6px !important}.b-csat3{paddin=
+g-left:10px !important;padding-bottom:4px !important;padding-right:10px !=
+important}.b1-csat3{width:100% !important;padding-bottom:6px !important}.=
+b-ces{padding-left:10px !important;padding-bottom:4px !important;padding-=
+right:10px !important}.b1-ces{width:100% !important;padding-bottom:6px !i=
+mportant}.b-ces7{padding-left:10px !important;padding-bottom:4px !importa=
+nt;padding-right:10px !important}.b1-ces7{width:100% !important;padding-b=
+ottom:6px !important}.b-smileys{padding-left:10px !important;padding-bott=
+om:4px !important;padding-right:10px !important}.b1-smileys{width:100% !i=
+mportant;padding-bottom:6px !important}.b-thumbs{padding-left:10px !impor=
+tant;padding-bottom:4px !important;padding-right:10px !important}.b1-thum=
+bs{width:100% !important;padding-bottom:6px !important}.b-enps{padding-le=
+ft:10px !important;padding-bottom:4px !important;padding-right:10px !impo=
+rtant}.b1-enps{width:100% !important;padding-bottom:6px !important}.b-pmf=
+{padding-left:10px !important;padding-bottom:4px !important;padding-right=
+:10px !important}.b1-pmf{width:100% !important;padding-bottom:6px !import=
+ant}.b-csat{padding-left:10px !important;padding-bottom:4px !important;pa=
+dding-right:10px !important}.b1-csat{width:100% !important;padding-bottom=
+:6px !important}.b2{display:none !important;height:0 !important;position:=
+absolute !important;left:-9999px !important}.bl{display:inherit !importan=
+t;visibility:inherit !important;overflow:inherit !important;line-height:i=
+nherit !important;font-size:inherit !important}.f1{padding-left:10px !imp=
+ortant}.f2{padding-right:10px !important}.b-nps .b1-nps td:active{backgro=
+und-color:#ffffff !important;border-top-width:1px !important;border-botto=
+m-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !import=
+ant}.b-general .b1-general td:active{background-color:#ffffff !important;=
+border-top-width:1px !important;border-bottom-width:3px !important;box-sh=
+adow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-stars-five .b1-stars-f=
+ive td:active{background-color:#ffffff !important;border-top-width:1px !i=
+mportant;border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06=
+) 0 2px 4px 0 !important}.b-csat .b1-csat td:active{background-color:#fff=
+fff !important;border-top-width:1px !important;border-bottom-width:3px !i=
+mportant;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-csat3 .=
+b1-csat3 td:active{background-color:#ffffff !important;border-top-width:1=
+px !important;border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0,=
+ 0.06) 0 2px 4px 0 !important}.b-ces .b1-ces td:active{background-color:#=
+ffffff !important;border-top-width:1px !important;border-bottom-width:3px=
+ !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}=0D
+.b-ces7 .b1-ces7 td:active{background-color:#ffffff !important;border-top=
+-width:1px !important;border-bottom-width:3px !important;box-shadow:rgba(=
+0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-smileys .b1-smileys td:active{ba=
+ckground-color:#ffffff !important;border-top-width:1px !important;border-=
+bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !i=
+mportant}.b-thumbs .b1-thumbs td:active{background-color:#ffffff !importa=
+nt;border-top-width:1px !important;border-bottom-width:3px !important;box=
+-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-enps .b1-enps td:ac=
+tive{background-color:#ffffff !important;border-top-width:1px !important;=
+border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4=
+px 0 !important}.b-pmf .b1-pmf td:active{background-color:#ffffff !import=
+ant;border-top-width:1px !important;border-bottom-width:3px !important;bo=
+x-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-csat .b1-csat td:a=
+ctive{background-color:#ffffff !important;border-top-width:1px !important=
+;border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px =
+4px 0 !important}#wrapper,.w{min-width:100vw !important}.y{font-size:0 !i=
+mportant;width:0 !important;overflow:hidden !important;white-space:normal=
+ !important}}</style>=0D
+<!--[if gte mso 9]>=0D
+<style type=3D'text/css'>table,tbody,tr,td{border-collapse:collapse !impo=
+rtant;mso-table-lspace:0 !important;mso-table-rspace:0 !important}.b2{wid=
+th:3px !important}.b1-nps{width:43px !important}.b2{width:3px !important}=
+.b1-general{width:43px !important}.b2{width:3px !important}.b1-stars-five=
+{width:43px !important}.b2{width:3px !important}.b1-csat{width:43px !impo=
+rtant}.b2{width:3px !important}.b1-csat3{width:43px !important}.b2{width:=
+3px !important}.b1-ces{width:43px !important}.b2{width:3px !important}.b1=
+-ces7{width:43px !important}.b2{width:3px !important}.b1-smileys{width:43=
+px !important}.b2{width:3px !important}.b1-thumbs{width:43px !important}.=
+b2{width:3px !important}.b1-enps{width:43px !important}.b2{width:3px !imp=
+ortant}.b1-pmf{width:43px !important}.b2{width:3px !important}.b1-csat{wi=
+dth:43px !important}</style>=0D
+<![endif]-->=0D
+</head><body style=3D"width:100% !important;-webkit-text-size-adjust:100%=
+;-ms-text-size-adjust:100%;margin:0;padding:0"><style type=3D"text/css">@=
+media screen yahoo and (max-width:480px){.i-nps{width:100% !important;min=
+-width:0 !important;margin:0 !important}.i-general{width:100% !important;=
+min-width:0 !important;margin:0 !important}.i-stars-five{width:100% !impo=
+rtant;min-width:0 !important;margin:0 !important}.i-csat{width:100% !impo=
+rtant;min-width:0 !important;margin:0 !important}.i-csat3{width:100% !imp=
+ortant;min-width:0 !important;margin:0 !important}.i-ces{width:100% !impo=
+rtant;min-width:0 !important;margin:0 !important}.i-ces7{width:100% !impo=
+rtant;min-width:0 !important;margin:0 !important}.i-smileys{width:100% !i=
+mportant;min-width:0 !important;margin:0 !important}.i-thumbs{width:100% =
+!important;min-width:0 !important;margin:0 !important}.i-enps{width:100% =
+!important;min-width:0 !important;margin:0 !important}.i-pmf{width:100% !=
+important;min-width:0 !important;margin:0 !important}.i-csat{width:100% !=
+important;min-width:0 !important;margin:0 !important}.l12{width:240px !im=
+portant;height:55px !important}.q{padding-left:10px !important;padding-ri=
+ght:10px !important}.n1{padding-left:20px !important;padding-right:20px !=
+important}.n2{font-size:16px !important}.q1{width:100% !important}.q11{fo=
+nt-size:18px !important;line-height:26px !important;font-weight:bold !imp=
+ortant}.h{display:none !important}.b-nps{padding-left:10px !important;pad=
+ding-bottom:4px !important;padding-right:10px !important}.b1-nps{width:10=
+0% !important;padding-bottom:6px !important}.b-general{padding-left:10px =
+!important;padding-bottom:4px !important;padding-right:10px !important}.b=
+1-general{width:100% !important;padding-bottom:6px !important}.b-stars-fi=
+ve{padding-left:10px !important;padding-bottom:4px !important;padding-rig=
+ht:10px !important}.b1-stars-five{width:100% !important;padding-bottom:6p=
+x !important}.b-csat{padding-left:10px !important;padding-bottom:4px !imp=
+ortant;padding-right:10px !important}.b1-csat{width:100% !important;paddi=
+ng-bottom:6px !important}.b-csat3{padding-left:10px !important;padding-bo=
+ttom:4px !important;padding-right:10px !important}.b1-csat3{width:100% !i=
+mportant;padding-bottom:6px !important}.b-ces{padding-left:10px !importan=
+t;padding-bottom:4px !important;padding-right:10px !important}.b1-ces{wid=
+th:100% !important;padding-bottom:6px !important}.b-ces7{padding-left:10p=
+x !important;padding-bottom:4px !important;padding-right:10px !important}=
+.b1-ces7{width:100% !important;padding-bottom:6px !important}.b-smileys{p=
+adding-left:10px !important;padding-bottom:4px !important;padding-right:1=
+0px !important}.b1-smileys{width:100% !important;padding-bottom:6px !impo=
+rtant}.b-thumbs{padding-left:10px !important;padding-bottom:4px !importan=
+t;padding-right:10px !important}.b1-thumbs{width:100% !important;padding-=
+bottom:6px !important}.b-enps{padding-left:10px !important;padding-bottom=
+:4px !important;padding-right:10px !important}.b1-enps{width:100% !import=
+ant;padding-bottom:6px !important}.b-pmf{padding-left:10px !important;pad=
+ding-bottom:4px !important;padding-right:10px !important}.b1-pmf{width:10=
+0% !important;padding-bottom:6px !important}.b-csat{padding-left:10px !im=
+portant;padding-bottom:4px !important;padding-right:10px !important}.b1-c=
+sat{width:100% !important;padding-bottom:6px !important}.b2{display:none =
+!important;height:0 !important;position:absolute !important;left:-9999px =
+!important}.bl{display:inherit !important;visibility:inherit !important;o=
+verflow:inherit !important;line-height:inherit !important;font-size:inher=
+it !important}.f1{padding-left:10px !important}.f2{padding-right:10px !im=
+portant}.b-nps .b1-nps td:active{background-color:#ffffff !important;bord=
+er-top-width:1px !important;border-bottom-width:3px !important;box-shadow=
+:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-general .b1-general td:act=
+ive{background-color:#ffffff !important;border-top-width:1px !important;b=
+order-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4p=
+x 0 !important}.b-stars-five .b1-stars-five td:active{background-color:#f=
+fffff !important;border-top-width:1px !important;border-bottom-width:3px =
+!important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-csat =
+.b1-csat td:active{background-color:#ffffff !important;border-top-width:1=
+px !important;border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0,=
+ 0.06) 0 2px 4px 0 !important}.b-csat3 .b1-csat3 td:active{background-col=
+or:#ffffff !important;border-top-width:1px !important;border-bottom-width=
+:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-=
+ces .b1-ces td:active{background-color:#ffffff !important;border-top-widt=
+h:1px !important;border-bottom-width:3px !important;box-shadow:rgba(0, 0,=
+ 0, 0.06) 0 2px 4px 0 !important}=0D
+.b-ces7 .b1-ces7 td:active{background-color:#ffffff !important;border-top=
+-width:1px !important;border-bottom-width:3px !important;box-shadow:rgba(=
+0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-smileys .b1-smileys td:active{ba=
+ckground-color:#ffffff !important;border-top-width:1px !important;border-=
+bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !i=
+mportant}.b-thumbs .b1-thumbs td:active{background-color:#ffffff !importa=
+nt;border-top-width:1px !important;border-bottom-width:3px !important;box=
+-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-enps .b1-enps td:ac=
+tive{background-color:#ffffff !important;border-top-width:1px !important;=
+border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4=
+px 0 !important}.b-pmf .b1-pmf td:active{background-color:#ffffff !import=
+ant;border-top-width:1px !important;border-bottom-width:3px !important;bo=
+x-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0 !important}.b-csat .b1-csat td:a=
+ctive{background-color:#ffffff !important;border-top-width:1px !important=
+;border-bottom-width:3px !important;box-shadow:rgba(0, 0, 0, 0.06) 0 2px =
+4px 0 !important}#wrapper,.w{min-width:100vw !important}.y{font-size:0 !i=
+mportant;width:0 !important;overflow:hidden !important;white-space:normal=
+ !important}}</style><table border=3D"0" cellpadding=3D"0" cellspacing=3D=
+"0" class=3D"w" role=3D"presentation" style=3D"width:100% !important;line=
+-height:24px !important;margin:0;padding:0" width=3D"100%"><tr><td align=3D=
+"center" class=3D"l1" dir=3D"ltr" valign=3D"middle" style=3D"border-botto=
+m-width:1px;border-bottom-style:none;border-bottom-color:#e3e3e3;border-t=
+op-width:6px;border-top-style:solid;border-top-color:#000000;background-c=
+olor:#ffffff;height:46px;padding:29px 0" bgcolor=3D"#ffffff" height=3D"46=
+"><img alt=3D"Warp" class=3D"l12" height=3D"60" src=3D"https://dcx14qs33e=
+g2z.cloudfront.net/uploads/production/logos/bd6e5b12-dbef-485f-9535-78315=
+dc378e8/resized_c7e4acb0_1748444959_Frame_1000003419.png" width=3D"262" s=
+tyle=3D"outline:0;text-decoration:none;-ms-interpolation-mode:bicubic;dis=
+play:block;line-height:40px;font-size:24px;font-family:'Helvetica Neue', =
+Helvetica, Arial, sans-serif;font-weight:bold;color:#000000;text-align:ce=
+nter;background-color:transparent !important" /></td></tr>=0D
+<tr><td align=3D"center" class=3D"n1" style=3D"border-bottom-width:1px;bo=
+rder-bottom-style:solid;border-bottom-color:#e3e3e3;padding-bottom:29px">=
+<table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"i-nps" r=
+ole=3D"presentation" style=3D"width:534px;min-width:534px;margin:0 23px" =
+width=3D"534"><tr><td align=3D"center" class=3D"n11" dir=3D"ltr" style=3D=
+"font-size:18px;line-height:26px;font-family:'Helvetica Neue', Helvetica,=
+ Arial, sans-serif;color:#777777;text-align:center">The Warp team persona=
+lly reads every response, so please let us know how we're doing!</td></tr=
+></table></td></tr><tr><td align=3D"center" class=3D"l2" style=3D"backgro=
+und-color:#f6f6f6" bgcolor=3D"#f6f6f6"><table border=3D"0" cellpadding=3D=
+"0" cellspacing=3D"0" class=3D"i-nps" role=3D"presentation" style=3D"widt=
+h:534px;min-width:534px;margin:0 23px" width=3D"534"><tr><td align=3D"cen=
+ter" class=3D"q" style=3D"padding:18px 0"><table align=3D"center" border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"q1" role=3D"presentation=
+" style=3D"width:374px" width=3D"374"><tr><td align=3D"center" class=3D"q=
+11" dir=3D"ltr" style=3D"font-size:22px;font-family:'Helvetica Neue', Hel=
+vetica, Arial, sans-serif;font-weight:normal;line-height:30px;color:#1111=
+11;text-align:center">How likely are you to recommend Warp to a friend?</=
+td></tr></table></td></tr><tr><td><table border=3D"0" cellpadding=3D"0" c=
+ellspacing=3D"0" class=3D"hp" role=3D"presentation" style=3D"width:100%;h=
+eight:1px" width=3D"100%" height=3D"1"><tr><td><table border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" class=3D"hp1" role=3D"presentation" style=3D=
+"width:1px;height:1px" width=3D"1" height=3D"1"><tr><td><a tabindex=3D"-1=
+" aria-hidden=3D"true" href=3D"https://delighted.com/e/en/h/Hf86c6BEt9NSB=
+5hPCJId3KBT/0/23FZpNCm"><img alt=3D"" src=3D"https://dcx14qs33eg2z.cloudf=
+ront.net/assets/email/1px-8bfc005fda670f2b6bce4396fdfa4350b241a6f17c53ff5=
+54b987b09a0e2bc7d.gif" style=3D"outline:0;text-decoration:none;-ms-interp=
+olation-mode:bicubic;display:none;width:1px;height:1px;position:absolute;=
+left:-9999px;border-style:none" width=3D"1" height=3D"1" /></a></td></tr>=
+</table></td></tr></table></td></tr><tr><td align=3D"center" class=3D"b-n=
+ps"><table align=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" class=3D"b1-nps" role=3D"presentation" style=3D"width:44px;height:44px=
+;display:inline-table;float:right" width=3D"44" height=3D"44"><tr><td ali=
+gn=3D"center" class=3D"b01" valign=3D"middle" style=3D"width:42px;backgro=
+und-color:#ffffff;height:40px;border-radius:6px;box-shadow:rgba(0, 0, 0, =
+0.06) 0 2px 4px 0;border-color:#cccccc #cccccc #cccccc;border-style:solid=
+;border-width:1px 1px 3px" bgcolor=3D"#ffffff" width=3D"42" height=3D"40"=
+><a aria-label=3D"10, Very likely" rel=3D"nofollow" href=3D"https://delig=
+hted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/10/2UereHhF" style=3D"display:bl=
+ock;line-height:40px;text-decoration:none;font-size:18px;font-family:'Hel=
+vetica Neue', Helvetica, Arial, sans-serif;font-weight:bold"><span dir=3D=
+"ltr" style=3D"color:#000000">10<span class=3D"bl" style=3D"color:#000000=
+;display:none;visibility:hidden;overflow:hidden;line-height:0;font-size:0=
+"> =E2=80=93 Very likely</span></span></a></td></tr></table><table align=3D=
+"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b2" rol=
+e=3D"presentation" style=3D"width:5px;height:44px;display:inline-table;fl=
+oat:right" width=3D"5" height=3D"44"><tr><td style=3D"width:5px;height:44=
+px;line-height:0;font-size:0" width=3D"5" height=3D"44">&nbsp;</td></tr><=
+/table><table align=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D=
+"0" class=3D"b1-nps" role=3D"presentation" style=3D"width:44px;height:44p=
+x;display:inline-table;float:right" width=3D"44" height=3D"44"><tr><td al=
+ign=3D"center" class=3D"b01" valign=3D"middle" style=3D"width:42px;backgr=
+ound-color:#ffffff;height:40px;border-radius:6px;box-shadow:rgba(0, 0, 0,=
+ 0.06) 0 2px 4px 0;border-color:#cccccc #cccccc #cccccc;border-style:soli=
+d;border-width:1px 1px 3px" bgcolor=3D"#ffffff" width=3D"42" height=3D"40=
+"><a aria-label=3D"9" rel=3D"nofollow" href=3D"https://delighted.com/e/en=
+/c/Hf86c6BEt9NSB5hPCJId3KBT/9/29ynepWn" style=3D"display:block;line-heigh=
+t:40px;text-decoration:none;font-size:18px;font-family:'Helvetica Neue', =
+Helvetica, Arial, sans-serif;font-weight:bold"><span dir=3D"" style=3D"co=
+lor:#000000">9</span></a></td></tr></table><table align=3D"right" border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b2" role=3D"presentation=
+" style=3D"width:5px;height:44px;display:inline-table;float:right" width=3D=
+"5" height=3D"44"><tr><td style=3D"width:5px;height:44px;line-height:0;fo=
+nt-size:0" width=3D"5" height=3D"44">&nbsp;</td></tr></table><table align=
+=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b1-n=
+ps" role=3D"presentation" style=3D"width:44px;height:44px;display:inline-=
+table;float:right" width=3D"44" height=3D"44"><tr><td align=3D"center" cl=
+ass=3D"b01" valign=3D"middle" style=3D"width:42px;background-color:#fffff=
+f;height:40px;border-radius:6px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px =
+0;border-color:#cccccc #cccccc #cccccc;border-style:solid;border-width:1p=
+x 1px 3px" bgcolor=3D"#ffffff" width=3D"42" height=3D"40"><a aria-label=3D=
+"8" rel=3D"nofollow" href=3D"https://delighted.com/e/en/c/Hf86c6BEt9NSB5h=
+PCJId3KBT/8/0JlqcUND" style=3D"display:block;line-height:40px;text-decora=
+tion:none;font-size:18px;font-family:'Helvetica Neue', Helvetica, Arial, =
+sans-serif;font-weight:bold"><span dir=3D"" style=3D"color:#000000">8</sp=
+an></a></td></tr></table><table align=3D"right" border=3D"0" cellpadding=3D=
+"0" cellspacing=3D"0" class=3D"b2" role=3D"presentation" style=3D"width:5=
+px;height:44px;display:inline-table;float:right" width=3D"5" height=3D"44=
+"><tr><td style=3D"width:5px;height:44px;line-height:0;font-size:0" width=
+=3D"5" height=3D"44">&nbsp;</td></tr></table><table align=3D"right" borde=
+r=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b1-nps" role=3D"pres=
+entation" style=3D"width:44px;height:44px;display:inline-table;float:righ=
+t" width=3D"44" height=3D"44"><tr><td align=3D"center" class=3D"b01" vali=
+gn=3D"middle" style=3D"width:42px;background-color:#ffffff;height:40px;bo=
+rder-radius:6px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#=
+cccccc #cccccc #cccccc;border-style:solid;border-width:1px 1px 3px" bgcol=
+or=3D"#ffffff" width=3D"42" height=3D"40"><a aria-label=3D"7" rel=3D"nofo=
+llow" href=3D"https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/7/4UG=
+nfRwD" style=3D"display:block;line-height:40px;text-decoration:none;font-=
+size:18px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font=
+-weight:bold"><span dir=3D"" style=3D"color:#000000">7</span></a></td></t=
+r></table><table align=3D"right" border=3D"0" cellpadding=3D"0" cellspaci=
+ng=3D"0" class=3D"b2" role=3D"presentation" style=3D"width:5px;height:44p=
+x;display:inline-table;float:right" width=3D"5" height=3D"44"><tr><td sty=
+le=3D"width:5px;height:44px;line-height:0;font-size:0" width=3D"5" height=
+=3D"44">&nbsp;</td></tr></table><table align=3D"right" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" class=3D"b1-nps" role=3D"presentation" sty=
+le=3D"width:44px;height:44px;display:inline-table;float:right" width=3D"4=
+4" height=3D"44"><tr><td align=3D"center" class=3D"b01" valign=3D"middle"=
+ style=3D"width:42px;background-color:#ffffff;height:40px;border-radius:6=
+px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#cccccc #ccccc=
+c #cccccc;border-style:solid;border-width:1px 1px 3px" bgcolor=3D"#ffffff=
+" width=3D"42" height=3D"40"><a aria-label=3D"6" rel=3D"nofollow" href=3D=
+"https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/6/02YckaBS" style=3D=
+"display:block;line-height:40px;text-decoration:none;font-size:18px;font-=
+family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-weight:bold"><=
+span dir=3D"" style=3D"color:#000000">6</span></a></td></tr></table><tabl=
+e align=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D=
+"b2" role=3D"presentation" style=3D"width:5px;height:44px;display:inline-=
+table;float:right" width=3D"5" height=3D"44"><tr><td style=3D"width:5px;h=
+eight:44px;line-height:0;font-size:0" width=3D"5" height=3D"44">&nbsp;</t=
+d></tr></table><table align=3D"right" border=3D"0" cellpadding=3D"0" cell=
+spacing=3D"0" class=3D"b1-nps" role=3D"presentation" style=3D"width:44px;=
+height:44px;display:inline-table;float:right" width=3D"44" height=3D"44">=
+<tr><td align=3D"center" class=3D"b01" valign=3D"middle" style=3D"width:4=
+2px;background-color:#ffffff;height:40px;border-radius:6px;box-shadow:rgb=
+a(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#cccccc #cccccc #cccccc;border-=
+style:solid;border-width:1px 1px 3px" bgcolor=3D"#ffffff" width=3D"42" he=
+ight=3D"40"><a aria-label=3D"5" rel=3D"nofollow" href=3D"https://delighte=
+d.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/5/3IF4FELP" style=3D"display:block;=
+line-height:40px;text-decoration:none;font-size:18px;font-family:'Helveti=
+ca Neue', Helvetica, Arial, sans-serif;font-weight:bold"><span dir=3D"" s=
+tyle=3D"color:#000000">5</span></a></td></tr></table><table align=3D"righ=
+t" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b2" role=3D"=
+presentation" style=3D"width:5px;height:44px;display:inline-table;float:r=
+ight" width=3D"5" height=3D"44"><tr><td style=3D"width:5px;height:44px;li=
+ne-height:0;font-size:0" width=3D"5" height=3D"44">&nbsp;</td></tr></tabl=
+e><table align=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"=
+ class=3D"b1-nps" role=3D"presentation" style=3D"width:44px;height:44px;d=
+isplay:inline-table;float:right" width=3D"44" height=3D"44"><tr><td align=
+=3D"center" class=3D"b01" valign=3D"middle" style=3D"width:42px;backgroun=
+d-color:#ffffff;height:40px;border-radius:6px;box-shadow:rgba(0, 0, 0, 0.=
+06) 0 2px 4px 0;border-color:#cccccc #cccccc #cccccc;border-style:solid;b=
+order-width:1px 1px 3px" bgcolor=3D"#ffffff" width=3D"42" height=3D"40"><=
+a aria-label=3D"4" rel=3D"nofollow" href=3D"https://delighted.com/e/en/c/=
+Hf86c6BEt9NSB5hPCJId3KBT/4/1eHc1Kbd" style=3D"display:block;line-height:4=
+0px;text-decoration:none;font-size:18px;font-family:'Helvetica Neue', Hel=
+vetica, Arial, sans-serif;font-weight:bold"><span dir=3D"" style=3D"color=
+:#000000">4</span></a></td></tr></table><table align=3D"right" border=3D"=
+0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b2" role=3D"presentation"=
+ style=3D"width:5px;height:44px;display:inline-table;float:right" width=3D=
+"5" height=3D"44"><tr><td style=3D"width:5px;height:44px;line-height:0;fo=
+nt-size:0" width=3D"5" height=3D"44">&nbsp;</td></tr></table><table align=
+=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b1-n=
+ps" role=3D"presentation" style=3D"width:44px;height:44px;display:inline-=
+table;float:right" width=3D"44" height=3D"44"><tr><td align=3D"center" cl=
+ass=3D"b01" valign=3D"middle" style=3D"width:42px;background-color:#fffff=
+f;height:40px;border-radius:6px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px =
+0;border-color:#cccccc #cccccc #cccccc;border-style:solid;border-width:1p=
+x 1px 3px" bgcolor=3D"#ffffff" width=3D"42" height=3D"40"><a aria-label=3D=
+"3" rel=3D"nofollow" href=3D"https://delighted.com/e/en/c/Hf86c6BEt9NSB5h=
+PCJId3KBT/3/2Xk6RXP0" style=3D"display:block;line-height:40px;text-decora=
+tion:none;font-size:18px;font-family:'Helvetica Neue', Helvetica, Arial, =
+sans-serif;font-weight:bold"><span dir=3D"" style=3D"color:#000000">3</sp=
+an></a></td></tr></table><table align=3D"right" border=3D"0" cellpadding=3D=
+"0" cellspacing=3D"0" class=3D"b2" role=3D"presentation" style=3D"width:5=
+px;height:44px;display:inline-table;float:right" width=3D"5" height=3D"44=
+"><tr><td style=3D"width:5px;height:44px;line-height:0;font-size:0" width=
+=3D"5" height=3D"44">&nbsp;</td></tr></table><table align=3D"right" borde=
+r=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"b1-nps" role=3D"pres=
+entation" style=3D"width:44px;height:44px;display:inline-table;float:righ=
+t" width=3D"44" height=3D"44"><tr><td align=3D"center" class=3D"b01" vali=
+gn=3D"middle" style=3D"width:42px;background-color:#ffffff;height:40px;bo=
+rder-radius:6px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#=
+cccccc #cccccc #cccccc;border-style:solid;border-width:1px 1px 3px" bgcol=
+or=3D"#ffffff" width=3D"42" height=3D"40"><a aria-label=3D"2" rel=3D"nofo=
+llow" href=3D"https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/2/3f6=
+RWqfm" style=3D"display:block;line-height:40px;text-decoration:none;font-=
+size:18px;font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;font=
+-weight:bold"><span dir=3D"" style=3D"color:#000000">2</span></a></td></t=
+r></table><table align=3D"right" border=3D"0" cellpadding=3D"0" cellspaci=
+ng=3D"0" class=3D"b2" role=3D"presentation" style=3D"width:5px;height:44p=
+x;display:inline-table;float:right" width=3D"5" height=3D"44"><tr><td sty=
+le=3D"width:5px;height:44px;line-height:0;font-size:0" width=3D"5" height=
+=3D"44">&nbsp;</td></tr></table><table align=3D"right" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" class=3D"b1-nps" role=3D"presentation" sty=
+le=3D"width:44px;height:44px;display:inline-table;float:right" width=3D"4=
+4" height=3D"44"><tr><td align=3D"center" class=3D"b01" valign=3D"middle"=
+ style=3D"width:42px;background-color:#ffffff;height:40px;border-radius:6=
+px;box-shadow:rgba(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#cccccc #ccccc=
+c #cccccc;border-style:solid;border-width:1px 1px 3px" bgcolor=3D"#ffffff=
+" width=3D"42" height=3D"40"><a aria-label=3D"1" rel=3D"nofollow" href=3D=
+"https://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/1/0qbMntmz" style=3D=
+"display:block;line-height:40px;text-decoration:none;font-size:18px;font-=
+family:'Helvetica Neue', Helvetica, Arial, sans-serif;font-weight:bold"><=
+span dir=3D"" style=3D"color:#000000">1</span></a></td></tr></table><tabl=
+e align=3D"right" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" class=3D=
+"b2" role=3D"presentation" style=3D"width:5px;height:44px;display:inline-=
+table;float:right" width=3D"5" height=3D"44"><tr><td style=3D"width:5px;h=
+eight:44px;line-height:0;font-size:0" width=3D"5" height=3D"44">&nbsp;</t=
+d></tr></table><table align=3D"right" border=3D"0" cellpadding=3D"0" cell=
+spacing=3D"0" class=3D"b1-nps" role=3D"presentation" style=3D"width:44px;=
+height:44px;display:inline-table;float:right" width=3D"44" height=3D"44">=
+<tr><td align=3D"center" class=3D"b01" valign=3D"middle" style=3D"width:4=
+2px;background-color:#ffffff;height:40px;border-radius:6px;box-shadow:rgb=
+a(0, 0, 0, 0.06) 0 2px 4px 0;border-color:#cccccc #cccccc #cccccc;border-=
+style:solid;border-width:1px 1px 3px" bgcolor=3D"#ffffff" width=3D"42" he=
+ight=3D"40"><a aria-label=3D"0, Not likely" rel=3D"nofollow" href=3D"http=
+s://delighted.com/e/en/c/Hf86c6BEt9NSB5hPCJId3KBT/0/3pJZOZYY" style=3D"di=
+splay:block;line-height:40px;text-decoration:none;font-size:18px;font-fam=
+ily:'Helvetica Neue', Helvetica, Arial, sans-serif;font-weight:bold"><spa=
+n dir=3D"ltr" style=3D"color:#000000">0<span class=3D"bl" style=3D"color:=
+#000000;display:none;visibility:hidden;overflow:hidden;line-height:0;font=
+-size:0"> =E2=80=93 Not likely</span></span></a></td></tr></table></td></=
+tr><tr><td class=3D"h" style=3D"padding:18px 0"><table aria-hidden=3D"tru=
+e" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation"=
+ style=3D"width:100%" width=3D"100%"><tr><td align=3D"left" class=3D"h1" =
+style=3D"font-size:18px;font-family:'Helvetica Neue', Helvetica, Arial, s=
+ans-serif;color:#777777;width:50%;text-align:left" width=3D"50%">Not like=
+ly</td><td align=3D"right" class=3D"h2" style=3D"font-size:18px;font-fami=
+ly:'Helvetica Neue', Helvetica, Arial, sans-serif;color:#777777;width:50%=
+;text-align:right" width=3D"50%">Very likely</td></tr></table></td></tr><=
+/table></td></tr><tr><td align=3D"center" class=3D"f" style=3D"border-top=
+-width:1px;border-top-style:solid;border-top-color:#e3e3e3;height:46px;ba=
+ckground-color:#ffffff" bgcolor=3D"#ffffff" height=3D"46"><table border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" class=3D"i-nps" role=3D"presentat=
+ion" style=3D"width:534px;min-width:534px;margin:0 23px" width=3D"534"><t=
+r><td align=3D"left" class=3D"f1" dir=3D"ltr" valign=3D"middle" style=3D"=
+height:48px;font-size:14px;font-family:'Helvetica Neue', Helvetica, Arial=
+, sans-serif;color:#cccccc;width:40%;text-align:left" width=3D"40%" heigh=
+t=3D"48"><a rel=3D"nofollow" href=3D"https://delighted.com/e/en/u/Hf86c6B=
+Et9NSB5hPCJId3KBT/1RTdOBBt" style=3D"color:#cccccc">Unsubscribe</a></td><=
+td align=3D"right" class=3D"f2" dir=3D"ltr" valign=3D"middle" style=3D"he=
+ight:48px;font-size:14px;font-family:'Helvetica Neue', Helvetica, Arial, =
+sans-serif;color:#cccccc;width:60%;text-align:right" width=3D"60%" height=
+=3D"48">Powered by&nbsp;<a rel=3D"nofollow" href=3D"https://delighted.com=
+/?utm_campaign=3Dsurvey_powered1&utm_content=3Dtemplates&utm_medium=3Dema=
+il&utm_source=3Ddelighted_survey" style=3D"color:#cccccc">Delighted</a><i=
+mg width=3D"1" height=3D"1" border=3D"0" alt=3D"" style=3D"width:0;overfl=
+ow:hidden" src=3D"https://delighted.com/e/en/o/Hf86c6BEt9NSB5hPCJId3KBT/1=
+RTdOBBt.gif" /></td></tr></table><table border=3D"0" cellpadding=3D"0" ce=
+llspacing=3D"0" class=3D"hp" role=3D"presentation" style=3D"width:100%;he=
+ight:1px" width=3D"100%" height=3D"1"><tr><td><table border=3D"0" cellpad=
+ding=3D"0" cellspacing=3D"0" class=3D"hp1" role=3D"presentation" style=3D=
+"width:1px;height:1px" width=3D"1" height=3D"1"><tr><td><a tabindex=3D"-1=
+" aria-hidden=3D"true" href=3D"https://delighted.com/e/en/h/Hf86c6BEt9NSB=
+5hPCJId3KBT/1/06E9Qlld" style=3D"color:#cccccc"><img alt=3D"" src=3D"http=
+s://dcx14qs33eg2z.cloudfront.net/assets/email/1px-8bfc005fda670f2b6bce439=
+6fdfa4350b241a6f17c53ff554b987b09a0e2bc7d.gif" style=3D"outline:0;text-de=
+coration:none;-ms-interpolation-mode:bicubic;display:none;width:1px;heigh=
+t:1px;position:absolute;left:-9999px;border-style:none" width=3D"1" heigh=
+t=3D"1" /></a></td></tr></table></td></tr></table></td></tr>=0D
+</table><div style=3D"display:none;white-space:nowrap;font:15px courier;l=
+ine-height:0" class=3D"y">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp=
+; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &=
+nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;</div></body></html=
+>=
+
+----==_mimepart_68d148a83a400_2b47544d5d063215493--

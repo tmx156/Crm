@@ -1,0 +1,194 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp130451ecs;
+        Mon, 22 Sep 2025 04:11:17 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IE6IkQuFWnLAh8jOV+F4hjyiR2P2zHzIpDdhX5nYaYqRUVAiuqAjeC5R2MqYH6R3UGM2Mzs
+X-Received: by 2002:ac8:5ac8:0:b0:4b2:ed82:29d5 with SMTP id d75a77b69052e-4c06fc1a9b8mr165021341cf.33.1758539477128;
+        Mon, 22 Sep 2025 04:11:17 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758539477; cv=none;
+        d=google.com; s=arc-20240605;
+        b=Tl9jDUEU8q73bIGPTNqDa0gOPWWXdG6x6AcLwnb0nOlsjjIA8vQAGYEJ5Oj2LQbZFb
+         0K5FIJ0XlbUVd0TWwnDk8JJg5lUgipJEwpw7gneIQYA9fWQhzLpu7WQNTXvn+7+JjBYl
+         E1b1laX42dk0nClGDfjDxdJ4soQXWn0jw4t2ch8EO7tYn9nQvvRf4G3c/RNEQ7XP0Uvo
+         2wKnWCn6DWJsNqeq9NCbhbftOdaSlY48CqLhonNHNkp9SKj8wwSq2c4yS9CAx3fxNiuq
+         lKQmUOsMs5+H72Tt8PUosK1p/gCWUhuRJPqnf7aDxkhck0gJ1jkgZV7+tZslHquhO0w4
+         fYtA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=mime-version:subject:references:in-reply-to:message-id:to:from:date
+         :dkim-signature;
+        bh=Q8jgXovDgVrIfHkc4aNv/WylAVnLWfWwTM0/1fGFY0o=;
+        fh=y7h+yB7sjHZMVA/hkkfQy0c6b2dNmo20704lVdiqOb8=;
+        b=Hnpzn/kbaJEucraZtKFzhRUd6f3MhhjKari9EgOoa4vVh+oAFKdV6HJ8ZiF7/7GfhX
+         9et1oPH8dh/aVpSNb4w2H+cKnhkY1+15mGqWjextEutUqdXnufZnV3j9uDkCd1d+4GdA
+         cO55hDavzfgbfKCcKFEsUepd/QLPi2IdesQJQ+QVRl4t7W7FfAdOog3thckb0iClsTNb
+         1//XDHuiFzp7X1rx2/FipvK9Fe5PYFpwM7SMyS8YrWIZdlxSsEljRjJpkjcMO9NqUkfV
+         meDjK0j4Ugg4dPyamLHuUoIoBzmzwTnCIvX7SoZhWl4diuXcvQBtZuW6/7lz7PV+H494
+         QK4w==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@yahoo.com header.s=s2048 header.b=C+9AO+wu;
+       spf=pass (google.com: domain of sophie_johno2@yahoo.com designates 74.6.131.41 as permitted sender) smtp.mailfrom=sophie_johno2@yahoo.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=yahoo.com
+Return-Path: <sophie_johno2@yahoo.com>
+Received: from sonic303-2.consmr.mail.bf2.yahoo.com (sonic303-2.consmr.mail.bf2.yahoo.com. [74.6.131.41])
+        by mx.google.com with ESMTPS id d75a77b69052e-4d16ae13464si318691cf.525.2025.09.22.04.11.16
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Mon, 22 Sep 2025 04:11:17 -0700 (PDT)
+Received-SPF: pass (google.com: domain of sophie_johno2@yahoo.com designates 74.6.131.41 as permitted sender) client-ip=74.6.131.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@yahoo.com header.s=s2048 header.b=C+9AO+wu;
+       spf=pass (google.com: domain of sophie_johno2@yahoo.com designates 74.6.131.41 as permitted sender) smtp.mailfrom=sophie_johno2@yahoo.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=yahoo.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yahoo.com; s=s2048; t=1758539476; bh=Q8jgXovDgVrIfHkc4aNv/WylAVnLWfWwTM0/1fGFY0o=; h=Date:From:To:In-Reply-To:References:Subject:From:Subject:Reply-To; b=C+9AO+wuyS5PVR9Y2Av7UwysvkK9CkFl3QnIplzpRIf/aCBqcmON/lJBSElwc667RQRY7K0aJUEYODIt+Ici8e7aUotAhcCWbR/S+6eu6DNHVowkEt1L6043JSJHzt0+bAm0PZ+D7QjijRBohOMO5a4AVrHNxKwO6vu22qEF0beVGMIgChSVTy9wFaixdDYNyxSrM4qAamX9nI9kcHmW1CVdyxwL7ZZabqVnDeocTk/+VBfVOShoHMUC4UgbwXPUhjd7TzgS+dhq1nynF6He4aTsfjJtcqypoTzoRxUl98AyZxvIordFYkt3J39pRDq+ST1McbK3aafvOCiMj2rOkw==
+X-SONIC-DKIM-SIGN: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yahoo.com; s=s2048; t=1758539476; bh=uwgrQza/wHAkD4nCmbZh1yLdXD2t2HqOuNm+tO6Sbk8=; h=X-Sonic-MF:Date:From:To:Subject:From:Subject; b=pBuu5uBLKRCgSNrHJvGfcgBZTsN5rQa4dZso4cVh2cwA4COXJ1G3H2WYOXTgGBbYuy69RJ7j+3Dw/4wtOHR6KLXpKmmPOeRMm9T4ciaBx6X5SKqx+mTLl9X/9nYQ6s2N8MqB4u4K3gfHSsySV6+pI1kExU1M8ySJg3sE2VJtvLzXg2WVz9LM2VAYaNJE0+qiV6UImWPOZP3I/5HFo1mwl6SZbNhAvdrJM03A/Dt1E/NZxSg7460iGMj77HO+tuljemzMGPZHU9oYoktt58ofjRz/dW8DQaA8MjXrtftPxhk6rExt4jZgd5wGyO4ckFnFcpMa5W8yr1RwU6XT20R3dw==
+X-YMail-OSG: Gzqi820VM1nkG_MjKYMHlC7qAMt4jvEC4a.EW2B0_KlwPvwb.KX0dSbOXIfm81_
+ 3Kb5k2gA.pt7t41oHmfV3tWjdOnbXyDHK16uuRHhJG4oE8GQ4Da0..gO23RieZ0SoOOD6SdV00Z1
+ vVxzal7jR6HNsiBfh2jZonlRKi2BwpoEAdp6BjN4wrDDeKEsQ.7hKHqZqU0Y4dBXaRV9LyaceRcS
+ Mg5bcz6p4BOUJQt2q.t154MxeorZB_NLpmJHHqnr_XPQY_nFMxWcGqYorDmWUxJgKPcGkxGZ2K4B
+ ITCVG06u49_emH2E.5DQc5meTUKpfm1oBCO5A..hZwu6htwBwoI1ONE94Yqyb0vEjg1FpZ_ODFoq
+ DP9yJgJC4qelqUFqoiZ4Rgzrzjflw2n4SXC2CSvJySRw4aoVUUsUfbhxcLgnXD7UBvopIzafl5cd
+ wNwTx2uEj6TimbrErMSM448bmilh5W.gB2X7thPNSX3kTDr9tLqHSCzYdrMWyfmuGMfZHhks7GG_
+ oEKAOv5lPdQUHe.axOO58.HNXon.OCb3U2FF8AwYgkvh_H3soDQJs1i_OHOiwa0PGYgUvNSjOPof
+ yg1rA8IjLP12I0lsnSPGJ.oxEPhTk_4stKc4LbmlkcvpnB.PPBROf5ZgNGG9bqWm.bLkRwbW0acA
+ WzKAaAX4RVVtsVwjJKCnoiVIqdLV0bN0lrV6gOVQq1ENZXT5tK0JHypRJG4MXIRY5LqKiqflpapJ
+ hCrePFaZhMBCsCkGu0GW4tW7.gH2W97do3GbT3Qhoog3nqLzcAvXTTIB67NQ9DPTfOoiBJAwaHqu
+ uE1N0XjUjPbnDXm07CkeXl7.0oAKlzy78gp68Sjy4IHDteNcGtbbEZUHACss7wtQhNZIsgQhcShb
+ 5RwqH7o5iJlOZu_kf501sjWepMIPIzKPtHZ1HVQJzXaKFE3OcCMseLNR_nDCr5PRMeMl0e1guJpv
+ BLvaSXOL736VYLWYF5RTewDoF53XM4u2Rw3YELnNYEEBxK8bVfiNRTr1edoZK5Ct4W70dRwU1Pr4
+ 7jGJqL8MyR2.GpYksADQx4rtfJz9K35yFJpnHLnMjTvTJsWM9X4KHvW8FbIaZBLmk_s6KXV8RwlC
+ 4LWX.FJ.KOW.AxENl_KrB.5roKy4i_qYIVwvV0asaetv4LRigm64AgSagjqODWp.eCGMBNMvxCYf
+ 3MAv2zv4NSD80.kfD5YEZuJX2d2BB3eFvPPgHLJHgUhqx4fu24fc8N.Kbx6xSRdSPS4nnFWR20T7
+ SRBf2JtwYwT2dZtHmMLL0vuqkKEzRVpRZ707AhuQx6wmCdxToYYM7BcOF_zz25lCXFG2ASpiHcyf
+ BaYsb0pVmg4_VWl9oqYv7L0z.K5MfbBwSJigPYwUNoVZP.7B5E4yJhUhDzFCQaK13BOFMdjJYcD3
+ ekSYzCm93UnAqEXReslv.yBgeLvJmmADXQaKSA7JzjYP.ca8AlkDHJRhSST43VsHqxnxnbSO0n_O
+ 9SI9.BDiwREibJQgRZBeTWlg9QES4YRP9y0Um7xEvoGsn6DZM5EvC_T0ELkzARXGNJoo3gwAT3_B
+ zijXM_8n.14_Qtt83WmLKPzCg6rdfHx3np8POyKGQOVscXDbv1ANUO23smbjY7mKbinKSoekN_sD
+ ESU4cqHkosT.OoVpGIuSdX8KaaQ_.QU4CpKNYTbR1im8gVU1JbQ07CXl3tPXICmfJMlS_aGSUMQT
+ sroozWioT5oOpkAWdcQov3jt47lVH1N1U.Q..33LsPylrlNqTpFQ_qW16KWjvytR5k8xnulioQkA
+ kovlkLV8aHnrnRSIxe.XF7xOPDojoV86AAQk6mC7LuKaytTqQg7vTDtiB3ljtE3Ae3KbWAJ4XSOB
+ fnLfq8kRpKdJxpK.nBdNo6cSFfIDzbXjW4XWBnv7vhucdhsH6UYX7xnjgV58LHq5z0DmprzxqTfp
+ MSbyCmIK00JPFn4mx8Q6SCn0mt4nIkCNt7IDC0jtQX.ps2LGWO1kdJcnX2Jd4VDru7Ud05asWZBv
+ 6QOwun3XrbKXkTWWgM8jVuyk.r32SQVWcPjvgTMEZ8pZiCKZzF5c6rw54ZDD1JqQilgHo9pU0SAI
+ FZxZNxj2cvpOWc9bClleKY5jFh.5sjcBb8tKfBISDfW5qft0gmbSu5eTiUV.2gEtLK7orm7m1fFb
+ DQjrhUJedrlzBPh0yOAFgxkpcSddqlvkjqb8_IRPOziptOdG77yr1DV1eZFfRuNka4Y20cNwOWhp
+ WjZmpmgykHagAr7bl9RUyPbuHC555d7YNEAx4LbAUwaHKyRbsIPcuP3H3baln6M9WoyVX1t3Ws5J
+ tgQsg9.gtGh68EMXzJANkcyOA0ZleO3ts01w0
+X-Sonic-MF: <sophie_johno2@yahoo.com>
+X-Sonic-ID: 9384746f-8e2a-4be3-aaa2-6aeecd570af1
+Received: from sonic.gate.mail.ne1.yahoo.com by sonic303.consmr.mail.bf2.yahoo.com with HTTP; Mon, 22 Sep 2025 11:11:16 +0000
+Date: Mon, 22 Sep 2025 11:11:14 +0000 (UTC)
+From: Sophie Johnson <sophie_johno2@yahoo.com>
+To: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+Message-ID: <1814340411.3343759.1758539474292@mail.yahoo.com>
+In-Reply-To: <f2bae95b-72d6-2d29-e24e-0171575d4bed@gmail.com>
+References: <f2bae95b-72d6-2d29-e24e-0171575d4bed@gmail.com>
+Subject: Re: Booking Confirmation
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_3343758_1884291536.1758539474290"
+X-Mailer: WebService/1.1.24425 YMailNoble
+Content-Length: 5373
+
+------=_Part_3343758_1884291536.1758539474290
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+ Good afternoon,=C2=A0
+I=E2=80=99m really sorry I=E2=80=99m not going to be able to make this appo=
+intment with Carson as I can=E2=80=99t get anyone to collect his older brot=
+her on Thursday, would I be possible to reschedule if not I=E2=80=99ll just=
+ have to cancel=C2=A0
+ThanksSophie =C2=A0
+
+    On Friday, September 19, 2025 at 05:17:37 PM GMT+1, Avensismodels <aven=
+sismodels.co.uk.crm.bookings@gmail.com> wrote: =20
+=20
+ Client: Carson
+Photoshoot Date: 25/09/2025
+Photoshoot Time: 13:30:00
+Studio Address: 60 Higher Ardwick, Manchester, M12 6DA
+
+Dear Carson
+
+Avensis Models UK has confirmed your consultation assessment. This will be =
+an exciting opportunity to see if you have model potential.
+
+Summary of your day with us,
+When you arrive at the studio, you will be greeted by our in-house industry=
+ experts, who will guide you through your consultation. After which, our te=
+am of photographers will carry out your test shoot assessment. And finally,=
+ you will be given your assessment feedback!
+
+What you will need to bring,
+We require you to bring 3 outfits, ranging from smart-casual.
+We also ask that you come photoshoot ready, with hair and make-up already d=
+one. We also require you to bring two forms of ID. For example, a driver's =
+licence/provisional, passport, or bank card. This is to verify you are who =
+you say you are ( this also applies to parents of any children who have an =
+appointment booked with us)
+
+If you have any more questions, please don't hesitate to contact us. If, fo=
+r any reason, you need to reschedule/cancel your appointment, you will need=
+ to give us at least 72 hours' notice. However, this is not advised as you =
+will be added to our unreliable list.
+
+Applicants under the age of 18=C2=A0 must be accompanied by a parent
+
+https://www.avensismodels.co.uk/ =20
+------=_Part_3343758_1884291536.1758539474290
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><head></head><body><div class=3D"ydp79a750e8yahoo-style-wrap" style=
+=3D"font-family:Helvetica Neue, Helvetica, Arial, sans-serif;font-size:16px=
+;"><div></div>
+        <div>Good afternoon,&nbsp;</div><div><br></div><div>I=E2=80=99m rea=
+lly sorry I=E2=80=99m not going to be able to make this appointment with Ca=
+rson as I can=E2=80=99t get anyone to collect his older brother on Thursday=
+, would I be possible to reschedule if not I=E2=80=99ll just have to cancel=
+&nbsp;</div><div><br></div><div>Thanks</div><div>Sophie &nbsp;</div><div><b=
+r></div><div><br></div>
+       =20
+        <div id=3D"ydp79a750e8yahoo_quoted_9206637025" class=3D"ydp79a750e8=
+yahoo_quoted">
+            <div style=3D"font-family:'Helvetica Neue', Helvetica, Arial, s=
+ans-serif;font-size:13px;color:#26282a;">
+               =20
+                <div>
+                        On Friday, September 19, 2025 at 05:17:37 PM GMT+1,=
+ Avensismodels &lt;avensismodels.co.uk.crm.bookings@gmail.com&gt; wrote:
+                    </div>
+                    <div><br></div>
+                    <div><br></div>
+               =20
+               =20
+                <div><div dir=3D"ltr">Client: Carson<br></div><div dir=3D"l=
+tr">Photoshoot Date: 25/09/2025<br></div><div dir=3D"ltr">Photoshoot Time: =
+13:30:00<br></div><div dir=3D"ltr">Studio Address: 60 Higher Ardwick, Manch=
+ester, M12 6DA<br></div><div dir=3D"ltr"><br></div><div dir=3D"ltr">Dear Ca=
+rson<br></div><div dir=3D"ltr"><br></div><div dir=3D"ltr">Avensis Models UK=
+ has confirmed your consultation assessment. This will be an exciting oppor=
+tunity to see if you have model potential.<br></div><div dir=3D"ltr"><br></=
+div><div dir=3D"ltr">Summary of your day with us,<br></div><div dir=3D"ltr"=
+>When you arrive at the studio, you will be greeted by our in-house industr=
+y experts, who will guide you through your consultation. After which, our t=
+eam of photographers will carry out your test shoot assessment. And finally=
+, you will be given your assessment feedback!<br></div><div dir=3D"ltr"><br=
+></div><div dir=3D"ltr">What you will need to bring,<br></div><div dir=3D"l=
+tr">We require you to bring 3 outfits, ranging from smart-casual.<br></div>=
+<div dir=3D"ltr">We also ask that you come photoshoot ready, with hair and =
+make-up already done. We also require you to bring two forms of ID. For exa=
+mple, a driver's licence/provisional, passport, or bank card. This is to ve=
+rify you are who you say you are ( this also applies to parents of any chil=
+dren who have an appointment booked with us)<br></div><div dir=3D"ltr"><br>=
+</div><div dir=3D"ltr">If you have any more questions, please don't hesitat=
+e to contact us. If, for any reason, you need to reschedule/cancel your app=
+ointment, you will need to give us at least 72 hours' notice. However, this=
+ is not advised as you will be added to our unreliable list.<br></div><div =
+dir=3D"ltr"><br></div><div dir=3D"ltr">Applicants under the age of 18&nbsp;=
+ must be accompanied by a parent<br></div><div dir=3D"ltr"><br></div><div d=
+ir=3D"ltr"><a href=3D"https://www.avensismodels.co.uk/" rel=3D"nofollow" ta=
+rget=3D"_blank">https://www.avensismodels.co.uk/</a></div></div>
+            </div>
+        </div></div></body></html>
+------=_Part_3343758_1884291536.1758539474290--

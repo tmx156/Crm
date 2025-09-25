@@ -101,9 +101,18 @@ router.get('/', auth, async (req, res) => {
           seenKeys.add(key);
 
           // Determine direction based on message type and sent_by field
-          // For SMS messages: if sent_by exists, it's sent; otherwise received
-          // For email messages: if sent_by exists, it's sent; otherwise received
-          const direction = row.sent_by ? 'sent' : 'received';
+          // For messages: if sent_by exists, it's sent; otherwise received
+          // Also check status field for additional context
+          let direction = 'received'; // Default to received
+
+          if (row.sent_by) {
+            direction = 'sent';
+          } else if (row.status === 'sent' || row.email_status === 'sent') {
+            direction = 'sent';
+          } else if (row.status === 'received') {
+            direction = 'received';
+          }
+
           const action = direction === 'received' ? `${row.type.toUpperCase()}_RECEIVED` : `${row.type.toUpperCase()}_SENT`;
 
           messagesData.push({
@@ -123,7 +132,14 @@ router.get('/', auth, async (req, res) => {
             performedByName: row.sent_by_name,
             content,
             details: { body: content, subject: row.subject },
-            isRead: row.read_status === true || direction === 'sent' // Use messages table read_status as source of truth
+            isRead: row.read_status === true || direction === 'sent', // Use messages table read_status as source of truth
+            // Add delivery status tracking fields
+            delivery_status: row.delivery_status,
+            error_message: row.error_message,
+            provider_message_id: row.provider_message_id,
+            delivery_provider: row.delivery_provider,
+            delivery_attempts: row.delivery_attempts,
+            email_status: row.email_status // For email delivery status
           });
         });
       }

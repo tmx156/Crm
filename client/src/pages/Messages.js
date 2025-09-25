@@ -80,77 +80,110 @@ const Messages = () => {
     }
   }, [readMessageIds, localStorageLoaded]);
 
-  // Calculate stats based on conversations rather than individual messages
-  const calculateConversationStats = (groupedMessages, allMessages) => {
-    const totalConversations = groupedMessages.length;
+  // Calculate stats based on conversations
+  const calculateConversationStats = (conversations, allMessages) => {
+    const totalConversations = conversations.filter(c => c.isConversation).length;
     const totalIndividualMessages = allMessages.length;
 
-    // Count conversations by type
-    const smsConversations = groupedMessages.filter(msg => msg.type === 'sms').length;
-    const emailConversations = groupedMessages.filter(msg => msg.type === 'email').length;
+    // Count conversations by type (conversations can have both SMS and email)
+    const smsConversations = conversations.filter(c => c.isConversation && c.hasSMS).length;
+    const emailConversations = conversations.filter(c => c.isConversation && c.hasEmail).length;
+    const mixedConversations = conversations.filter(c => c.isConversation && c.hasSMS && c.hasEmail).length;
 
-    // Count unread conversations (a conversation is unread if it has any unread messages)
-    const unreadConversations = groupedMessages.filter(msg => !msg.isRead).length;
+    // Count unread conversations (conversations with unread messages)
+    const unreadConversations = conversations.filter(c => c.isConversation && c.unreadCount > 0).length;
 
-    // Calculate total messages in conversations
-    const totalMessagesInConversations = groupedMessages.reduce((total, msg) => {
-      return total + (msg.conversationCount || 1);
-    }, 0);
+    // Calculate total messages across all conversations
+    const totalMessagesInConversations = conversations
+      .filter(c => c.isConversation)
+      .reduce((total, conv) => total + conv.messageCount, 0);
 
     return {
-      totalMessages: totalConversations, // Show conversations, not individual messages
+      totalMessages: totalConversations, // Show conversations count
       smsCount: smsConversations,
       emailCount: emailConversations,
+      mixedCount: mixedConversations,
       unreadCount: unreadConversations,
       totalIndividualMessages, // Keep track of actual message count
       totalMessagesInConversations
     };
   };
 
-  // Group messages by lead for SMS and email conversations
-  const groupMessagesByLead = (messages) => {
-    const grouped = new Map();
-    const individualMessages = [];
+  // Group messages into conversation threads by lead (not by lead+type)
+  const groupMessagesIntoConversations = (messages) => {
+    const conversations = new Map();
+    const orphanedMessages = [];
 
     messages.forEach(message => {
-      // For SMS and email messages, group by lead and type
+      // Only group SMS and email messages that have a leadId
       if ((message.type === 'sms' || message.type === 'email') && message.leadId) {
-        const leadKey = `${message.leadId}_${message.type}`; // Group by lead + message type
+        const conversationKey = message.leadId; // Group by lead only
 
-        if (!grouped.has(leadKey)) {
-          grouped.set(leadKey, {
-            ...message,
-            conversationCount: 1,
-            isGrouped: true
+        if (!conversations.has(conversationKey)) {
+          // Create new conversation with the most recent message
+          conversations.set(conversationKey, {
+            id: `conv_${message.leadId}`,
+            leadId: message.leadId,
+            leadName: message.leadName,
+            leadEmail: message.leadEmail,
+            leadPhone: message.leadPhone,
+            leadStatus: message.leadStatus,
+            assignedTo: message.assignedTo,
+            lastMessage: message,
+            messageCount: 1,
+            unreadCount: message.isRead === false ? 1 : 0,
+            hasSMS: message.type === 'sms',
+            hasEmail: message.type === 'email',
+            messages: [message],
+            timestamp: new Date(message.timestamp || message.created_at),
+            isConversation: true,
+            // Track delivery status for conversations
+            hasFailedDeliveries: message.delivery_status === 'failed' || message.email_status === 'failed',
+            hasPendingDeliveries: message.delivery_status === 'pending' || message.delivery_status === 'sending'
           });
         } else {
-          const existing = grouped.get(leadKey);
-          // Keep the most recent message
-          if (new Date(message.timestamp || message.created_at) > new Date(existing.timestamp || existing.created_at)) {
-            grouped.set(leadKey, {
-              ...message,
-              conversationCount: existing.conversationCount + 1,
-              isGrouped: true
-            });
-          } else {
-            // Update conversation count but keep the newer message
-            grouped.set(leadKey, {
-              ...existing,
-              conversationCount: existing.conversationCount + 1
-            });
+          const conversation = conversations.get(conversationKey);
+
+          // Add message to conversation
+          conversation.messages.push(message);
+          conversation.messageCount++;
+
+          // Update unread count
+          if (message.isRead === false) {
+            conversation.unreadCount++;
+          }
+
+          // Update message type flags
+          if (message.type === 'sms') conversation.hasSMS = true;
+          if (message.type === 'email') conversation.hasEmail = true;
+
+          // Update delivery status flags
+          if (message.delivery_status === 'failed' || message.email_status === 'failed') {
+            conversation.hasFailedDeliveries = true;
+          }
+          if (message.delivery_status === 'pending' || message.delivery_status === 'sending') {
+            conversation.hasPendingDeliveries = true;
+          }
+
+          // Update last message if this is newer
+          const messageTime = new Date(message.timestamp || message.created_at);
+          if (messageTime > conversation.timestamp) {
+            conversation.lastMessage = message;
+            conversation.timestamp = messageTime;
           }
         }
       } else {
-        // For other message types or messages without leadId, keep as individual messages
-        individualMessages.push(message);
+        // Messages without leadId or other types stay as individual items
+        orphanedMessages.push(message);
       }
     });
 
-    // Convert grouped messages to array
-    const groupedArray = Array.from(grouped.values());
+    // Convert conversations to array and sort by most recent
+    const conversationArray = Array.from(conversations.values())
+      .sort((a, b) => b.timestamp - a.timestamp);
 
-    // Combine grouped conversations and individual messages
-    return [...groupedArray, ...individualMessages];
+    // Combine conversations and orphaned messages
+    return [...conversationArray, ...orphanedMessages];
   };
 
   // Fetch messages
@@ -192,8 +225,8 @@ const Messages = () => {
         };
       });
 
-      // Group SMS messages by lead to show conversations (not individual messages)
-      const groupedMessages = groupMessagesByLead(fetchedMessages);
+      // Group messages into conversation threads by lead
+      const groupedMessages = groupMessagesIntoConversations(fetchedMessages);
 
       // Calculate stats based on grouped conversations
       const conversationStats = calculateConversationStats(groupedMessages, fetchedMessages);
@@ -1142,140 +1175,234 @@ const Messages = () => {
           </div>
         ) : (
           <ul className="divide-y divide-gray-200">
-            {filteredMessages.map((message) => (
-              <li
-                key={message.id}
-                className={`hover:bg-gray-50 cursor-pointer transition-colors relative ${
-                  !message.isRead ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                }`}
-                onClick={() => handleMessageClick(message)}
-              >
-                <div className="px-4 py-4 flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1">
-                    {user.role === 'admin' && (
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(message.id)}
-                        onChange={(e) => toggleSelectOne(e, message.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4"
-                      />
-                    )}
-                    {/* Message Icon */}
-                    <div className="flex-shrink-0">
-                      {getMessageIcon(message.type, message.direction)}
-                    </div>
-
-                    {/* Message Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <p className={`text-sm font-medium ${!message.isRead ? 'text-gray-900' : 'text-gray-600'}`}>
-                            {message.leadName}
-                          </p>
-                          <span className="text-xs text-gray-500">
-                            {message.leadPhone}
-                          </span>
-                          {message.direction === 'received' && !message.isRead && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white animate-pulse">
-                              NEW
-                            </span>
+            {filteredMessages.map((item) => {
+              // Handle conversations vs individual messages
+              if (item.isConversation) {
+                // Render conversation
+                const conversation = item;
+                const lastMessage = conversation.lastMessage;
+                return (
+                  <li
+                    key={conversation.id}
+                    className={`hover:bg-gray-50 cursor-pointer transition-colors relative ${
+                      conversation.unreadCount > 0 ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                    }`}
+                    onClick={() => handleMessageClick(lastMessage)}
+                  >
+                    <div className="px-4 py-4 flex items-center justify-between">
+                      <div className="flex items-center space-x-4 flex-1">
+                        {user.role === 'admin' && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(conversation.id)}
+                            onChange={(e) => toggleSelectOne(e, conversation.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4"
+                          />
+                        )}
+                        {/* Conversation Icon with type indicators and status warnings */}
+                        <div className="flex-shrink-0 relative">
+                          <FiMessageSquare className={`h-5 w-5 ${conversation.hasFailedDeliveries ? 'text-red-500' : 'text-blue-500'}`} />
+                          {/* Status warnings */}
+                          {conversation.hasFailedDeliveries && (
+                            <div className="absolute -top-1 -left-1">
+                              <span className="inline-flex items-center px-1 py-0.5 rounded-full text-xs bg-red-500 text-white animate-pulse">
+                                <FiX className="h-2 w-2" />
+                              </span>
+                            </div>
                           )}
+                          {conversation.hasPendingDeliveries && !conversation.hasFailedDeliveries && (
+                            <div className="absolute -top-1 -left-1">
+                              <span className="inline-flex items-center px-1 py-0.5 rounded-full text-xs bg-yellow-500 text-white">
+                                <FiClock className="h-2 w-2" />
+                              </span>
+                            </div>
+                          )}
+                          {/* Type badges */}
+                          <div className="absolute -top-1 -right-1 flex space-x-0.5">
+                            {conversation.hasSMS && (
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-xs bg-blue-100 text-blue-800 text-xs">
+                                SMS
+                              </span>
+                            )}
+                            {conversation.hasEmail && (
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-xs bg-green-100 text-green-800 text-xs">
+                                Email
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            message.direction === 'sent'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {message.direction === 'sent' ? (
+
+                        {/* Conversation Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <p className={`text-sm font-medium ${conversation.unreadCount > 0 ? 'text-gray-900' : 'text-gray-600'}`}>
+                                {conversation.leadName}
+                              </p>
+                              <span className="text-xs text-gray-500">
+                                {conversation.leadPhone}
+                              </span>
+                              {conversation.unreadCount > 0 && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white animate-pulse">
+                                  {conversation.unreadCount} NEW
+                                </span>
+                              )}
+                              {/* Conversation message count */}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-800">
+                                <FiMessageSquare className="h-3 w-3 mr-1" />
+                                {conversation.messageCount} messages
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <FiArrowUpRight className="h-4 w-4 text-gray-400" />
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-500 truncate mt-1">
+                            {lastMessage.content}
+                          </p>
+                          <div className="flex items-center mt-2 text-xs text-gray-500">
+                            <FiClock className="h-3 w-3 mr-1" />
+                            {formatTime(lastMessage.timestamp)}
+                            <span className="mx-2">•</span>
+                            <span>Last: {lastMessage.direction === 'sent' ? 'Sent' : 'Received'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              } else {
+                // Render individual message (orphaned or non-conversation messages)
+                const message = item;
+                return (
+                  <li
+                    key={message.id}
+                    className={`hover:bg-gray-50 cursor-pointer transition-colors relative ${
+                      !message.isRead ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                    }`}
+                    onClick={() => handleMessageClick(message)}
+                  >
+                    <div className="px-4 py-4 flex items-center justify-between">
+                      <div className="flex items-center space-x-4 flex-1">
+                        {user.role === 'admin' && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(message.id)}
+                            onChange={(e) => toggleSelectOne(e, message.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4"
+                          />
+                        )}
+                        {/* Message Icon */}
+                        <div className="flex-shrink-0">
+                          {getMessageIcon(message.type, message.direction)}
+                        </div>
+
+                        {/* Message Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <p className={`text-sm font-medium ${!message.isRead ? 'text-gray-900' : 'text-gray-600'}`}>
+                                {message.leadName || 'Unknown Lead'}
+                              </p>
+                              <span className="text-xs text-gray-500">
+                                {message.leadPhone}
+                              </span>
+                              {message.direction === 'received' && !message.isRead && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white animate-pulse">
+                                  NEW
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                message.direction === 'sent'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {message.direction === 'sent' ? (
+                                  <>
+                                    <FiSend className="h-3 w-3 mr-1" />
+                                    Sent
+                                  </>
+                                ) : (
+                                  <>
+                                    <FiInbox className="h-3 w-3 mr-1" />
+                                    Received
+                                  </>
+                                )}
+                              </span>
+                              {/* Delivery Status for Sent Messages */}
+                              {message.direction === 'sent' && message.delivery_status && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ml-2 ${
+                                  message.delivery_status === 'delivered'
+                                    ? 'bg-green-100 text-green-800'
+                                    : message.delivery_status === 'failed'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {message.delivery_status === 'delivered' && (
+                                    <>
+                                      <FiCheck className="h-3 w-3 mr-1" />
+                                      Delivered
+                                    </>
+                                  )}
+                                  {message.delivery_status === 'failed' && (
+                                    <>
+                                      <FiX className="h-3 w-3 mr-1" />
+                                      Failed
+                                    </>
+                                  )}
+                                  {message.delivery_status === 'sending' && (
+                                    <>
+                                      <FiRefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                      Sending
+                                    </>
+                                  )}
+                                  {message.delivery_status === 'pending' && (
+                                    <>
+                                      <FiClock className="h-3 w-3 mr-1" />
+                                      Pending
+                                    </>
+                                  )}
+                                </span>
+                              )}
+                              <FiArrowUpRight className="h-4 w-4 text-gray-400" />
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-500 truncate mt-1">
+                            {message.content}
+                          </p>
+                          {/* Error message for failed deliveries */}
+                          {message.direction === 'sent' && message.delivery_status === 'failed' && message.error_message && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-50 text-red-700 border border-red-200">
+                                <FiX className="h-3 w-3 mr-1" />
+                                Error: {message.error_message.length > 50
+                                  ? `${message.error_message.substring(0, 50)}...`
+                                  : message.error_message}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center mt-2 text-xs text-gray-500">
+                            <FiClock className="h-3 w-3 mr-1" />
+                            {formatTime(message.timestamp)}
+                            {message.performedByName && message.direction === 'sent' && (
                               <>
-                                <FiSend className="h-3 w-3 mr-1" />
-                                Sent
-                              </>
-                            ) : (
-                              <>
-                                <FiInbox className="h-3 w-3 mr-1" />
-                                Received
+                                <span className="mx-2">•</span>
+                                <FiUser className="h-3 w-3 mr-1" />
+                                {message.performedByName}
                               </>
                             )}
-                          </span>
-                          {/* Delivery Status for Sent Messages */}
-                          {message.direction === 'sent' && message.delivery_status && (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ml-2 ${
-                              message.delivery_status === 'delivered'
-                                ? 'bg-green-100 text-green-800'
-                                : message.delivery_status === 'failed'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {message.delivery_status === 'delivered' && (
-                                <>
-                                  <FiCheck className="h-3 w-3 mr-1" />
-                                  Delivered
-                                </>
-                              )}
-                              {message.delivery_status === 'failed' && (
-                                <>
-                                  <FiX className="h-3 w-3 mr-1" />
-                                  Failed
-                                </>
-                              )}
-                              {message.delivery_status === 'sending' && (
-                                <>
-                                  <FiRefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                                  Sending
-                                </>
-                              )}
-                              {message.delivery_status === 'pending' && (
-                                <>
-                                  <FiClock className="h-3 w-3 mr-1" />
-                                  Pending
-                                </>
-                              )}
-                            </span>
-                          )}
-                          <FiArrowUpRight className="h-4 w-4 text-gray-400" />
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-sm text-gray-500 truncate mt-1">
-                        {message.content}
-                      </p>
-                      {/* Error message for failed deliveries */}
-                      {message.direction === 'sent' && message.delivery_status === 'failed' && message.error_message && (
-                        <div className="mt-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-50 text-red-700 border border-red-200">
-                            <FiX className="h-3 w-3 mr-1" />
-                            Error: {message.error_message.length > 50
-                              ? `${message.error_message.substring(0, 50)}...`
-                              : message.error_message}
-                          </span>
-                        </div>
-                      )}
-                      {message.isGrouped && message.conversationCount > 1 && (
-                        <div className="mt-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-800">
-                            <FiMessageSquare className="h-3 w-3 mr-1" />
-                            {message.conversationCount} messages in conversation
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center mt-2 text-xs text-gray-500">
-                        <FiClock className="h-3 w-3 mr-1" />
-                        {formatTime(message.timestamp)}
-                        {message.performedByName && message.direction === 'sent' && (
-                          <>
-                            <span className="mx-2">•</span>
-                            <FiUser className="h-3 w-3 mr-1" />
-                            {message.performedByName}
-                          </>
-                        )}
                       </div>
                     </div>
-                  </div>
-                </div>
-              </li>
-            ))}
+                  </li>
+                );
+              }
+            })}
           </ul>
         )}
       </div>
