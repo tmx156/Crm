@@ -2,12 +2,14 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "nixpacks",
-    "buildCommand": "npm run install-deps && npm run build",
-    "startCommand": "npm start"
+    "buildCommand": "npm run railway:build",
+    "startCommand": "npm run railway:start"
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
-    "numReplicas": 1
+    "numReplicas": 1,
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 300
   },
   "networking": {
     "outboundConnections": {
@@ -23,12 +25,17 @@
         {
           "host": "tnltvfzltdeilanxhlvy.supabase.co",
           "ports": [443]
+        },
+        {
+          "host": "api.resend.com",
+          "ports": [443]
         }
       ]
     }
   },
   "environment": {
     "NODE_ENV": "production",
-    "NODE_OPTIONS": "--max-old-space-size=1024"
+    "NODE_OPTIONS": "--max-old-space-size=2048",
+    "CI": "false"
   }
 }
