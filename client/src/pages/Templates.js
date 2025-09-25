@@ -32,15 +32,16 @@ const Templates = () => {
   // Utility to group templates by category
   const categorizeTemplates = (templates) => {
     if (!templates || !Array.isArray(templates)) {
-      return { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [] };
+      return { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Lead Details Templates': [] };
     }
-    
+
     const categories = {
       'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
       'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
       'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
+      'Lead Details Templates': ['custom', 'booker']
     };
-    const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [] };
+    const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Lead Details Templates': [] };
     templates.forEach(t => {
       let found = false;
       for (const [cat, types] of Object.entries(categories)) {
@@ -50,7 +51,7 @@ const Templates = () => {
           break;
         }
       }
-      if (!found) grouped['Diary Templates'].push(t); // fallback
+      if (!found) grouped['Diary Templates'].push(t); // fallback to Diary Templates
     });
     return grouped;
   };
@@ -294,16 +295,24 @@ const Templates = () => {
       const end = textarea.selectionEnd;
       const text = textarea.value;
       const newText = text.substring(0, start) + variable + text.substring(end);
-      textarea.value = newText;
-      textarea.setSelectionRange(start + variable.length, start + variable.length);
-      textarea.focus();
-      
-      // Update form data
+
+      // Update form data first
       const fieldName = textarea.name;
       setFormData(prev => ({
         ...prev,
         [fieldName]: newText
       }));
+
+      // Update the textarea value and cursor position after state update
+      setTimeout(() => {
+        textarea.value = newText;
+        textarea.setSelectionRange(start + variable.length, start + variable.length);
+        textarea.focus();
+
+        // Trigger input event to ensure React knows about the change
+        const event = new Event('input', { bubbles: true });
+        textarea.dispatchEvent(event);
+      }, 0);
     }
   };
 
@@ -359,7 +368,8 @@ const Templates = () => {
               const cat = Object.entries({
                 'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
                 'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
-                'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification']
+                'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
+                'Lead Details Templates': ['custom', 'booker']
               }).find(([cat, types]) => types.includes(t.type));
               return cat ? cat[0] === categoryFilter : categoryFilter === 'Diary Templates';
             });

@@ -1,0 +1,36 @@
+Return-Path: <avensismodels.co.uk.crm.bookings@gmail.com>
+Received: from [127.0.0.1] (92.40.173.120.threembb.co.uk. [92.40.173.120])
+        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-403ec628ff7sm1945487f8f.4.2025.09.22.16.58.39
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 22 Sep 2025 16:58:39 -0700 (PDT)
+X-Email-ID: sbnsld
+X-Application: CRM System
+X-Service: SMTP
+From: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Subject: Railway Email Service Test
+Message-ID: <0fbf93cb-4193-661f-9ff3-a656c4371685@gmail.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Mon, 22 Sep 2025 23:58:39 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+
+This is a test email to verify the Railway-compatible email service.
+
+Service Mode: SMTP Fallback (Local Development)
+
+Features:
+=E2=9C=85 Railway-compatible (no SMTP restrictions)
+=E2=9C=85 Automatic service detection
+=E2=9C=85 Retry logic with =
+exponential backoff
+=E2=9C=85 Attachment support
+=E2=9C=85 Detailed logging
+
+If you receive this email, the Railway email service is working correctly!
+
+Timestamp: 2025-09-22T23:58:39.835Z
+Test ID: ec2zj2
+ =20

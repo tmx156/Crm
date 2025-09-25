@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiEdit, FiSave, FiPhone, FiMail, FiMapPin, FiCalendar, FiMessageSquare, FiSend, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiActivity, FiCheckCircle, FiX, FiRefreshCw, FiClock, FiUser, FiCheck } from 'react-icons/fi';
+import { FiArrowLeft, FiEdit, FiSave, FiPhone, FiMail, FiMapPin, FiCalendar, FiMessageSquare, FiSend, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiActivity, FiCheckCircle, FiX, FiRefreshCw, FiClock, FiUser, FiCheck, FiSettings } from 'react-icons/fi';
 import axios from 'axios';
 import TagSystem from '../components/TagSystem';
 import PhotoModal from '../components/PhotoModal';
@@ -112,11 +112,11 @@ const LeadDetail = () => {
   const categorizeTemplates = (templates) => {
     const categories = {
       'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
-      'Retargeting Templates': ['gentle_retargeting', 'urgent_retargeting', 'final_retargeting', 'retargeting'],
-      'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale'],
-      'Bookers Templates': ['booker'],
+      'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
+      'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
+      'Lead Details Templates': ['custom', 'booker'],
     };
-    const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Bookers Templates': [] };
+    const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Lead Details Templates': [] };
     templates.forEach(t => {
       let found = false;
       for (const [cat, types] of Object.entries(categories)) {
@@ -126,16 +126,20 @@ const LeadDetail = () => {
           break;
         }
       }
-      if (!found) grouped['Diary Templates'].push(t); // Default to Diary if unknown
+      if (!found) grouped['Diary Templates'].push(t); // Default to Diary Templates if unknown
     });
     return grouped;
   };
 
-  // Only show Bookers Templates in dropdowns
-  const isBookersTemplate = (t) => [
+  // Show Diary Templates and Lead Details templates in dropdowns (relevant for lead communication)
+  const isLeadTemplate = (t) => [
     'booking_confirmation',
     'appointment_reminder',
-    'custom'
+    'no_show',
+    'reschedule',
+    'cancellation',
+    'custom',
+    'booker'
   ].includes(t.type);
 
   // Preload adjacent lead images for smooth navigation
@@ -253,11 +257,11 @@ const LeadDetail = () => {
     try {
       // Fetch SMS templates
       const smsResponse = await axios.get('/api/templates/active/sms');
-      setSmsTemplates(smsResponse.data.filter(isBookersTemplate));
-      
-      // Fetch Email templates  
+      setSmsTemplates(smsResponse.data.filter(isLeadTemplate));
+
+      // Fetch Email templates
       const emailResponse = await axios.get('/api/templates/active/email');
-      setEmailTemplates(emailResponse.data.filter(isBookersTemplate));
+      setEmailTemplates(emailResponse.data.filter(isLeadTemplate));
     } catch (error) {
       console.error('Error fetching templates:', error);
       // Use fallback templates
@@ -1449,25 +1453,37 @@ const LeadDetail = () => {
               {/* 📱 Send Text Message Section */}
               {!editing && (
                 <div className="card">
-                  <button
-                    onClick={() => setSmsExpanded(!smsExpanded)}
-                    className="flex items-center justify-between w-full text-left hover:bg-gray-50 p-2 -m-2 rounded-md transition-colors"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <FiMessageSquare className="h-5 w-5 text-blue-500" />
-                      <h3 className="text-lg font-medium text-gray-900">📱 Send Text Message</h3>
-                      {!smsExpanded && smsMessage && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Draft Ready
-                        </span>
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setSmsExpanded(!smsExpanded)}
+                      className="flex items-center space-x-2 flex-1 text-left hover:bg-gray-50 p-2 -m-2 rounded-md transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <FiMessageSquare className="h-5 w-5 text-blue-500" />
+                        <h3 className="text-lg font-medium text-gray-900">📱 Send Text Message</h3>
+                        {!smsExpanded && smsMessage && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Draft Ready
+                          </span>
+                        )}
+                      </div>
+                      {smsExpanded ? (
+                        <FiChevronUp className="h-5 w-5 text-gray-400" />
+                      ) : (
+                        <FiChevronDown className="h-5 w-5 text-gray-400" />
                       )}
-                    </div>
-                    {smsExpanded ? (
-                      <FiChevronUp className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <FiChevronDown className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
+                    </button>
+
+                    {/* Templates Management Link */}
+                    <button
+                      onClick={() => navigate('/templates')}
+                      className="ml-3 px-3 py-2 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md flex items-center space-x-1 transition-colors border border-blue-200"
+                      title="Manage all templates - Create & edit Diary, Retargeting, Sale & Lead Details templates"
+                    >
+                      <FiSettings className="h-4 w-4" />
+                      <span>Manage Templates</span>
+                    </button>
+                  </div>
                   
                   {smsExpanded && (
                     <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">

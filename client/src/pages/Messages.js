@@ -727,59 +727,79 @@ const Messages = () => {
     fetchMessages();
   };
 
-  // Mark message as read
+  // Mark message as read with proper race condition handling
   const markAsRead = async (message) => {
     const messageId = message.id;
+
+    // Prevent duplicate requests if already processing
+    if (readMessageIds.has(messageId) || message.processing) {
+      console.log('ℹ️ Messages: Message already read or being processed:', messageId);
+      return;
+    }
+
     try {
       console.log('📱 Messages: Marking message as read:', messageId);
 
-      // If this is a grouped conversation, mark the entire conversation as read
-      if (message.isGrouped && message.leadId) {
-        console.log(`📱 Messages: Marking entire ${message.type} conversation as read for lead:`, message.leadId);
+      // Mark as processing to prevent race conditions
+      const updateProcessingState = (processing) => {
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, processing } : msg
+          )
+        );
+        setFilteredMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, processing } : msg
+          )
+        );
+      };
 
-        // Add all messages from this lead and same type to the read set
-        setMessages(prev => prev.map(msg => {
-          if (msg.leadId === message.leadId && msg.type === message.type) {
-            return { ...msg, isRead: true };
-          }
-          return msg;
-        }));
+      updateProcessingState(true);
 
-        setFilteredMessages(prev => prev.map(msg => {
-          if (msg.leadId === message.leadId && msg.type === message.type) {
-            return { ...msg, isRead: true };
-          }
-          return msg;
-        }));
+      // Optimistic UI update - mark as read immediately for better UX
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === messageId ? { ...msg, isRead: true } : msg
+        )
+      );
+      setFilteredMessages(prev =>
+        prev.map(msg =>
+          msg.id === messageId ? { ...msg, isRead: true } : msg
+        )
+      );
 
-        // Mark the grouped conversation itself as read
+      // Use messageId directly (now that we're using UUIDs consistently)
+      const response = await axios.put(`/api/messages-list/${messageId}/read`);
+
+      if (response.data.success) {
+        console.log('✅ Messages: Message marked as read successfully:', messageId);
+        console.log('📋 Messages: Update method used:', response.data.method || 'direct');
+
+        // Add to permanent read set - once read, stays read forever
         setReadMessageIds(prev => new Set([...prev, messageId]));
+
+        updateProcessingState(false);
       } else {
-        // Single message marking
-        const response = await axios.put(`/api/messages-list/${messageId}/read`);
-
-        if (response.data.success) {
-          console.log('✅ Messages: Message marked as read successfully:', messageId);
-          console.log('📋 Messages: Update method used:', response.data.method || 'booking_history');
-
-          // Add to permanent read set - once read, stays read forever
-          setReadMessageIds(prev => new Set([...prev, messageId]));
-
-          // Update local state immediately
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.id === messageId ? { ...msg, isRead: true } : msg
-            )
-          );
-          setFilteredMessages(prev =>
-            prev.map(msg =>
-              msg.id === messageId ? { ...msg, isRead: true } : msg
-            )
-          );
-        }
+        throw new Error(response.data.message || 'Failed to mark as read');
       }
     } catch (error) {
       console.error('❌ Messages: Error marking message as read:', error);
+
+      // Remove processing state
+      const updateProcessingState = (processing) => {
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, processing } : msg
+          )
+        );
+        setFilteredMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, processing } : msg
+          )
+        );
+      };
+
+      updateProcessingState(false);
 
       // Handle 404 - message doesn't exist, remove from UI
       if (error.response?.status === 404) {
@@ -788,13 +808,19 @@ const Messages = () => {
         // Remove the non-existent message from the UI
         setMessages(prev => prev.filter(msg => msg.id !== messageId));
         setFilteredMessages(prev => prev.filter(msg => msg.id !== messageId));
-
-        // Also remove from read status if it was there
-        setReadMessageIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(messageId);
-          return newSet;
-        });
+      } else {
+        // Revert optimistic UI update on other errors
+        console.log('🔄 Messages: Reverting optimistic update due to error');
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, isRead: false } : msg
+          )
+        );
+        setFilteredMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, isRead: false } : msg
+          )
+        );
       }
     }
   };

@@ -160,11 +160,38 @@ const BookersTemplates = () => {
   };
 
   const insertVariable = (variable) => {
-    setFormData({
-      ...formData,
-      smsBody: formData.smsBody + `{{${variable}}}`,
-      emailBody: formData.emailBody + `{{${variable}}}`
-    });
+    const textarea = document.activeElement;
+    if (textarea && textarea.tagName === 'TEXTAREA') {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const newText = text.substring(0, start) + `{{${variable}}}` + text.substring(end);
+
+      // Update form data first
+      const fieldName = textarea.name;
+      setFormData(prev => ({
+        ...prev,
+        [fieldName]: newText
+      }));
+
+      // Update the textarea value and cursor position after state update
+      setTimeout(() => {
+        textarea.value = newText;
+        textarea.setSelectionRange(start + variable.length + 4, start + variable.length + 4); // +4 for {{}}
+        textarea.focus();
+
+        // Trigger input event to ensure React knows about the change
+        const event = new Event('input', { bubbles: true });
+        textarea.dispatchEvent(event);
+      }, 0);
+    } else {
+      // Fallback: append to both fields if no active textarea
+      setFormData(prev => ({
+        ...prev,
+        smsBody: prev.smsBody + `{{${variable}}}`,
+        emailBody: prev.emailBody + `{{${variable}}}`
+      }));
+    }
   };
 
   return (

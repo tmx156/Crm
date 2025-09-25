@@ -94,7 +94,8 @@ router.get('/', auth, async (req, res) => {
           const leadData = lead;
 
           const content = row.content || row.sms_body || row.subject || 'No content';
-          const timestamp = row.created_at || row.sent_at || new Date().toISOString();
+          // Prioritize sent_at (actual message time) over created_at (processing time)
+          const timestamp = row.sent_at || row.created_at || new Date().toISOString();
           const key = `${row.lead_id}_${new Date(timestamp).toISOString()}_${row.type}_${content.slice(0,30)}`;
           if (seenKeys.has(key)) return;
           seenKeys.add(key);
@@ -106,7 +107,7 @@ router.get('/', auth, async (req, res) => {
           const action = direction === 'received' ? `${row.type.toUpperCase()}_RECEIVED` : `${row.type.toUpperCase()}_SENT`;
 
           messagesData.push({
-            id: `${row.lead_id}_${timestamp}`,
+            id: row.id, // Use actual message UUID as primary ID (simplified format)
             messageId: row.id, // Include the actual message UUID for proper read status handling
             leadId: row.lead_id,
             leadName: leadData.name,
@@ -122,7 +123,7 @@ router.get('/', auth, async (req, res) => {
             performedByName: row.sent_by_name,
             content,
             details: { body: content, subject: row.subject },
-            isRead: direction === 'received' ? false : true // Received messages are unread by default
+            isRead: row.read_status === true || direction === 'sent' // Use messages table read_status as source of truth
           });
         });
       }
@@ -185,65 +186,84 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Helper function to handle direct message UUID updates
-const handleDirectMessageUpdate = async (messageId, res) => {
+const handleDirectMessageUpdate = async (messageId, res, req = null) => {
   try {
     let actualMessageId = messageId;
     let directMessage = null;
-    let directError = null;
 
     console.log(`🔍 Backend: Searching for message ${messageId} in messages table...`);
 
-    // First try the full messageId
-    const result1 = await supabase
+    // Try to find the message - first with exact ID match
+    let result = await supabase
       .from('messages')
-      .select('id, lead_id, sms_body, content, subject, type, status, created_at, delivery_status, provider_message_id, error_message, delivery_provider, delivery_attempts')
+      .select('id, lead_id, sms_body, content, subject, type, status, created_at, read_status, delivery_status, provider_message_id, error_message, delivery_provider, delivery_attempts')
       .eq('id', messageId)
       .single();
 
-    if (result1.data) {
-      directMessage = result1.data;
-      console.log(`✅ Backend: Found message with full ID: ${messageId}`);
-    } else {
-      // Try with just the UUID part (before underscore)
-      const uuidPart = messageId.split('_')[0];
-      console.log(`🔄 Backend: Full ID not found, trying UUID part: ${uuidPart}`);
+    if (result.data) {
+      directMessage = result.data;
+      console.log(`✅ Backend: Found message with exact ID: ${messageId}`);
+    } else if (result.error?.code === 'PGRST116') {
+      // Message not found with exact ID, try extracting UUID part if composite
+      const uuidPart = messageId.includes('_') ? messageId.split('_')[0] : messageId;
 
-      const result2 = await supabase
-        .from('messages')
-        .select('id, lead_id, sms_body, content, subject, type, status, created_at, delivery_status, provider_message_id, error_message, delivery_provider, delivery_attempts')
-        .eq('id', uuidPart)
-        .single();
+      if (uuidPart !== messageId) {
+        console.log(`🔄 Backend: Exact ID not found, trying UUID part: ${uuidPart}`);
 
-      if (result2.data) {
-        directMessage = result2.data;
-        actualMessageId = uuidPart;
-        console.log(`✅ Backend: Found message with UUID part: ${uuidPart}`);
-      } else {
-        directError = result2.error;
+        result = await supabase
+          .from('messages')
+          .select('id, lead_id, sms_body, content, subject, type, status, created_at, read_status, delivery_status, provider_message_id, error_message, delivery_provider, delivery_attempts')
+          .eq('id', uuidPart)
+          .single();
+
+        if (result.data) {
+          directMessage = result.data;
+          actualMessageId = uuidPart;
+          console.log(`✅ Backend: Found message with UUID part: ${uuidPart}`);
+        }
       }
     }
 
     if (!directMessage) {
       console.log(`❌ Backend: Message ${messageId} not found in messages table`);
-      console.log(`❌ Backend: Direct error:`, directError?.message);
+      console.log(`❌ Backend: Search error:`, result.error?.message || 'Unknown error');
 
-      // Debug: Check what messages DO exist
-      console.log(`🔍 Backend: Checking what messages exist in database...`);
+      // More detailed debug info
+      console.log(`🔍 Backend: Checking recent messages in database...`);
       const { data: sampleMessages, error: sampleError } = await supabase
         .from('messages')
-        .select('id, created_at, type')
-        .limit(10);
+        .select('id, created_at, type, lead_id')
+        .order('created_at', { ascending: false })
+        .limit(5);
 
       if (!sampleError && sampleMessages) {
-        console.log(`📊 Backend: Found ${sampleMessages.length} messages in DB`);
+        console.log(`📊 Backend: Found ${sampleMessages.length} recent messages in DB:`);
         sampleMessages.forEach((msg, i) => {
-          console.log(`   ${i + 1}. ${msg.id.substring(0, 8)}... (${msg.type}, ${msg.created_at})`);
+          console.log(`   ${i + 1}. ${msg.id} (${msg.type}, lead: ${msg.lead_id}, ${new Date(msg.created_at).toLocaleString()})`);
         });
       }
 
       return res.status(404).json({
+        success: false,
         message: 'Message not found in messages table',
-        details: `Message ${messageId} does not exist in the database.`
+        details: `Message ${messageId} does not exist in the database. This may be stale UI data.`,
+        debug: {
+          originalId: messageId,
+          searchedId: actualMessageId,
+          recentMessages: sampleMessages?.length || 0
+        }
+      });
+    }
+
+    // Check if already read to avoid unnecessary updates
+    if (directMessage.read_status === true) {
+      console.log(`ℹ️ Backend: Message ${actualMessageId} already marked as read`);
+      return res.json({
+        success: true,
+        message: 'Message was already marked as read',
+        messageId: actualMessageId,
+        method: 'direct',
+        alreadyRead: true
       });
     }
 
@@ -253,6 +273,7 @@ const handleDirectMessageUpdate = async (messageId, res) => {
       lead_id: directMessage.lead_id,
       type: directMessage.type,
       status: directMessage.status,
+      read_status: directMessage.read_status,
       created_at: directMessage.created_at
     });
 
@@ -269,29 +290,37 @@ const handleDirectMessageUpdate = async (messageId, res) => {
     if (updateError) {
       console.log(`❌ Backend: Failed to update message directly:`, updateError.message);
       return res.status(500).json({
+        success: false,
         message: 'Failed to update message read status',
-        details: updateError.message
+        details: updateError.message,
+        errorCode: updateError.code
       });
     }
 
-    console.log(`✅ Backend: Successfully updated message ${actualMessageId} directly in messages table`);
+    console.log(`✅ Backend: Successfully updated message ${actualMessageId} read status in messages table`);
 
     // Emit socket event for real-time updates
-    if (req?.app?.get('io')) {
-      req.app.get('io').emit('message_read', {
+    const ioInstance = req?.app?.get('io') || global.io;
+    if (ioInstance) {
+      const eventData = {
         messageId: actualMessageId,
         leadId: directMessage.lead_id,
         timestamp: new Date().toISOString(),
-        content: directMessage.content || directMessage.sms_body || 'Message content'
-      });
+        content: directMessage.content || directMessage.sms_body || directMessage.subject || 'Message content',
+        type: directMessage.type
+      };
+
+      ioInstance.emit('message_read', eventData);
       console.log(`📡 Emitted message_read event for direct update: ${actualMessageId}`);
     }
 
     return res.json({
       success: true,
-      message: 'Message marked as read (direct update)',
+      message: 'Message marked as read successfully',
       messageId: actualMessageId,
-      method: 'direct'
+      method: 'direct',
+      leadId: directMessage.lead_id,
+      type: directMessage.type
     });
 
   } catch (error) {
@@ -311,42 +340,51 @@ router.put('/:messageId/read', auth, async (req, res) => {
     const { messageId } = req.params;
     console.log(`🔍 Backend: Received request to mark message as read: ${messageId}`);
 
-    // Check if this is a UUID (direct message ID) or leadId_timestamp format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Improved UUID detection with better validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const simpleUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     let isDirectMessageId = false;
+    let actualMessageId = messageId;
     let leadId, timestamp;
 
-    if (uuidRegex.test(messageId)) {
-      // Pure UUID - direct message ID
-      console.log(`🔍 Backend: Detected pure UUID (direct message ID): ${messageId}`);
+    // First, try direct UUID match (most common case for new messages)
+    if (uuidRegex.test(messageId) || simpleUuidRegex.test(messageId)) {
+      console.log(`✅ Backend: Direct UUID detected: ${messageId}`);
       isDirectMessageId = true;
+      actualMessageId = messageId;
     } else {
-      // Check if first part is a UUID (potential direct message ID with timestamp)
+      // Parse composite ID format
       const parts = messageId.split('_');
-      const firstPart = parts[0];
 
-      if (uuidRegex.test(firstPart)) {
-        // First part is UUID - treat as direct message ID with timestamp
-        console.log(`🔍 Backend: Detected UUID with timestamp (direct message ID): ${messageId}`);
-        isDirectMessageId = true;
-      } else {
-        // Parse as leadId_timestamp format
-        if (parts.length < 2) {
-          console.log(`❌ Backend: Invalid message ID format: ${messageId}`);
-          return res.status(400).json({ message: 'Invalid message ID format' });
+      if (parts.length >= 2) {
+        const firstPart = parts[0];
+
+        // Check if first part is UUID (messageId with timestamp suffix)
+        if (uuidRegex.test(firstPart) || simpleUuidRegex.test(firstPart)) {
+          console.log(`✅ Backend: UUID with timestamp detected: ${firstPart} (full: ${messageId})`);
+          isDirectMessageId = true;
+          actualMessageId = firstPart; // Use just the UUID part
+        } else {
+          // Legacy leadId_timestamp format
+          leadId = firstPart;
+          timestamp = parts.slice(1).join('_');
+          console.log(`✅ Backend: Legacy format - leadId: ${leadId}, timestamp: ${timestamp}`);
         }
-
-        leadId = parts[0];
-        timestamp = parts.slice(1).join('_'); // Rejoin in case timestamp contains underscores
-
-        console.log(`🔍 Backend: Parsed as leadId_timestamp - leadId: ${leadId}, timestamp: ${timestamp}`);
+      } else {
+        console.log(`❌ Backend: Invalid message ID format: ${messageId}`);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid message ID format',
+          details: `Expected UUID or leadId_timestamp format, got: ${messageId}`
+        });
       }
     }
-    
-    // Handle direct message UUID case
+
+    // Handle direct message UUID case (preferred path)
     if (isDirectMessageId) {
-      console.log(`🔄 Backend: Handling direct message UUID: ${messageId}`);
-      return await handleDirectMessageUpdate(messageId, res);
+      console.log(`🔄 Backend: Using direct message update for UUID: ${actualMessageId}`);
+      return await handleDirectMessageUpdate(actualMessageId, res, req);
     }
 
     // Get the lead's current booking_history

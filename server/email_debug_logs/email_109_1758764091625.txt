@@ -1,0 +1,472 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp1621680ecs;
+        Wed, 24 Sep 2025 09:00:55 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IEVGchZ0apvnWJXWl3nYQdKebtAwGzusbtkyE+RdrIY7X9PZuFM3iwyhHldXw8lWcZvYEg0
+X-Received: by 2002:a05:690c:3390:b0:731:817b:4d73 with SMTP id 00721157ae682-7644eb4585bmr1092657b3.14.1758729655044;
+        Wed, 24 Sep 2025 09:00:55 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758729655; cv=none;
+        d=google.com; s=arc-20240605;
+        b=MNLMRbjxjZuCMiEw0kaDu361JAzGZ3kEQ6dRT49Pr8yk85YT+ZFc0LQma7Lzgoeb4i
+         BfDeKXM8mMQ57pqFmDrgkujZuWy/AtHxEFItcgseZc6j3vGbNCJUCW1qSyZMP2EUx4B9
+         zn9g1Yj0Dkqf5aEOgf/2NyjmE/lIIC9gMhuS8gJCqbzaAMQ5267pYCJK/rgnu0buyH0H
+         JGS0xolINQc8uNYk9x65hd7SUqpOKNflMCWiYL4OfPv4iAYHR6mfmUW83yDpJNES2Vnw
+         bihQ+J6X4NfNx7LVoNXiBPYds/dBPOj5BpXkl7JLR54ODFVaVqa0rU33sIthIVhW56tp
+         +wxg==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=feedback-id:from:subject:list-unsubscribe-post:reply-to
+         :list-unsubscribe:mime-version:date:message-id:to:dkim-signature;
+        bh=u+HO12+CxXIHcFNJNfq1D6KpvpyYHQFfVW+Rg62JD6c=;
+        fh=XD0hVRmVPeMWhCW2cIWGAl2yIjFjST6ryt4PWd1EzRk=;
+        b=fdEIhwPKF1wjJ6JtKWRv1s3xICiXkPf5CCbDJmb4jWWo3QJmstqrw5PwM53R6clN0m
+         sCTboD5gMYiXx8u2R7MtenuZdfkRxALbLwaXmdqJ+68kOwc3v5dtgEZbteu4c3kkfF/2
+         Jo2vqactrb3JitIBHMZr1W3uzRf1NeWE4kt7fPIVyhTJ06SiIKKDTM1iyYbG5SV8D2ta
+         8z3LuttQuPMGIB4hUMr04pdfKjaF1Pty0Yfkh8h3XKk5t7UxlJU2cP/f6NWMEo0Y68la
+         dE3Jf52JiLpid+b0uABaepkW6YPxN6j8vjU9XPiJ55K+sNEcRARb/ILsCiWcbY+QhpKy
+         VgAA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@mail.replit.com header.s=20250624 header.b=FUUNmqjc;
+       spf=pass (google.com: domain of msprvs1=20362igqiwpyc=bounces-280172-1545@bounce.replit.com designates 168.203.32.122 as permitted sender) smtp.mailfrom="msprvs1=20362iGQiWPYC=bounces-280172-1545@bounce.replit.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=replit.com
+Return-Path: <msprvs1=20362iGQiWPYC=bounces-280172-1545@bounce.replit.com>
+Received: from mta-203-32-122.sparkpostmail.com (mta-203-32-122.sparkpostmail.com. [168.203.32.122])
+        by mx.google.com with ESMTPS id 956f58d0204a3-636059e6794si2247193d50.103.2025.09.24.09.00.54
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128);
+        Wed, 24 Sep 2025 09:00:54 -0700 (PDT)
+Received-SPF: pass (google.com: domain of msprvs1=20362igqiwpyc=bounces-280172-1545@bounce.replit.com designates 168.203.32.122 as permitted sender) client-ip=168.203.32.122;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@mail.replit.com header.s=20250624 header.b=FUUNmqjc;
+       spf=pass (google.com: domain of msprvs1=20362igqiwpyc=bounces-280172-1545@bounce.replit.com designates 168.203.32.122 as permitted sender) smtp.mailfrom="msprvs1=20362iGQiWPYC=bounces-280172-1545@bounce.replit.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=replit.com
+Return-Path: <msprvs1=20362iGQiWPYC=bounces-280172-1545@bounce.replit.com>
+X-MSFBL: skHYxRN9ulRHSAa6ua6RjF1LHJZqkuxkHdd6cfduDPs=|eyJzdWJhY2NvdW50X2l
+	kIjoiMTU0NSIsInRlbmFudF9pZCI6InNwYyIsIm1lc3NhZ2VfaWQiOiI2OGM0YjY
+	xNWQ0NjgzNTdlMmYyNyIsInIiOiJhdmVuc2lzbW9kZWxzLmNvLnVrLmNybS5ib29
+	raW5nc0BnbWFpbC5jb20iLCJjdXN0b21lcl9pZCI6IjI4MDE3MiJ9
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=mail.replit.com;
+	s=20250624; t=1758729654; i=@mail.replit.com;
+	bh=u+HO12+CxXIHcFNJNfq1D6KpvpyYHQFfVW+Rg62JD6c=;
+	h=To:Message-ID:Date:Content-Type:List-Unsubscribe:
+	 List-Unsubscribe-Post:Subject:From:From:To:Cc:Subject;
+	b=FUUNmqjcnC90GnIOREigiBE47WZO7IQlu/j4h3FGRycNQzgedXXHOtKVUum4YLIR+
+	 0eY0HIBldSTiP5A+SzQG9DU/HBKkj0q5DYReBQZJtpruCFmzXYZUdJaB817z2nH2XH
+	 DNZ5TZ86oTMkI5wV9lbUAlWVhWwAd4pfAttx0d5TZpcgetEuEKf5UdGRqPpXvkUlPI
+	 fAJL+iO9LHM1WPfbsAWWzK60yrSWwx8hbm/fbIoRhIlpbTwiTWEwl11DzsnySVmTmd
+	 fEnW1c8/nrQTEg/Wqibz8b3OvZGRUyWWF08EIMNEs49Jjdj/TAoCPYgQwAoLaXp2P2
+	 +gLsmV8kx3bzw==
+Received: from [10.90.38.130] ([10.90.38.130])
+	by i-09b57cac9f5f04417.mta1vrest.sd.prd.sparkpost (ecelerity 5.1.0.74599 r(msys-ecelerity:tags/5.1.0.9)) with REST
+	id 72/F2-05257-6B514D86; Wed, 24 Sep 2025 16:00:54 +0000
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Message-ID: <72.F2.05257.6B514D86@i-09b57cac9f5f04417.mta1vrest.sd.prd.sparkpost>
+Date: Wed, 24 Sep 2025 16:00:54 +0000
+Content-Type: multipart/alternative; boundary="_----XWZ6fr7exISnTf4Frg39cA===_B1/F2-05257-6B514D86"
+MIME-Version: 1.0
+X-Campaign-ID: 13577659
+List-Unsubscribe: <https://links.iterable.com/s/u/XqOyOv29DjOyYHsmuHVwGevmeNf-tRHJ-3bqggeBdkMW5PI3ogLfHLSEtiM0qGRU_40T0gbmV-7kAUfOZVjc3c4hVcD6rVDQRUYmM4T2-bejBRKyqcLA9pnJ3R1BzJrUQGJFmcf3goahPZ2oNZw6zbTRJutxUFYSSfUJe79LYv1mravogVNvrNWkc78SM2oW_OwCKEem0Jti5_sW/N_qEPILFS_Mng4B46UIAeVpxib9NEnqZ/13>,<mailto:unsubscribe+13577659+17752994@unsubscribe.iterable.com>
+X-Message-ID: acc97a5b313745a3b31400648d3382d3
+X-Feedback-ID: 17752994:13577659:89164:iterable
+Reply-To: contact@replit.com
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Subject: Get Your App Ready for Real Users
+From: "The Replit Team" <contact@mail.replit.com>
+Feedback-ID: 17752994:13577659:89164:iterable
+
+--_----XWZ6fr7exISnTf4Frg39cA===_B1/F2-05257-6B514D86
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="UTF-8"
+
+Get Your App Ready for Real Users=0A=0A=0A Take your project from prototype=
+ to production with these essential =0Aintegrations and features.=0A=0A=0A =
+<https://www.youtube.com/watch=3Fv=3DjoHMyy-BqPA>=E2=80=8A=E2=80=8A=0A=0ACr=
+itical app components:=0A=E2=80=8A=0A=0AStore & manage data=0A=0A=0A * Add =
+a database to your app <https://www.youtube.com/watch=3Fv=3DzbyRuoPNIc8>: =
+=0ALearn how to persistently store user data and application state=E2=80=8A=
+=0A=0AIntegrate any API=0A=0A=0A * Add secrets to your projects <https://ww=
+w.youtube.com/watch=3Fv=3DqE_2Z8ReyWI>: =0Ahow to securely add API keys to =
+connect to other software you want=E2=80=8A=0A=0ASecure user access=0A=0A=
+=0A * Implement Replit Auth <https://www.youtube.com/watch=3Fv=3DjoHMyy-BqP=
+A>: Add =0Auser authentication in minutes without complex setup=E2=80=8A=0A=
+=0APre-launch checklist:=0A=0A=0A *  Test your database connections with sa=
+mple data=0A * Verify authentication flows for different user types=0A * Im=
+plement proper error handling for API failures=0A * Set up monitoring to tr=
+ack usage and performance=0A * Create a simple onboarding process for new u=
+sers=E2=80=8A=0A=0AThese integrations will transform your project into a ro=
+bust application =0Athat's ready for real-world users.=0A=0ALooking forward=
+ to seeing what you launch!=0AThe Replit Team=0A=E2=80=8A=E2=80=8A=E2=80=8A=
+=0A=0A=E2=80=8A=0A=0A <https://twitter.com/Replit> <https://www.linkedin.co=
+m/company/repl-it> =0A<https://www.youtube.com/channel/UCgoJjdR6-7AMu9fDitb=
+6nVw>  =0A<https://www.instagram.com/repl.it/=3Fhl=3Den>=0A=0ASent by Repli=
+t=0A1001 E Hillsdale Blvd, Suite 400, Foster City, CA 94404 =0A=0AUnsubscri=
+be here =0A<https://links.replit.com/s/u/JS2dT7hzjhdeLbrBVPzZNXI1bY6lVu3iRZ=
+66tln6PRd9MJoJAkT1y106vY5xxBwjh8AkQXh2rKHrznDlUP28QtOw5Qb9BrGz4uR4S3S4eEcuj=
+VRQESltdkjjiK5f9wiuF8lDdVGt9GcZnogXFfYJWRTMhR1zgJEovRP9yzhq4xDYQHXVyaGcS8Sd=
+3ffmqG_qAjAz0q-p3bc8mkIB/zxolpItZ_WXYKm89JsJSQeDuI7v1-EW6/13>
+--_----XWZ6fr7exISnTf4Frg39cA===_B1/F2-05257-6B514D86
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset="UTF-8"
+
+<!DOCTYPE html><html xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:o=3D"u=
+rn:schemas-microsoft-com:office:office" lang=3D"en"><head><title></title><m=
+eta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8"><met=
+a name=3D"viewport" content=3D"width=3Ddevice-width,initial-scale=3D1"><!--=
+[if mso]><xml><w:WordDocument xmlns:w=3D"urn:schemas-microsoft-com:office:w=
+ord"><w:DontUseAdvancedTypographyReadingMail/></w:WordDocument> <o:OfficeDo=
+cumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:Office=
+DocumentSettings></xml><![endif]--><!--[if !mso]><!--><link href=3D"https:/=
+/fonts.googleapis.com/css2=3Ffamily=3DSource+Sans+Pro:wght@400;700;900&amp;=
+display=3Dswap" rel=3D"stylesheet" type=3D"text/css"><!--<![endif]--><style=
+>*{box-sizing:border-box}body{margin:0;padding:0}a[x-apple-data-detectors]{=
+color:inherit!important;text-decoration:inherit!important}#MessageViewBody =
+a{color:inherit;text-decoration:none}p{line-height:inherit}.desktop_hide,.d=
+esktop_hide table{mso-hide:all;display:none;max-height:0;overflow:hidden}.i=
+mage_block img+div{display:none}sub,sup{font-size:75%;line-height:0}#conver=
+ted-body .list_block ol,#converted-body .list_block ul,.body [class~=3Dx_li=
+st_block] ol,.body [class~=3Dx_list_block] ul,u+.body .list_block ol,u+.bod=
+y .list_block ul{padding-left:20px}@media(max-width:620px){.social_block.de=
+sktop_hide .social-table{display:inline-block!important}.mobile_hide{displa=
+y:none}.video_block .sizer{max-width:none!important}.row-content{width:100%=
+!important}.stack .column{width:100%;display:block}.mobile_hide{min-height:=
+0;max-height:0;max-width:0;overflow:hidden;font-size:0}.desktop_hide,.deskt=
+op_hide table{display:table!important;max-height:none!important}}</style><!=
+--[if mso ]><style>sup,sub{font-size:100%!important}sup{mso-text-raise:10%}=
+sub{mso-text-raise:-10%}</style><![endif]--></head><body class=3D"body" sty=
+le=3D"background-color:#fff;margin:0;padding:0;-webkit-text-size-adjust:non=
+e;text-size-adjust:none">=0D=0A<div style=3D"color:transparent;visibility:h=
+idden;opacity:0;font-size:0px;border:0;max-height:1px;width:1px;margin:0px;=
+padding:0px;border-width:0px!important;display:none!important;line-height:0=
+px!important;"><img border=3D"0" width=3D"1" height=3D"1" src=3D"http://tra=
+ck.replit.com/q/yN-0LNa7y3qeiDQ-tAhCWw~~/AARGbBA~/EfCNIw33vm2XKS4xxfg2swg2Z=
+e5ETirWQzF1WBLW9fW7yQmfCmZMN0y_tP35Pnzg-g5ZXu3J_UpuhtX-hiar1blPxZmt72mtQ6LE=
+v9ihTvU~" alt=3D""/></div>=0D=0A<span style=3D"color:transparent;visibility=
+:hidden;display:none;opacity:0;height:0;width:0;font-size:0;"></span><img s=
+rc=3D"https://links.replit.com/s/eo/hEpKPF1epb8Xt05r1H4c7-vwCn7qyvZ1msDHryB=
+JiwoWEnGCwZ2ubcnzt4qi-uiI8MQc8V3OCyNSXRiQs8_7E6EQDQhc2578P1GYcFunFIHXyL6RtC=
+lsdDP2FicMQ2dwnES2tmepUjZjA5Z9wiNJWH8G_DzNtH6V--Npt46vHWEXFrlOZS_LqnfScEYEc=
+nZ8jdLNpEdZGF9YNzIXtOSnAW7HG_0D85aPQth2/pUoXWteY4fQsj8mU6e_npG3uuZC6bi-y/13=
+" style=3D"border:0;width:1px;height:1px;border-width:0px!important;display=
+:none!important;line-height:0!important;" width=3D"1" height=3D"1"/><table =
+class=3D"nl-container" width=3D"100%" border=3D"0" cellpadding=3D"0" cellsp=
+acing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rsp=
+ace:0;background-color:#fff"><tbody><tr><td><table class=3D"row row-1" alig=
+n=3D"center" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0=
+" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;back=
+ground-color:#ebeced"><tbody><tr><td><table class=3D"row-content stack" ali=
+gn=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pres=
+entation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background-color:#=
+ebeced;border-radius:0;color:#000;width:600px;margin:0 auto" width=3D"600">=
+<tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"mso-table-=
+lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;padding-bottom:=
+10px;padding-top:10px;vertical-align:top"><div class=3D"spacer_block block-=
+1" style=3D"height:60px;line-height:60px;font-size:1px">&#8202;</div><table=
+ class=3D"image_block block-2" width=3D"100%" border=3D"0" cellpadding=3D"1=
+0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-=
+table-rspace:0"><tr><td class=3D"pad"><div class=3D"alignment" align=3D"cen=
+ter"><div style=3D"max-width:150px"><img src=3D"https://d15k2d11r6t6rl.clou=
+dfront.net/public/users/Integrators/669d5713-9b6a-46bb-bd7e-c542cff6dd6a/68=
+8a6826b9ec49299691e89a144d7cfa/Replit%20logo.png" style=3D"display:block;he=
+ight:auto;border:0;width:100%" width=3D"150" alt title height=3D"auto"></di=
+v></div></td></tr></table><div class=3D"spacer_block block-3" style=3D"heig=
+ht:30px;line-height:30px;font-size:1px">&#8202;</div></td></tr></tbody></ta=
+ble></td></tr></tbody></table><table class=3D"row row-2" align=3D"center" w=
+idth=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pres=
+entation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background-color:#=
+ebeced"><tbody><tr><td><table class=3D"row-content stack" align=3D"center" =
+border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" styl=
+e=3D"mso-table-lspace:0;mso-table-rspace:0;background-color:#fcfcfc;border-=
+bottom:30px solid transparent;border-left:30px solid transparent;border-rad=
+ius:30px;border-right:30px solid transparent;border-top:30px solid transpar=
+ent;color:#000;width:600px;margin:0 auto" width=3D"600"><tbody><tr><td clas=
+s=3D"column column-1" width=3D"100%" style=3D"mso-table-lspace:0;mso-table-=
+rspace:0;font-weight:400;text-align:left;padding-bottom:5px;padding-top:5px=
+;vertical-align:top"><table class=3D"heading_block block-1" width=3D"100%" =
+border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"presentation" sty=
+le=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td class=3D"pad"><h1 styl=
+e=3D"margin:0;color:#000;direction:ltr;font-family:'Source Sans Pro',Tahoma=
+,Verdana,Segoe,sans-serif;font-size:23px;font-weight:700;letter-spacing:nor=
+mal;line-height:1.8;text-align:left;margin-top:0;margin-bottom:0;mso-line-h=
+eight-alt:41px">Get Your App Ready for Real Users</h1></td></tr></table><ta=
+ble class=3D"paragraph_block block-2" width=3D"100%" border=3D"0" cellpaddi=
+ng=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:=
+0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=3D"=
+padding-bottom:10px;padding-left:10px;padding-right:10px"><div style=3D"col=
+or:#000;direction:ltr;font-family:'Source Sans Pro',Tahoma,Verdana,Segoe,sa=
+ns-serif;font-size:16px;font-weight:400;letter-spacing:0;line-height:1.8;te=
+xt-align:left;mso-line-height-alt:29px"><p style=3D"margin:0"> Take your pr=
+oject from prototype to production with these essential integrations and fe=
+atures.</p></div></td></tr></table><table class=3D"video_block block-3" wid=
+th=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"prese=
+ntation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr style=3D"box-s=
+izing:content-box"><td class=3D"pad" style=3D"box-sizing:content-box"><!--[=
+if (mso)|(IE)]><table width=3D"580" align=3D"center" cellpadding=3D"0" cell=
+spacing=3D"0" role=3D"presentation"><tr><td><![endif]--><div class=3D"sizer=
+" align=3D"center" style=3D"box-sizing:content-box;max-width:580px;min-widt=
+h:300px"><!--[if !vml]><!--><a class=3D"video-preview" tabindex=3D"0" href=
+=3D"https://links.replit.com/s/c/hWLTO8k_LcbPf3SZFLBB5aqx1i8ZIaFIK7IRK_dp0O=
+_d2ST03I6WDwpSPoGi2MUq_UMxMjWrti_4TV9UlXAVblMmPl3DzUyNXlk9fasOXoH7aiSOGtD2p=
+NeOCThgxvD52vQrd_4uRZ2xWg4lJpQte6WaWkZJvJUDnEbr4uMmDh43SlEQSaS4qrlDjyoAcFXg=
+BrMYZzjhTIk9g5W6gzG2GBr3N_cJesFcN7U4bvBj78jp3Tj83-DoOU-dOrHIoQELDEAiy2DTP-p=
+JCOhpI8iqQUvE4EgtlFj0uo90mJ-NE-8So9sGMoc5akmaTuKDawPPSQVx5ga94OTHavjaFMhTqU=
+qAp80xUnFevcddpa4KCbV9z1FGmGQivABqnux071OZ0Oi-Xb4HihNhskVFdlgm19OXHs_rUqw1f=
+Mr2jUZFAfPzUUz6LopOLfIA57lURx01GcqJR2spryCjyc4Ke-vnTVRNNfSlfu9TFGyRoNHol75C=
+lnfdLjQFRWuutwhKLzAH7WDUzsAuBG59j3VOuyuHJ_oHomoMc5xvwlpSx-A28CP2qbwPw3Q/kcB=
+dh-v61Y9ygWuIp1uw8XGx0fKG-kfR/13" target=3D"_blank" title=3D"Introducing Re=
+plit Auth" style=3D"box-sizing: content-box; background-color: #5b5f66; bac=
+kground-image: radial-gradient(circle at center, #5b5f66, #1d1f21); display=
+: block; text-decoration: none;"><div style=3D"box-sizing:content-box"><tab=
+le cellpadding=3D"0" cellspacing=3D"0" border=3D"0" width=3D"100%" backgrou=
+nd=3D"https://img.youtube.com/vi/joHMyy-BqPA/maxresdefault.jpg" role=3D"pre=
+sentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;box-sizing:conten=
+t-box;background-image:url(https://img.youtube.com/vi/joHMyy-BqPA/maxresdef=
+ault.jpg);background-size:cover;background-position:center;min-height:169px=
+;min-width:300px"><tr style=3D"box-sizing:content-box"><td width=3D"25%" st=
+yle=3D"box-sizing:content-box"><img src=3D"https://app-rsrc.getbee.io/publi=
+c/resources/multiparser/video_block/video_ratio_16-9.gif" width=3D"100%" bo=
+rder=3D"0" style=3D"display:block;box-sizing:content-box;height:auto;opacit=
+y:0;visibility:hidden" height=3D"auto"></td><td width=3D"50%" align=3D"cent=
+er" valign=3D"middle" style=3D"box-sizing:content-box;vertical-align:middle=
+"><img src=3D"https://app-rsrc.getbee.io/public/resources/components/widget=
+Bar/video-content-icon-sets/light/type-01.png" width=3D"65" height=3D"auto"=
+ alt=3D"Play" style=3D"display:block;height:auto;box-sizing:content-box"></=
+td><td width=3D"25%" style=3D"box-sizing:content-box">=C2=A0</td></tr></tab=
+le></div></a><!--<![endif]--><!--[if vml]><v:group xmlns:v=3D"urn:schemas-m=
+icrosoft-com:vml" xmlns:w=3D"urn:schemas-microsoft-com:office:word" coordsi=
+ze=3D"580,326" coordorigin=3D"0,0" href=3D"https://links.replit.com/s/c/r9c=
+C6Fjx6p5W1GhZKNeYYrge91knBL8MKapnLZ2GM3U8GydCbC2y6dTHdsAo_-S_xmb8u8I6ii0tiW=
+8dzGlFRRYU1W-DNzOdqYKozjFwlkxWBJBn_Mm9N11zz9mINpBJT2BmIN7VONQrc2RvpVkzOd_e7=
+l40TZt0ohUJoyyiU3sYBFMusYB7id5aPCwjccOX86sQKvZgRbr_clIgiXhnzsRGxSBYRBVkNk1e=
+-Y-I-4BDH4IT1dDkz1e8uBqyTh5u-JxmaUZ7b6j93t_DMUni0md26HdlBmwdsgXme7Y6n-DlEDw=
+zmvKL_aQtvma3dE-PiK0nt9VZW5PSPUXjfLfgFvYfD_ViSKTCHDUFI8PaA2_7nqa8tyrGWc2Sb5=
+_8J50cUu9WlA62sieFzTggYoMUXIBsA-ZE_RSk3wAwxsxklqZjujy0nEA9S3u0dlpr3Oph_nlZF=
+NmD505MDSnRRPbzliXasOGeV0KOsso237cqZsfFp8WgCr7B8fgKHBmXRABsk1zjw69_SuGqqTMX=
+HSHUENowPgSwrOJBGTGojnjTCiLs6xurshk/g8M1nCqueZZSNg1MjpNca3tSUGfNzPwS/13" st=
+yle=3D"width:580px;height:326px;"> <v:rect fill=3D"t" stroked=3D"f" style=
+=3D"position:absolute;width:580;height:326;"> <v:fill src=3D"https://img.yo=
+utube.com/vi/joHMyy-BqPA/maxresdefault.jpg" type=3D"frame"/> </v:rect> <v:o=
+val fill=3D"t" strokecolor=3D"#ffffff" strokeweight=3D"3px" style=3D"positi=
+on:absolute;left:258;top:131;width:65;height:65"> <v:fill color=3D"#ffffff"=
+ opacity=3D"100%"/> </v:oval> <v:shape coordsize=3D"24,32" path=3D"m,l,32,2=
+4,16,xe" fillcolor=3D"#000000" stroked=3D"f" style=3D"position:absolute;lef=
+t:281;top:147;width:23;height:33;"/> </v:group><![endif]--></div><!--[if (m=
+so)|(IE)]></td></tr></table><![endif]--></td></tr></table><div class=3D"spa=
+cer_block block-4" style=3D"height:10px;line-height:10px;font-size:1px">&#8=
+202;</div><div class=3D"spacer_block block-5" style=3D"height:10px;line-hei=
+ght:10px;font-size:1px">&#8202;</div><table class=3D"heading_block block-6"=
+ width=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"p=
+resentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td class=
+=3D"pad"><h2 style=3D"margin:0;color:#000;direction:ltr;font-family:'Source=
+ Sans Pro',Tahoma,Verdana,Segoe,sans-serif;font-size:18px;font-weight:700;l=
+etter-spacing:normal;line-height:1.2;text-align:left;margin-top:0;margin-bo=
+ttom:0;mso-line-height-alt:22px"><span class=3D"tinyMce-placeholder" style=
+=3D"word-break: break-word;">Critical app components:</span></h2></td></tr>=
+</table><div class=3D"spacer_block block-7" style=3D"height:10px;line-heigh=
+t:10px;font-size:1px">&#8202;</div><table class=3D"paragraph_block block-8"=
+ width=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"p=
+resentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;word-break:brea=
+k-word"><tr><td class=3D"pad"><div style=3D"color:#000;direction:ltr;font-f=
+amily:'Source Sans Pro',Tahoma,Verdana,Segoe,sans-serif;font-size:16px;font=
+-weight:400;letter-spacing:0;line-height:1.8;text-align:left;mso-line-heigh=
+t-alt:29px"><p style=3D"margin:0"><strong>Store & manage data</strong></p><=
+/div></td></tr></table><table class=3D"list_block block-9" width=3D"100%" b=
+order=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=
+=3D"mso-table-lspace:0;mso-table-rspace:0;word-break:break-word;color:#000;=
+direction:ltr;font-family:'Source Sans Pro',Tahoma,Verdana,Segoe,sans-serif=
+;font-size:16px;font-weight:400;letter-spacing:0;line-height:1.8;text-align=
+:left;mso-line-height-alt:29px"><tr><td class=3D"pad" style=3D"padding-bott=
+om:10px;padding-left:10px;padding-right:10px"><div style=3D"margin-left:-20=
+px"><ul start=3D"1" style=3D"margin-top:0;margin-bottom:0;list-style-type:r=
+evert"><li style=3D"Margin:0"><a href=3D"https://links.replit.com/s/c/kfzI4=
+mT8Of0RgXiP4k8LvReg7tH6kutzM4JcCZxScmyX9qQa-4ME2O0FmmBhxKbZUd-S4LHZTG8-ytrO=
+SCzayEq2l6HDNWRB7siJya8rckE_NGrx_bxsrg_hwUl4BWcirCh1OfdsODMUNGIvbk7Yn_wiwvR=
+GNFMQnYmp1ia1WJJ3puJoVFmHagxMO2NnWhh3cu-bD-pEOvqr3gZ6QTZrH_jhX_i-fWAaTtlQdw=
+257hfqkXf71iCJ6igVfuP14FFTsRODou_dTn53gsV--wqXmVsxauNV-eRd8P_v7-yfwxKhy96lC=
+abBF4V8_hIydI9eSnfzAJdjxm-nNfOCxVQXbiQf10LtmWnMCIrve_xBBD2gPdNttmXzOSusyBz5=
+CydtiTc7RH3EGiylUXEigKzfyVpcm075iPVazRfK6TP9GuZT__MTT96snOLTlKPt4VfwM0G4oQy=
+qXATTkxzulnEoVG6jcbqPq1Q4Ubl2OTAwQpZzXSOamBDCbbsYep0pDyYwGGLsuAfkrEAlyTiqSW=
+PB8exG4GDylZIEt0vKyR7P1QuW9fws2n8/Fub43li5WBaaa0e5QzLH19FBmhXda_Sf/13" targ=
+et=3D"_self" style=3D"text-decoration: none; color: #fd5402;" tabindex=3D"0=
+">Add a database to your app</a>: Learn how to persistently store user data=
+ and application state</li></ul></div></td></tr></table><div class=3D"space=
+r_block block-10" style=3D"height:10px;line-height:10px;font-size:1px">&#82=
+02;</div><table class=3D"paragraph_block block-11" width=3D"100%" border=3D=
+"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"presentation" style=3D"mso=
+-table-lspace:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"=
+pad"><div style=3D"color:#000;direction:ltr;font-family:'Source Sans Pro',T=
+ahoma,Verdana,Segoe,sans-serif;font-size:16px;font-weight:400;letter-spacin=
+g:0;line-height:1.8;text-align:left;mso-line-height-alt:29px"><p style=3D"m=
+argin:0"><strong>Integrate any API</strong></p></div></td></tr></table><tab=
+le class=3D"list_block block-12" width=3D"100%" border=3D"0" cellpadding=3D=
+"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso=
+-table-rspace:0;word-break:break-word;color:#000;direction:ltr;font-family:=
+'Source Sans Pro',Tahoma,Verdana,Segoe,sans-serif;font-size:16px;font-weigh=
+t:400;letter-spacing:0;line-height:1.8;text-align:left;mso-line-height-alt:=
+29px"><tr><td class=3D"pad" style=3D"padding-bottom:10px;padding-left:10px;=
+padding-right:10px"><div style=3D"margin-left:-20px"><ul start=3D"1" style=
+=3D"margin-top:0;margin-bottom:0;list-style-type:auto"> <li style=3D"Margin=
+:0"><a href=3D"https://links.replit.com/s/c/Cx_HrvblD4h3fG9-EDqtfIw-sLREOcu=
+1-RvHZ5hosXgqTmYQL76dqC0OlE8FwQ6SIBHOsitkbqGP96wIDVBjHZm3hISkJbChDHj3lJIf1I=
+KD5fnTzAVIMOUoYbfaT2dU5uTBTivd-VFUPQp3CNc1BK3XJpqh896GqBn3Xj0cX0f1vIQarpfQH=
+Z6mhmmOlIkz0C_O2FaXxVJ29iO2J6CscLm1--El_8XXBW0rW3BaKsvmyIXGiFFPBPUBAutF-xc4=
+tQZ3PQpMfmCmLQga5sqPCFnse9AGIGGfPeMEfwFrvhhMubt0Ja5__S3tnXM5lizFVV9HelxH8nn=
+r3C0hZBgvKCEK1MDq_8rgXxrs_ewqH8LwGislXpfQHE8AhV5vTpY3E4SJDAS_t34Vsn6-DDXc8E=
+CdlrHe2NAXd_svIyFwbxs9giHV8s64COeWpG9kmbOu_UCho8EWKv_hHKTqwsq6mtC1uWVmAkSgV=
+_WI9sJ7jLsJwsiJxD7Eg-bWA1yPyl39PM12wdZyG088xz2fgbvc_gf_LGBHRSki3mF8Kzxf6d22=
+y0rD8E4/vDpFxUfR_7lctM5Ro4Aymr8pNk6ZFJ9V/13" target=3D"_self" style=3D"text=
+-decoration: none; color: #fd5402;" tabindex=3D"0">Add secrets to your proj=
+ects</a>: how to securely add API keys to connect to other software you wan=
+t</li></ul></div></td></tr></table><div class=3D"spacer_block block-13" sty=
+le=3D"height:10px;line-height:10px;font-size:1px">&#8202;</div><table class=
+=3D"paragraph_block block-14" width=3D"100%" border=3D"0" cellpadding=3D"10=
+" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-t=
+able-rspace:0;word-break:break-word"><tr><td class=3D"pad"><div style=3D"co=
+lor:#000;direction:ltr;font-family:'Source Sans Pro',Tahoma,Verdana,Segoe,s=
+ans-serif;font-size:16px;font-weight:400;letter-spacing:0;line-height:1.8;t=
+ext-align:left;mso-line-height-alt:29px"><p style=3D"margin:0"><strong>Secu=
+re user access</strong></p></div></td></tr></table><table class=3D"list_blo=
+ck block-15" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0=
+" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;word=
+-break:break-word;color:#000;direction:ltr;font-family:'Source Sans Pro',Ta=
+homa,Verdana,Segoe,sans-serif;font-size:16px;font-weight:400;letter-spacing=
+:0;line-height:1.8;text-align:left;mso-line-height-alt:29px"><tr><td class=
+=3D"pad" style=3D"padding-bottom:10px;padding-left:10px;padding-right:10px"=
+><div style=3D"margin-left:-20px"><ul start=3D"1" style=3D"margin-top:0;mar=
+gin-bottom:0;list-style-type:revert"><li style=3D"Margin:0"> <a href=3D"htt=
+ps://links.replit.com/s/c/S2Dsi6YXY_qiZMyXdkWhpJQxC6qnJrOLxLwAKIGajbCW35U9n=
+feBjDVy5k5JbUX4SUqeDx80Sf_WySHCDulknVlglTqjxfpqaAnd8ZIMpZu931KKekNEBW5PNZqO=
+_8P7tfHF1t6sfvqoPpdjz_h3-IgUhwhkD7lHb-95BCMN6P-CkR-WC3v8e4OqE6_YuHGjWyi49Zm=
+VHy-OgBAF1ekzKTMKZw4Gvopu9lxtqP_YtmXA2Gg6xymSEMXt4JS63BEAjRlJsNhd7uLi9EHR4R=
+V9i0dF6vxilG0CNypXtgDUUxY-FTfpJ4x06NYxeMg5dZxkO6_mWstJgMl6QQzQMbkXd0yy344ri=
+-Ge9Et4hnjkbfxaCgiotLYb6WlENxiM9uL_RD3BYxQK6NRhnIJzX0r_li2qLinSpKAA7JgiZYLk=
+PmErskSVOq0EFBNQsHyva818x0MX-oPuf73z0gFeMCXnlYyQQzfpIpPVWgkGbIpTkrEf4haTFhC=
+xduSDwQkazWvuaU0f825jaq7dLToNRGAFzbtR0SGxMe2-6TWeZr2iTm-IyM06oj8/_SIUY7POsS=
+LevdzvIm2ih7T9GaGFQ4Mb/13" target=3D"_self" style=3D"text-decoration: none;=
+ color: #fd5402;" tabindex=3D"0">Implement Replit Auth</a>: Add user authen=
+tication in minutes without complex setup</li></ul></div></td></tr></table>=
+<div class=3D"spacer_block block-16" style=3D"height:10px;line-height:10px;=
+font-size:1px">&#8202;</div><table class=3D"paragraph_block block-17" width=
+=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"present=
+ation" style=3D"mso-table-lspace:0;mso-table-rspace:0;word-break:break-word=
+"><tr><td class=3D"pad"><div style=3D"color:#000;direction:ltr;font-family:=
+'Source Sans Pro',Tahoma,Verdana,Segoe,sans-serif;font-size:16px;font-weigh=
+t:400;letter-spacing:0;line-height:1.8;text-align:left;mso-line-height-alt:=
+29px"><p style=3D"margin:0"><strong>Pre-launch checklist:</strong></p></div=
+></td></tr></table><table class=3D"list_block block-18" width=3D"100%" bord=
+er=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D=
+"mso-table-lspace:0;mso-table-rspace:0;word-break:break-word;color:#000;dir=
+ection:ltr;font-family:'Source Sans Pro',Tahoma,Verdana,Segoe,sans-serif;fo=
+nt-size:16px;font-weight:400;letter-spacing:0;line-height:1.8;text-align:le=
+ft;mso-line-height-alt:29px"><tr><td class=3D"pad" style=3D"padding-bottom:=
+10px;padding-left:10px;padding-right:10px"><div style=3D"margin-left:-20px"=
+><ul start=3D"1" style=3D"margin-top:0;margin-bottom:0;list-style-type:auto=
+"><li style=3D"Margin:0"> Test your database connections with sample data</=
+li><li style=3D"Margin:0">Verify authentication flows for different user ty=
+pes</li><li style=3D"Margin:0">Implement proper error handling for API fail=
+ures</li><li style=3D"Margin:0">Set up monitoring to track usage and perfor=
+mance</li><li style=3D"Margin:0">Create a simple onboarding process for new=
+ users</li></ul></div></td></tr></table><div class=3D"spacer_block block-19=
+" style=3D"height:10px;line-height:10px;font-size:1px">&#8202;</div><table =
+class=3D"paragraph_block block-20" width=3D"100%" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;=
+mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=3D"pa=
+dding-bottom:10px;padding-left:10px;padding-right:10px"><div style=3D"color=
+:#000;direction:ltr;font-family:'Source Sans Pro',Tahoma,Verdana,Segoe,sans=
+-serif;font-size:16px;font-weight:400;letter-spacing:0;line-height:1.8;text=
+-align:left;mso-line-height-alt:29px"><p style=3D"margin:0;margin-bottom:16=
+px">These integrations will transform your project into a robust applicatio=
+n that's ready for real-world users.</p><p style=3D"margin:0">Looking forwa=
+rd to seeing what you launch!<br>The Replit Team</p></div></td></tr></table=
+><div class=3D"spacer_block block-21" style=3D"height:10px;line-height:10px=
+;font-size:1px">&#8202;</div><div class=3D"spacer_block block-22" style=3D"=
+height:10px;line-height:10px;font-size:1px">&#8202;</div><div class=3D"spac=
+er_block block-23" style=3D"height:30px;line-height:30px;font-size:1px">&#8=
+202;</div></td></tr></tbody></table></td></tr></tbody></table><table class=
+=3D"row row-3" align=3D"center" width=3D"100%" border=3D"0" cellpadding=3D"=
+0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-=
+table-rspace:0;background-color:#ebeced"><tbody><tr><td><table class=3D"row=
+-content stack" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0=
+;background-color:#ebeced;border-radius:0;color:#000;width:600px;margin:0 a=
+uto" width=3D"600"><tbody><tr><td class=3D"column column-1" width=3D"100%" =
+style=3D"mso-table-lspace:0;mso-table-rspace:0;font-weight:400;text-align:l=
+eft;padding-bottom:5px;padding-top:5px;vertical-align:top"><div class=3D"sp=
+acer_block block-1" style=3D"height:60px;line-height:60px;font-size:1px">&#=
+8202;</div><table class=3D"social_block block-2" width=3D"100%" border=3D"0=
+" cellpadding=3D"10" cellspacing=3D"0" role=3D"presentation" style=3D"mso-t=
+able-lspace:0;mso-table-rspace:0"><tr><td class=3D"pad"><div class=3D"align=
+ment" align=3D"center"><table class=3D"social-table" width=3D"208px" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"m=
+so-table-lspace:0;mso-table-rspace:0;display:inline-block"><tr><td style=3D=
+"padding:0 10px 0 10px"><a href=3D"https://links.replit.com/s/c/sPyIscgup7i=
+naqUbqaB9RKSiVSYyLsbDnRGuXgoQIzKZC2JIruUB2F39RLxbsmiwvg20jUwbMCujzG5kDKjzEw=
+8qfcj5OWinin5v9ayLu1_tEPmiwk6CnKyqiy3BNwBx1OAeo5I5apRhj7GGsJJLB_2grPIV55cGT=
+IaZjumXc9ALvY-qGE42-4uk9eWdw_Kdo75u3abyF2_QlAmpWKBylVqcLO8a4OJjInwx7mmhjEKU=
+49MmRh8sxuFHfO1etan5HoBhG9gX6Q6GD6e0FDYXRDNS-CF-REEPJOJcggD7KtJI1KmwSiFZHS5=
+3_uhJZDzSnJAVQYupl2yT2xZy9fHK7gQMsYV741ZJ8CKlEdGezEcRRlJ_dGdmG2hPzz8ccgVLul=
+YvJsQFaZ6AP_5pB7aVL461fU0_nxHITw_NelViyOuL7_uBXGtHqzMe5qPZIAP2ePQMwA35Y4yel=
+quSK8_8Y7CX3MCsKomYgMBHX49ux4HqxNWx85XIabkA_dA1JpkrKTU/gPaknCDq-T9ggS-23Mwv=
+j34xtlEypb3J/13" target=3D"_blank"><img src=3D"https://app-rsrc.getbee.io/p=
+ublic/resources/social-networks-icon-sets/t-only-logo-dark-gray/twitter@2x.=
+png" width=3D"32" height=3D"auto" alt=3D"Twitter" title=3D"Twitter" style=
+=3D"display:block;height:auto;border:0"></a></td><td style=3D"padding:0 10p=
+x 0 10px"><a href=3D"https://links.replit.com/s/c/3o-es_wH-m4yOwTuqmdjOuVQl=
+5ckQE3iV1q6ROIvWfT9Dk-BShZjXMZRv_PG_Yb2L4Rxtj2wO1pNzjHVjSMNtXMJbncBYjIvNU9j=
+OcYGgOELY-nyCeMrgNKlX4GQEXhC30g57nIW26cNVNx2NvunxNwhst3qmSdKlFA-I2bq_w7-iOd=
+6sCbGhd1fAjKf6tRGFlK5W9mCsGMEJs6l1M6mGDtopcyx_Mhd3XWfCcb5m4VTfjrJ5q_I8UZ01v=
+goira7Li-W26sS33hHIwr40zKPYHhQvuIRkp29MOjE8hdnuSbTZORdJyqpKc0ePw8kiRYARENi5=
+DUucJBTUYQL359mc8ofs8ekq8iYkhYL7lGOx_JrNlXbJxLeEl9IN7iR_21RYBeuIZzcaEUR0yJV=
+AAARDZXJM-aFcd8Pxu0vsoob7TM-OJecSuq4Y8PHKPIWDgBX9A0wdk9m-SomgyYVh_IJQZpYjH0=
+c0-wFxQMB_J3FCsA2YHnYejtLrr_rhIuzBXko1mUhVOYIFTthxcRzSLcrWH2xIztgnf-oFjAg19=
+ZmKSE/qqRg9jUa3kwYjqjxnpwnDzL4q8TwXP4D/13" target=3D"_blank"><img src=3D"ht=
+tps://app-rsrc.getbee.io/public/resources/social-networks-icon-sets/t-only-=
+logo-dark-gray/linkedin@2x.png" width=3D"32" height=3D"auto" alt=3D"LinkedI=
+n" title=3D"LinkedIn" style=3D"display:block;height:auto;border:0"></a></td=
+><td style=3D"padding:0 10px 0 10px"><a href=3D"https://links.replit.com/s/=
+c/5Tq5mzrSAdlUySe5bVk85QeuY3S7fA4rorFAWSp8Iza9YqxFKng_tz0-RZ8wsIQKjDpZvjEZq=
+ntkVgDXhQ9NeDJDkiZT4dtCi_KZin72jlQe6yXba1t80XBzTuBYxCvC5brZNbCTgrNUK8CFehez=
+Va2LuhJZqFAkbLoRshlwb7warxcmAks7OMXzTDGGHqcH_usmYSaa93-E0kLx9Y4RicCCVZhc5dV=
+XvZCHb4GRTIAdNxK5UrzKqrSra3N7K2KKmauOTj1BkyEG9tV4xpo4U2OMFhIIZKixFbHO-RBzIO=
+BaAoR2GJA58bNxwo7t-hV-ykdCtfHujJk74IERYmQinOz_lA-fqhj20A6pZ6zy0Kn9cbdR6YMjn=
+UsPyZHWm5KFvTZAvQ-TC2__Qo4uj3oWAfhB8ry93sC_ZPB9gKQwPCvCNvG4RrNmqqeLI5J_tZf3=
+Uxxku-a1kEWlt3lRYGAHEoD83P-JFiLgSAuLdlGdknhSGkcWFNigs_IA0ZS8qYFLQg7Z0Z_aYol=
+9STycnZjPJSBVybqxtjgjY52g3DW5Jf5gGr800nXyIQM8ooYEn5CfvtfFC26KvSFCHVa9LZRN5g=
+/KvDNU-o_jIGYr_nvdw227DrkI9UaYCAw/13" target=3D"_blank"><img src=3D"https:/=
+/app-rsrc.getbee.io/public/resources/social-networks-icon-sets/t-only-logo-=
+dark-gray/youtube@2x.png" width=3D"32" height=3D"auto" alt=3D"YouTube" titl=
+e=3D"YouTube" style=3D"display:block;height:auto;border:0"></a></td><td sty=
+le=3D"padding:0 10px 0 10px"> <a href=3D"https://links.replit.com/s/c/Kv0Zl=
+QmqzNpKjFWDQF50M0kklir1dI6kfgt_FCDsYt3U7Bu9-7JJv0sOKhXRNFhmu52Bf031giOZOVLc=
+WCrtXm3eWvPEIdYFBR994iX2xNuF12ErXuE1vx4wLtTqrfOJRsxNk94hYR2KXHEISGW4fdcQHU6=
+N-5Oxnr0qTdh9-2NRzVBy1Xtyh5edZrc4xNZ5zCQk0QddqWUNnSGZaKJigsa2DiSA4Gkb6TcjTf=
+HULQ1Oud5IRYbOdcWLIygf8IgZkzRx8J9CCDypDChWDQzuM3AneIPDcw5TbjF1aLzEkBFWWuZWX=
+oU6ZjqCjp-UACFFIZyBzCHVsh-Y7HP_ypsHbo8k03RkWfGYLmrWf1LGtQbV-GnrHuISgoxll5xQ=
+dFkx6EbDtCaGo40PUo1Hn360StCLP0FAmqnJDN1GkA1aa_m309L7RestKI5o4S8aSmNXQLgiaIO=
+0R-dTysXquuA2WCRb3XA5_v-mFYX3O5Wo2bwRivvIBlrL7cFGBbVRYa30UUrjLg7NPpG-X0gMSi=
+TfsaXPMlNWHQxim_WXcwaEVJg/WH4wUywXIiHRxvuL_9uFRqQKXmBsZ1lk/13" target=3D"_b=
+lank"><img src=3D"https://app-rsrc.getbee.io/public/resources/social-networ=
+ks-icon-sets/t-only-logo-dark-gray/instagram@2x.png" width=3D"32" height=3D=
+"auto" alt=3D"Instagram" title=3D"Instagram" style=3D"display:block;height:=
+auto;border:0"></a></td></tr></table></div></td></tr></table><table class=
+=3D"text_block block-3" width=3D"100%" border=3D"0" cellpadding=3D"5" cells=
+pacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rs=
+pace:0;word-break:break-word"><tr><td class=3D"pad"><div style=3D"font-fami=
+ly:sans-serif"><div class style=3D"font-size:14px;font-family:'Source Sans =
+Pro',Tahoma,Verdana,Segoe,sans-serif;mso-line-height-alt:16.8px;color:#555;=
+line-height:1.2"><p style=3D"margin:0;text-align:center;font-size:10px;mso-=
+line-height-alt:12px"><span style=3D"word-break: break-word; font-size: 10p=
+x;">Sent by Replit<br>1001 E Hillsdale Blvd, Suite 400, Foster City, CA 944=
+04&nbsp;</span></p><p style=3D"margin:0;text-align:center;font-size:10px;ms=
+o-line-height-alt:12px"><span style=3D"word-break: break-word; font-size: 1=
+0px;"><a href=3D"https://links.replit.com/s/u/JS2dT7hzjhdeLbrBVPzZNXI1bY6lV=
+u3iRZ66tln6PRd9MJoJAkT1y106vY5xxBwjh8AkQXh2rKHrznDlUP28QtOw5Qb9BrGz4uR4S3S4=
+eEcujVRQESltdkjjiK5f9wiuF8lDdVGt9GcZnogXFfYJWRTMhR1zgJEovRP9yzhq4xDYQHXVyaG=
+cS8Sd3ffmqG_qAjAz0q-p3bc8mkIB/zxolpItZ_WXYKm89JsJSQeDuI7v1-EW6/13" target=
+=3D"_blank" style=3D"text-decoration: none; color: #fd5402;" rel=3D"noopene=
+r">Unsubscribe here</a>&nbsp;&nbsp;</span></p></div></div></td></tr></table=
+></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></ta=
+ble><!-- End -->=0D=0A<img border=3D"0" width=3D"1" height=3D"1" alt=3D"" s=
+rc=3D"http://track.replit.com/q/ACPo7_cHgXuIXuHz1Ywe1Q~~/AARGbBA~/eTs6ngpHf=
+vnH8cgfy6DPeOAT3gmrZrmqj9c_EyJDK-jF4_jVplgOmE3Sk5P_czIBUFqH12htwVhoY_7O2pKL=
+dxcKVZLNfJbtUDbaVxPIo8w~">=0D=0A</body></html>
+--_----XWZ6fr7exISnTf4Frg39cA===_B1/F2-05257-6B514D86--
+

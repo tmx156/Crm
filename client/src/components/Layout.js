@@ -206,55 +206,81 @@ const Layout = ({ children }) => {
           return updated;
         });
       };
-    // Handle incoming emails via message_received event
+    // Handle incoming messages via message_received event (both SMS and email)
     const handleMessageReceived = (data) => {
-      console.log('📧 Layout: Received message_received event:', data);
-      if (data?.channel !== 'email') return;
+      console.log('🔔 Layout: Received message_received event:', data);
 
-      // Use messageId if available, otherwise fall back to leadId_timestamp format
-      const notificationId = data.messageId || `${data.leadId}_${data.timestamp}`;
+      // Handle both SMS and email messages
+      if (!data?.leadId && !data?.phone) {
+        console.log('❌ Layout: No leadId or phone in message event data');
+        return;
+      }
+
+      // Use consistent messageId format
+      const notificationId = data.messageId || `${data.leadId || data.phone}_${data.timestamp}_${Date.now()}`;
+
       const notification = {
         id: notificationId,
-        messageId: data.messageId,  // Store the actual message ID
+        messageId: data.messageId || notificationId, // Store the actual message ID
         leadId: data.leadId,
-        leadName: data.leadName || 'Email Reply',
-        content: data.content,
+        leadName: data.leadName || (data.channel === 'email' ? 'Email Reply' : 'SMS Reply'),
+        leadPhone: data.phone || data.leadPhone,
+        leadEmail: data.email || data.leadEmail,
+        message: data.content,
+        content: data.content, // Include both for compatibility
         timestamp: data.timestamp,
-        type: 'email',
+        type: data.channel || data.type || 'sms',
         subject: data.subject,
-        read: false
+        read: false,
+        formattedTime: 'Just now'
       };
 
-      // Check if this notification already exists to prevent duplicates
+      console.log(`🔔 Layout: Adding ${notification.type} notification:`, {
+        id: notification.id,
+        lead: notification.leadName,
+        content: notification.content?.substring(0, 30) + '...'
+      });
+
+      // Add to notifications (avoid duplicates)
       setSmsNotifications(prev => {
-        const existingIndex = prev.findIndex(notif => notif.id === notificationId);
-        if (existingIndex >= 0) {
-          // Update existing notification
-          console.log('📧 Layout: Updating existing email notification:', notificationId);
-          const updated = [...prev];
-          updated[existingIndex] = { ...updated[existingIndex], ...notification };
-          return updated;
-        } else {
-          // Add new notification
-          console.log('📧 Layout: Adding new email notification:', notificationId);
-          return [notification, ...prev.slice(0, 9)];
+        const exists = prev.some(n => n.id === notification.id);
+        if (exists) {
+          console.log('⚠️ Layout: Notification already exists, skipping duplicate');
+          return prev;
         }
+
+        // Add new notification to the beginning and keep only 10 most recent
+        const updated = [notification, ...prev.slice(0, 9)];
+        console.log(`✅ Layout: Added ${notification.type} notification, total notifications:`, updated.length);
+        return updated;
       });
     };
 
     // Handle message read events from other clients/components
     const handleMessageRead = (data) => {
-      console.log('📡 Received message_read event:', data);
-      setSmsNotifications(prev =>
-        prev.map(notif =>
-          notif.id === data.messageId ? { ...notif, read: true } : notif
-        )
-      );
-      // Persist this specific notification id as read
-      if (data?.messageId) {
-        const ids = Array.from(new Set([...readNotificationIds, data.messageId]));
-        persistReadIds(ids);
+      console.log('📡 Layout: Received message_read event:', data);
+
+      const messageId = data.messageId;
+      if (!messageId) {
+        console.warn('⚠️ Layout: No messageId in message_read event');
+        return;
       }
+
+      // Update notifications state - match by both id and messageId for compatibility
+      setSmsNotifications(prev =>
+        prev.map(notif => {
+          if (notif.id === messageId || notif.messageId === messageId) {
+            console.log('✅ Layout: Marking notification as read:', notif.id);
+            return { ...notif, read: true };
+          }
+          return notif;
+        })
+      );
+
+      // Persist this specific notification id as read
+      const ids = Array.from(new Set([...readNotificationIds, messageId]));
+      persistReadIds(ids);
+      console.log('💾 Layout: Persisted read status for:', messageId);
     };
 
     socket.on('lead_updated', handleLeadUpdate);
@@ -301,49 +327,26 @@ const Layout = ({ children }) => {
         
         // Scope to recent window to avoid historical backlog dominating
         const recentThresholdMs = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
-        const recentUnreadMessages = messages.filter(msg => {
+        const recentMessages = messages.filter(msg => {
           const ts = (() => { try { return new Date(msg.timestamp).getTime(); } catch { return Date.now(); } })();
           if (ts < recentThresholdMs) return false;
           if (msg.direction !== 'received') return false;
 
-          // Filter out email messages from SMS notifications
-          if (msg.type === 'email' || msg.channel === 'email') {
-            // Only log occasionally to reduce spam
+          // Include both SMS and email messages in notifications
+          if (msg.type !== 'sms' && msg.type !== 'SMS' && msg.type !== 'email') {
+            // Only filter out unknown message types
             if (Math.random() < 0.1) { // Log only 10% of the time
-              console.log('📧 Filtering out email message from SMS notifications:', msg.id);
+              console.log('🔔 Filtering out unknown message type:', msg.id, msg.type);
             }
             return false;
           }
 
-          // Filter out messages that are not SMS
-          if (msg.type && msg.type !== 'sms' && msg.type !== 'SMS') {
-            // Only log occasionally to reduce spam
-            if (Math.random() < 0.1) { // Log only 10% of the time
-              console.log('📧 Filtering out non-SMS message from notifications:', msg.id, msg.type);
-            }
-            return false;
-          }
-
-          // Check read status in order of preference:
-          // 1. Direct read_status field from messages table (most reliable)
-          // 2. Server's isRead field from API response
-          // 3. Local storage tracking
-          const hasDirectReadStatus = msg.read_status !== undefined;
-          const locallyMarkedAsRead = readNotificationIds.includes(msg.id);
-
-          if (hasDirectReadStatus) {
-            // Use the direct read_status field if available
-            return !msg.read_status && !locallyMarkedAsRead;
-          } else {
-            // Fall back to the old logic using isRead field
-            const isUnreadOnServer = !msg.isRead; // Server says it's unread
-            return isUnreadOnServer && !locallyMarkedAsRead;
-          }
+          return true; // Include all recent SMS and email messages
         });
-        console.log('🔔 All unread messages:', recentUnreadMessages.length);
-        
+        console.log('🔔 All recent messages:', recentMessages.length);
+
         // Convert to notifications format and update state
-        const newNotifications = recentUnreadMessages.map(msg => {
+        const newNotifications = recentMessages.map(msg => {
           // Fix timestamp formatting
           let formattedTime = 'Just now';
           if (msg.timestamp) {
@@ -355,7 +358,7 @@ const Layout = ({ children }) => {
                 const diffMins = Math.floor(diffMs / (1000 * 60));
                 const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
                 const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                
+
                 if (diffMins < 1) {
                   formattedTime = 'Just now';
                 } else if (diffMins < 60) {
@@ -372,31 +375,28 @@ const Layout = ({ children }) => {
               console.warn('Invalid timestamp:', msg.timestamp);
             }
           }
-          
-          // Determine read status with proper fallback chain
-          let isRead = false;
-          if (msg.read_status !== undefined) {
-            // Use direct read_status field if available (most reliable)
-            isRead = msg.read_status;
-          } else if (msg.isRead !== undefined) {
-            // Fall back to server's isRead field
-            isRead = msg.isRead;
-          }
-          // Also check if locally marked as read
-          const locallyMarkedAsRead = readNotificationIds.includes(msg.id);
-          if (locallyMarkedAsRead) {
-            isRead = true;
-          }
+
+          // Use consistent ID format - always use the message UUID
+          const notificationId = msg.messageId || msg.id;
+
+          // Check read status using the correct ID
+          const locallyMarkedAsRead = readNotificationIds.includes(notificationId);
+          const serverUnread = !msg.isRead; // Server's computed read status
+          const isRead = !serverUnread || locallyMarkedAsRead;
 
           return {
-            id: msg.id,
-            messageId: msg.messageId, // Include the actual message UUID
+            id: notificationId, // Use messageId as the primary ID for consistency
+            messageId: msg.messageId || msg.id, // Include the actual message UUID
             leadId: msg.leadId,
             leadName: msg.leadName,
             leadPhone: msg.leadPhone,
+            leadEmail: msg.leadEmail,
             message: msg.content,
+            content: msg.content, // Include both for compatibility
             timestamp: msg.timestamp,
             formattedTime: formattedTime,
+            type: msg.type, // Include message type (sms/email)
+            subject: msg.details?.subject || msg.subject, // For email notifications
             read: isRead
           };
         });
@@ -413,18 +413,35 @@ const Layout = ({ children }) => {
 
             // Merge new notifications with existing ones, preserving read status
             const mergedNotifications = newNotifications.map(newNotif => {
-              const existing = prev.find(existing => existing.id === newNotif.id);
+              const existing = prev.find(existing => existing.id === newNotif.id || existing.messageId === newNotif.id);
               const persistedRead = readNotificationIds.includes(newNotif.id);
-              return existing ? { ...newNotif, read: existing.read || persistedRead } : { ...newNotif, read: persistedRead };
+
+              // Priority for read status: existing state > persisted state > server state
+              let finalReadStatus = newNotif.read; // Start with server state
+              if (persistedRead) finalReadStatus = true; // Override with persisted state
+              if (existing && existing.read) finalReadStatus = true; // Override with existing state
+
+              return {
+                ...newNotif,
+                read: finalReadStatus
+              };
+            });
+
+            // Filter out notifications that are older than those we already have from real-time
+            const filteredMerged = mergedNotifications.filter(merged => {
+              const existingRealTimeItem = existingRealtime.find(rt => rt.id === merged.id);
+              return !existingRealTimeItem; // Only include if not already present from real-time
             });
 
             // Combine real-time and polled notifications
-            const combined = [...existingRealtime, ...mergedNotifications];
+            const combined = [...existingRealtime, ...filteredMerged];
 
             // Sort by timestamp (most recent first) and keep only 10 most recent
             combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-            return combined.slice(0, 10);
+            const final = combined.slice(0, 10);
+            console.log('🔔 Final notifications:', final.length, 'unread:', final.filter(n => !n.read).length);
+            return final;
           });
         } else {
           console.log('🔔 No new notifications found via polling');
@@ -489,11 +506,8 @@ const Layout = ({ children }) => {
         })
       );
 
-      // Call API to mark message as read in database
-      // Send in the format expected by server: leadId_timestamp
-      const messageIdentifier = notification.leadId && notification.timestamp
-        ? `${notification.leadId}_${notification.timestamp}`
-        : notificationId; // Fallback to just ID if format not available
+      // Use the messageId (UUID) directly for marking as read - no need for complex formatting
+      const messageIdentifier = notification.messageId || notificationId;
 
       const token = localStorage.getItem('token');
       const response = await axios.put(`/api/messages-list/${messageIdentifier}/read`, {}, {
@@ -1176,7 +1190,7 @@ const Layout = ({ children }) => {
                     <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                       <div className="py-2">
                         <div className="px-4 py-2 border-b border-gray-200">
-                          <h3 className="text-sm font-medium text-gray-900">SMS Notifications</h3>
+                          <h3 className="text-sm font-medium text-gray-900">Message Notifications</h3>
                         </div>
                         
                         {smsNotifications.length === 0 ? (
@@ -1196,9 +1210,15 @@ const Layout = ({ children }) => {
                               >
                                 <div className="flex items-start space-x-3">
                                   <div className="flex-shrink-0">
-                                    <FiMessageSquare className={`h-5 w-5 ${
-                                      !notification.read ? 'text-blue-600' : 'text-gray-400'
-                                    }`} />
+                                    {notification.type === 'email' ? (
+                                      <FiMail className={`h-5 w-5 ${
+                                        !notification.read ? 'text-blue-600' : 'text-gray-400'
+                                      }`} />
+                                    ) : (
+                                      <FiMessageSquare className={`h-5 w-5 ${
+                                        !notification.read ? 'text-blue-600' : 'text-gray-400'
+                                      }`} />
+                                    )}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between">
@@ -1206,6 +1226,11 @@ const Layout = ({ children }) => {
                                         !notification.read ? 'text-gray-900' : 'text-gray-600'
                                       }`}>
                                         {notification.leadName}
+                                        {notification.type === 'email' && notification.subject && (
+                                          <span className="text-xs text-gray-500 block">
+                                            Subject: {notification.subject}
+                                          </span>
+                                        )}
                                       </p>
                                       <p className="text-xs text-gray-500">
                                         {notification.formattedTime || 'Just now'}

@@ -4,10 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const { simpleParser } = require('mailparser');
 
-// Global state
+// Global state with enhanced connection management
 let client = null;
 let isConnected = false;
 let reconnectTimer = null;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 10;
+let isReconnecting = false;
+let lastHeartbeat = null;
+let heartbeatTimer = null;
 let io = null;
 
 // Supabase configuration
@@ -41,76 +46,159 @@ class EmailPoller {
       return false;
     }
 
-    if (client && client.usable) {
+    if (isReconnecting) {
+      console.log('📧 Connection already in progress, skipping...');
+      return false;
+    }
+
+    if (client && client.usable && isConnected) {
       console.log('📧 Already connected to Gmail IMAP');
       return true;
     }
 
     try {
-      // Close any existing connection
-      if (client) {
-        try { 
-          await client.close();
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for connection to fully close
-        } catch (e) {
-          console.log('📧 Error closing existing connection:', e.message);
-        }
-        client = null;
-      }
+      isReconnecting = true;
+
+      // Clean up any existing connection properly
+      await this.cleanup();
+
+      console.log(`📧 Connecting to Gmail IMAP (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})...`);
 
       client = new ImapFlow({
-      host: 'imap.gmail.com',
-      port: 993,
-      secure: true,
+        host: 'imap.gmail.com',
+        port: 993,
+        secure: true,
         auth: { user, pass },
         logger: false, // Disable verbose logging
-        socketTimeout: 300000,  // 5 minutes
-        idleTimeout: 300000,    // 5 minutes
+        socketTimeout: 120000,  // 2 minutes (shorter for faster failure detection)
+        idleTimeout: 240000,    // 4 minutes (shorter for more reliable reconnects)
         emitLogs: false,
         tls: {
           rejectUnauthorized: false,
-          servername: 'imap.gmail.com'
-        }
+          servername: 'imap.gmail.com',
+          minVersion: 'TLSv1.2' // Ensure secure TLS
+        },
+        // Connection pool settings for reliability
+        maxIdleTime: 300000, // 5 minutes
+        connectionTimeout: 60000, // 1 minute connection timeout
       });
 
-      await client.connect();
-      console.log('📧 Connected to Gmail IMAP');
-      
-      await client.mailboxOpen('INBOX');
-      console.log('📧 INBOX opened');
-      
-      isConnected = true;
-      
-      // Set up event handlers
-      client.on('exists', this.handleNewEmail.bind(this));
+      // Set up event handlers before connecting
       client.on('error', this.handleError.bind(this));
-      client.on('close', () => {
-        console.log('📧 IMAP connection closed');
-        isConnected = false;
-        this.scheduleReconnect(5000);
-      });
+      client.on('close', this.handleClose.bind(this));
+      client.on('exists', this.handleNewEmail.bind(this));
+
+      await client.connect();
+      console.log('✅ Connected to Gmail IMAP successfully');
+
+      await client.mailboxOpen('INBOX');
+      console.log('✅ INBOX opened successfully');
+
+      isConnected = true;
+      reconnectAttempts = 0; // Reset on successful connection
+      isReconnecting = false;
+      lastHeartbeat = Date.now();
+
+      // Start heartbeat monitoring
+      this.startHeartbeat();
 
       // Initial scan and IDLE mode
       await this.scanUnprocessedMessages();
       this.startIdleMode();
-      
+
       return true;
     } catch (error) {
-      console.error('📧 Connection error:', error.message);
+      console.error('❌ Gmail IMAP connection failed:', error.message);
+      isReconnecting = false;
       this.handleError(error);
       return false;
     }
   }
 
-  handleError(error) {
-    console.error('📧 IMAP Error:', error.message);
+  async cleanup() {
+    console.log('📧 Cleaning up existing connection...');
+
+    // Clear heartbeat timer
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    // Close existing client connection
+    if (client) {
+      try {
+        if (client.usable) {
+          await client.close();
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for cleanup
+      } catch (e) {
+        console.log('⚠️ Error during connection cleanup:', e.message);
+      }
+      client = null;
+    }
+
     isConnected = false;
-    
+  }
+
+  startHeartbeat() {
+    // Clear existing heartbeat
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer);
+    }
+
+    heartbeatTimer = setTimeout(async () => {
+      if (isConnected && client?.usable) {
+        try {
+          // Simple heartbeat - check mailbox status
+          await client.status('INBOX', { messages: true });
+          lastHeartbeat = Date.now();
+          console.log('💓 Email poller heartbeat OK');
+          this.startHeartbeat(); // Schedule next heartbeat
+        } catch (error) {
+          console.error('💔 Email poller heartbeat failed:', error.message);
+          this.handleError(error);
+        }
+      }
+    }, 60000); // Heartbeat every minute
+  }
+
+  handleClose() {
+    console.log('📧 IMAP connection closed');
+    isConnected = false;
+    isReconnecting = false;
+
+    // Clear heartbeat
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    this.scheduleReconnect(5000);
+  }
+
+  handleError(error) {
+    console.error('❌ IMAP Error:', error.message);
+    isConnected = false;
+    isReconnecting = false;
+
+    reconnectAttempts++;
+
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      console.error(`❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Email polling disabled.`);
+      return;
+    }
+
     if (error.message?.includes('Too many simultaneous connections')) {
-      console.log('📧 Hit Gmail connection limit, waiting longer before retry...');
-      this.scheduleReconnect(60000); // Wait 1 minute
+      console.log('⏳ Hit Gmail connection limit, waiting 2 minutes before retry...');
+      this.scheduleReconnect(120000); // Wait 2 minutes
+    } else if (error.message?.includes('authentication')) {
+      console.error('❌ Authentication error. Please check EMAIL_USER and EMAIL_PASSWORD');
+      this.scheduleReconnect(300000); // Wait 5 minutes for auth errors
     } else {
-      this.scheduleReconnect(5000); // Wait 5 seconds
+      // Exponential backoff for other errors
+      const delay = Math.min(5000 * Math.pow(2, reconnectAttempts - 1), 60000);
+      console.log(`⏳ Scheduling reconnect in ${delay/1000} seconds (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+      this.scheduleReconnect(delay);
     }
   }
 
@@ -149,14 +237,52 @@ class EmailPoller {
   }
 
   async startIdleMode() {
-    while (isConnected && client?.usable) {
+    console.log('📧 Starting IDLE mode for real-time email monitoring...');
+
+    while (isConnected && client?.usable && !isReconnecting) {
       try {
+        console.log('📧 Entering IDLE state...');
+
+        // Set a timeout for IDLE to prevent hanging
+        const idleTimeout = setTimeout(() => {
+          if (client?.usable) {
+            console.log('📧 IDLE timeout - refreshing connection...');
+            try {
+              client.close();
+            } catch (e) {
+              console.log('⚠️ Error closing IDLE connection:', e.message);
+            }
+          }
+        }, 240000); // 4 minutes timeout
+
         await client.idle();
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Small delay between IDLE cycles
+
+        clearTimeout(idleTimeout);
+        console.log('📧 IDLE state ended normally');
+
+        // Small delay before next IDLE cycle to prevent rapid cycling
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
       } catch (error) {
-        console.error('📧 IDLE mode error:', error);
-        break;
+        console.error('❌ IDLE mode error:', error.message);
+
+        // Check if this is a connection error
+        if (!client?.usable || !isConnected) {
+          console.log('📧 Connection lost during IDLE, will reconnect...');
+          break;
+        }
+
+        // Wait before retrying IDLE
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
+    }
+
+    console.log('📧 IDLE mode ended');
+
+    // If we exit IDLE due to connection issues, trigger reconnection
+    if (!isConnected && !isReconnecting) {
+      console.log('📧 IDLE mode ended due to connection issues, triggering reconnect...');
+      this.handleError(new Error('IDLE mode connection lost'));
     }
   }
 
@@ -217,32 +343,87 @@ class EmailPoller {
 
   async processMessage(message) {
     const supabase = this.getSupabase();
+    const startTime = Date.now();
+
     try {
       const { envelope, uid, internalDate, source } = message;
       const fromAddr = envelope?.from?.[0]?.address;
       const subject = envelope?.subject || '';
-      const dateIso = internalDate?.toISOString() || new Date().toISOString();
 
-      console.log(`📧 Processing email: ${fromAddr} - ${subject}`);
+      // Use email's actual received date with better fallback logic
+      let emailReceivedDate;
+      let processingDate = new Date().toISOString();
 
-      // Extract body
-      const rawEmail = source.toString('utf8');
-      const body = await this.extractEmailBody(rawEmail);
+      if (internalDate && internalDate instanceof Date && !isNaN(internalDate.getTime())) {
+        // Use IMAP internal date (when email was received by server)
+        emailReceivedDate = internalDate.toISOString();
+        console.log(`📧 Using IMAP internal date: ${emailReceivedDate}`);
+      } else if (envelope?.date && envelope.date instanceof Date && !isNaN(envelope.date.getTime())) {
+        // Fallback to envelope date (when email was sent)
+        emailReceivedDate = envelope.date.toISOString();
+        console.log(`📧 Using envelope date: ${emailReceivedDate}`);
+      } else {
+        // Last resort: use current time but log warning
+        emailReceivedDate = processingDate;
+        console.warn(`⚠️ No valid email date found, using current time: ${emailReceivedDate}`);
+      }
 
-      // Save raw email for debugging
-      const debugDir = path.join(__dirname, '..', 'email_debug_logs');
-      fs.mkdirSync(debugDir, { recursive: true });
-      fs.writeFileSync(path.join(debugDir, `email_${uid}_${Date.now()}.txt`), rawEmail);
+      console.log(`📧 Processing email from ${fromAddr}: "${subject}" (UID: ${uid}, Date: ${emailReceivedDate})`);
 
-      // Find matching lead
-      const { data: lead, error: leadError } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('email', fromAddr)
-        .single();
+      // Validate required fields
+      if (!fromAddr) {
+        console.warn(`⚠️ Skipping email with no from address (UID: ${uid})`);
+        return;
+      }
 
-      if (leadError || !lead) {
-        console.log(`📧 No matching lead found for ${fromAddr}`);
+      if (!source || source.length === 0) {
+        console.warn(`⚠️ Skipping email with no content (UID: ${uid}, from: ${fromAddr})`);
+        return;
+      }
+
+      // Extract body with error handling
+      let body;
+      try {
+        const rawEmail = source.toString('utf8');
+        body = await this.extractEmailBody(rawEmail);
+
+        // Save raw email for debugging (with size limit)
+        if (rawEmail.length < 1024 * 1024) { // Only save emails < 1MB
+          try {
+            const debugDir = path.join(__dirname, '..', 'email_debug_logs');
+            fs.mkdirSync(debugDir, { recursive: true });
+            fs.writeFileSync(path.join(debugDir, `email_${uid}_${Date.now()}.txt`), rawEmail);
+          } catch (debugError) {
+            console.warn('⚠️ Failed to save debug email:', debugError.message);
+          }
+        }
+      } catch (bodyError) {
+        console.error('❌ Failed to extract email body:', bodyError.message);
+        body = 'Error extracting email content';
+      }
+
+      // Find matching lead with better error handling
+      let lead;
+      try {
+        const { data: leadData, error: leadError } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('email', fromAddr)
+          .single();
+
+        if (leadError) {
+          if (leadError.code === 'PGRST116') {
+            console.log(`📧 No matching lead found for email: ${fromAddr}`);
+          } else {
+            console.error(`❌ Database error finding lead for ${fromAddr}:`, leadError.message);
+          }
+          return;
+        }
+
+        lead = leadData;
+        console.log(`✅ Found matching lead: ${lead.name} (ID: ${lead.id})`);
+      } catch (dbError) {
+        console.error(`❌ Failed to query leads for ${fromAddr}:`, dbError.message);
         return;
       }
 
@@ -264,7 +445,7 @@ class EmailPoller {
         return;
       }
 
-      // Add to messages table
+      // Add to messages table with proper timestamp separation
       const { randomUUID } = require('crypto');
       const messageId = randomUUID();
       const { data: insertedMessage, error: insertError } = await supabase
@@ -277,9 +458,9 @@ class EmailPoller {
           content: body,
           recipient_email: fromAddr,
           status: 'received',
-          sent_at: dateIso,
-          created_at: dateIso,
-          updated_at: dateIso,
+          sent_at: emailReceivedDate, // When the email was actually received
+          created_at: processingDate,  // When CRM processed the email
+          updated_at: processingDate,  // When CRM last updated the record
           read_status: false
         })
         .select('id')
@@ -301,7 +482,7 @@ class EmailPoller {
 
       history.unshift({
         action: 'EMAIL_RECEIVED',
-        timestamp: dateIso,
+        timestamp: emailReceivedDate, // Use email's actual received date
         details: {
           subject,
           body,
@@ -315,7 +496,7 @@ class EmailPoller {
         .from('leads')
         .update({
           booking_history: JSON.stringify(history),
-          updated_at: dateIso
+          updated_at: processingDate // Use processing date for lead update
         })
         .eq('id', lead.id);
 
@@ -334,7 +515,7 @@ class EmailPoller {
             leadId: lead.id,
             leadName: lead.name,
             content: subject || body.slice(0, 120),
-            timestamp: dateIso,
+            timestamp: emailReceivedDate, // Use email's actual received date for UI
             direction: 'received',
             channel: 'email',
             subject,
@@ -351,10 +532,18 @@ class EmailPoller {
         });
       }
 
-      console.log(`📧 Email processed successfully: ${subject}`);
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ Email processed successfully in ${processingTime}ms: "${subject}" from ${fromAddr}`);
 
     } catch (error) {
-      console.error('📧 Error processing message:', error);
+      const processingTime = Date.now() - startTime;
+      console.error(`❌ Error processing message after ${processingTime}ms:`, error.message);
+      console.error(`📧 Failed message details: UID=${message.uid}, from=${message.envelope?.from?.[0]?.address}, subject="${message.envelope?.subject}"`);
+
+      // Log stack trace only for unexpected errors
+      if (!error.message.includes('lead found') && !error.message.includes('already processed')) {
+        console.error('📧 Full error stack:', error.stack);
+      }
     }
   }
 }

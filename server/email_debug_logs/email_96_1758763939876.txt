@@ -1,0 +1,18 @@
+Return-Path: <avensismodels.co.uk.crm.bookings@gmail.com>
+Received: from [127.0.0.1] (92.40.173.118.threembb.co.uk. [92.40.173.118])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4613ddc01e6sm255148795e9.18.2025.09.22.17.36.03
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 22 Sep 2025 17:36:03 -0700 (PDT)
+From: avensismodels.co.uk.crm.bookings@gmail.com
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Subject: Gmail Auth Test - SSL (465)
+Message-ID: <181b3c5f-d48b-292b-f1d0-efbedbb1d4b0@gmail.com>
+Content-Transfer-Encoding: 7bit
+Date: Tue, 23 Sep 2025 00:36:03 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+This is a test email sent via SSL (465) configuration.
+
+Timestamp: 2025-09-23T00:36:03.304Z

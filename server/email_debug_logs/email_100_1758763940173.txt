@@ -1,0 +1,18 @@
+Return-Path: <avensismodels.co.uk.crm.bookings@gmail.com>
+Received: from [127.0.0.1] (92.40.173.118.threembb.co.uk. [92.40.173.118])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-464f0aac439sm250958445e9.5.2025.09.22.17.45.27
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 22 Sep 2025 17:45:27 -0700 (PDT)
+X-Email-ID: 8ubrxb
+X-Application: CRM System
+From: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+To: avensismodels.co.uk.crm.bookings@gmail.com
+Subject: Startup Test
+Message-ID: <79b0ce8f-b3dd-1a22-47a6-d63b035010f9@gmail.com>
+Content-Transfer-Encoding: 7bit
+Date: Tue, 23 Sep 2025 00:45:27 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Testing after startup timeout fix

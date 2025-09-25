@@ -1,0 +1,185 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp1883216ecs;
+        Wed, 24 Sep 2025 18:34:31 -0700 (PDT)
+X-Received: by 2002:a5d:64e4:0:b0:405:3028:1bf0 with SMTP id ffacd0b85a97d-40e44777213mr1670562f8f.10.1758764071437;
+        Wed, 24 Sep 2025 18:34:31 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758764071; cv=none;
+        d=google.com; s=arc-20240605;
+        b=PgUOnzPuDF0W/D1TFT0Aqv5rbipkpMI77zGxHYCvdMYclBAjxZmLMgKqdgbys3FwEH
+         NV9ViAR11rVdR7bEluW+t3aKmKVSiBXGLkcS0UOkfwUA42imjmDFPv2bnI5eyPMC7iHO
+         F4vZFqU5fkW1aR01d4sWquI2RlQs3zJJuMldIhrBzwIJUfftehodbb3YEK28j8uKWPOT
+         bdbMKYWj4mmQbdF4doUu/8PiS8kd2yWzTtCVIvaMPAxNm+BWJfaA4ur3dWka6iiR8jhk
+         6kIGtbJ7nQ4ExyiXVRNFWy3yV/gts3DQJdqDLZYMQU0k1JDmX0yNHFR50EzBoFYV4sHh
+         jVfQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=+cZbDzwoYpMiK3W2ea0keIVBT4AWBUbiIGe/bomvg9A=;
+        fh=y7h+yB7sjHZMVA/hkkfQy0c6b2dNmo20704lVdiqOb8=;
+        b=LT4yyfuZRh2nP4uVQpRRUW2ajfqoB2Sl1onUKo/vds3mIm/JssqtGaNJjkNLR5YsfN
+         75hg8oF3OJ3cSJ/pJospn9XX/ZbVAfF+jAvaOhjPTWriLefoEVBa5WvbNUuRXjwskfkK
+         5//WmLWlFpLzdsbJg3OxI86pfRdgyzFPQ3OPgF4wY8apR3nEMZ11gEJp+7MfYzzYwxpZ
+         5RC/DduUUgBeH2M4ril8rzvcD0Y2jVxyrQev79XVYLBGkpHJajk3DzoJl19rWtl08oTX
+         BZGhlMLjqj1m/F4os9LfxnxoSof8GGxwbslmmzf6lb890hHGNwGFXeDVT1A7RbXGe1pz
+         T2jA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@googlemail.com header.s=20230601 header.b=hMt5Oyat;
+       spf=pass (google.com: domain of tmx565@googlemail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=tmx565@googlemail.com;
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=googlemail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <tmx565@googlemail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id ffacd0b85a97d-40fc749b88bsor80609f8f.15.2025.09.24.18.34.31
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (Google Transport Security);
+        Wed, 24 Sep 2025 18:34:31 -0700 (PDT)
+Received-SPF: pass (google.com: domain of tmx565@googlemail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@googlemail.com header.s=20230601 header.b=hMt5Oyat;
+       spf=pass (google.com: domain of tmx565@googlemail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=tmx565@googlemail.com;
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=googlemail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=googlemail.com; s=20230601; t=1758764071; x=1759368871; dara=google.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=+cZbDzwoYpMiK3W2ea0keIVBT4AWBUbiIGe/bomvg9A=;
+        b=hMt5OyatGEsyHWLKzye+86BsLOlb7eQ7ptHgAKYtMVapN19GCzGwfx+oKnynI8O/lq
+         aAJEvK4y5yfGHEH+svB97IMscc5TwZDEDLOCk1kY6BD1J4un4cdcPyHC2PGpc/xNojzh
+         UxHdSIMfBc1MAw6/z8ork158g9JDK2nV7xuMIiloKpxap+yxZ3+9vT0AtZa2CXuvmNXa
+         2fcekbt88bfRSkH8FkjVhGgXmdQq3MEfpmE/VrrUBaprCmKWQAFBrrA/bmTBQ4U/XJ2D
+         Z3/sXzSlibvwJ6ZRxZn6GNUbgN4ksBz7DSL0OA0ZSUnevT/PycOoEoPyHlD/aibi0gOL
+         IF0A==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758764071; x=1759368871;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=+cZbDzwoYpMiK3W2ea0keIVBT4AWBUbiIGe/bomvg9A=;
+        b=iL7FVF/eiWKZUHlqPK1R7lmlIXcIGOT/f2CTPlGK1/Y4vlbSQUTgRH85Ly49R473X8
+         QRmG1hoQ//vQ/04p8Uk5nYbrK3IzZIpySnBXb1Ef3CpJu3tvTM/EGIGN/f9U6DcPemKr
+         2l3aTK+Ls3O6uFx3R7Z5m60xv3ce0r/5QqsyghzhASvPy+A26kwx3nzx3fBQ3Zz9ppgz
+         srcoyCsg6Lar6pQXx4klBEWnMHd+3MRGfLeru3iJTLMR3zgzK5Y4Drl+Je5eQtpuarZX
+         icuSx1AaBfDykNmxqLQtehRSK8QZulKQTeYQMPxgaK/+ZSsX7tHGeX/NWhPjdEVEV8Bu
+         7otA==
+X-Gm-Message-State: AOJu0YxyZhn6EHlCYjsJlO/6Dym5lbWWEMaDYUPq55PJqC2V3OLR5V9R
+	M87UDx0e6nLsv0SMVi70SSKuCYP2+tbjGZKbrdDAPGxMQQPoS7wrzKDnhaGEAko7GldDLBFDfcM
+	QWmhrIhLvxgas2AQnPSZCzWVXjnnKUvlKnLWh
+X-Gm-Gg: ASbGncsMLKkSmR4T5hIa17O3nwk/GlAYtouXvDTkMYJ7/jCLHGmLt5Fwm+nv1Ubkqss
+	d+wdZSN7DFw2ALEmtrhKoqKSsQCsOsHiwSQLXgqlVDgixHPRc2I4Iaz3/epsMnx7MSRT/Z8zZI2
+	g3ZF7VuLOdrJak1JDzCrss7aH5i0eUgUSU5j7DearBK+vsR8iWqNXfQWW/0P5Zh0GPSAscei7HM
+	z0rPtVabWBIE9oN4g==
+X-Google-Smtp-Source: AGHT+IHPDfZ5zsd7gYyMi6kcoflfT3f0PfUXDy6l/minBylaOZUvF4vpRGb0KeEYF1YrgUjrNJONO9xZrtkssbikQt8=
+X-Received: by 2002:a05:6000:2388:b0:3c7:df1d:3d9 with SMTP id
+ ffacd0b85a97d-40e4a05bf20mr1667379f8f.39.1758764070904; Wed, 24 Sep 2025
+ 18:34:30 -0700 (PDT)
+MIME-Version: 1.0
+References: <7ea95e91-3cce-028c-2d3a-30168489642a@gmail.com> <CAKsc7gZgeX+a2G0RJx4OAyX3k9-7ATxexcnXEnj9USE9JBgP6w@mail.gmail.com>
+In-Reply-To: <CAKsc7gZgeX+a2G0RJx4OAyX3k9-7ATxexcnXEnj9USE9JBgP6w@mail.gmail.com>
+From: sean miller <tmx565@googlemail.com>
+Date: Thu, 25 Sep 2025 02:34:18 +0100
+X-Gm-Features: AS18NWCECeCo78ZnG2Mq3bDhtiLkNcoEL78DQUR5pqMxpz4BZQSrERzdRIvM0ac
+Message-ID: <CAKsc7gYyggUOLUs+K5w5T3y8yS7_DwhsxfuW0JuXAyWAuTc=qQ@mail.gmail.com>
+Subject: Re: Booking Confirmation
+To: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+Content-Type: multipart/alternative; boundary="000000000000b0a734063f962bcd"
+
+--000000000000b0a734063f962bcd
+Content-Type: text/plain; charset="UTF-8"
+
+Lets see it this works
+
+On Thu, 25 Sept 2025, 02:22 sean miller, <tmx565@googlemail.com> wrote:
+
+> Thank you
+>
+> On Thu, 25 Sept 2025, 01:42 Avensismodels, <
+> avensismodels.co.uk.crm.bookings@gmail.com> wrote:
+>
+>> Client: john walker
+>> Photoshoot Date: 27/09/2025
+>> Photoshoot Time: 13:00:00
+>> Studio Address: 60 Higher Ardwick, Manchester, M12 6DA
+>>
+>> Dear john walker
+>>
+>> Avensis Models UK has confirmed your consultation assessment. This will
+>> be an exciting opportunity to see if you have model potential.
+>>
+>> Summary of your day with us,
+>> When you arrive at the studio, you will be greeted by our in-house
+>> industry experts, who will guide you through your consultation. After
+>> which, our team of photographers will carry out your test shoot assessment.
+>> And finally, you will be given your assessment feedback!
+>>
+>> What you will need to bring,
+>> We require you to bring 3 outfits, ranging from smart-casual.
+>> We also ask that you come photoshoot ready, with hair and make-up already
+>> done. We also require you to bring two forms of ID. For example, a driver's
+>> licence/provisional, passport, or bank card. This is to verify you are who
+>> you say you are ( this also applies to parents of any children who have an
+>> appointment booked with us)
+>>
+>> If you have any more questions, please don't hesitate to contact us. If,
+>> for any reason, you need to reschedule/cancel your appointment, you will
+>> need to give us at least 72 hours' notice. However, this is not advised as
+>> you will be added to our unreliable list.
+>>
+>> Applicants under the age of 18  must be accompanied by a parent
+>>
+>> https://www.avensismodels.co.uk/
+>>
+>
+
+--000000000000b0a734063f962bcd
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto">Lets see it this works=C2=A0</div><br><div class=3D"gmail=
+_quote gmail_quote_container"><div dir=3D"ltr" class=3D"gmail_attr">On Thu,=
+ 25 Sept 2025, 02:22 sean miller, &lt;<a href=3D"mailto:tmx565@googlemail.c=
+om">tmx565@googlemail.com</a>&gt; wrote:<br></div><blockquote class=3D"gmai=
+l_quote" style=3D"margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left=
+:1ex"><div dir=3D"auto">Thank you=C2=A0</div><br><div class=3D"gmail_quote"=
+><div dir=3D"ltr" class=3D"gmail_attr">On Thu, 25 Sept 2025, 01:42 Avensism=
+odels, &lt;<a href=3D"mailto:avensismodels.co.uk.crm.bookings@gmail.com" ta=
+rget=3D"_blank" rel=3D"noreferrer">avensismodels.co.uk.crm.bookings@gmail.c=
+om</a>&gt; wrote:<br></div><blockquote class=3D"gmail_quote" style=3D"margi=
+n:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">Client: john walk=
+er<br>
+Photoshoot Date: 27/09/2025<br>
+Photoshoot Time: 13:00:00<br>
+Studio Address: 60 Higher Ardwick, Manchester, M12 6DA<br>
+<br>
+Dear john walker<br>
+<br>
+Avensis Models UK has confirmed your consultation assessment. This will be =
+an exciting opportunity to see if you have model potential.<br>
+<br>
+Summary of your day with us,<br>
+When you arrive at the studio, you will be greeted by our in-house industry=
+ experts, who will guide you through your consultation. After which, our te=
+am of photographers will carry out your test shoot assessment. And finally,=
+ you will be given your assessment feedback!<br>
+<br>
+What you will need to bring,<br>
+We require you to bring 3 outfits, ranging from smart-casual.<br>
+We also ask that you come photoshoot ready, with hair and make-up already d=
+one. We also require you to bring two forms of ID. For example, a driver&#3=
+9;s licence/provisional, passport, or bank card. This is to verify you are =
+who you say you are ( this also applies to parents of any children who have=
+ an appointment booked with us)<br>
+<br>
+If you have any more questions, please don&#39;t hesitate to contact us. If=
+, for any reason, you need to reschedule/cancel your appointment, you will =
+need to give us at least 72 hours&#39; notice. However, this is not advised=
+ as you will be added to our unreliable list.<br>
+<br>
+Applicants under the age of 18=C2=A0 must be accompanied by a parent<br>
+<br>
+<a href=3D"https://www.avensismodels.co.uk/" rel=3D"noreferrer noreferrer n=
+oreferrer" target=3D"_blank">https://www.avensismodels.co.uk/</a><br>
+</blockquote></div>
+</blockquote></div>
+
+--000000000000b0a734063f962bcd--

@@ -61,21 +61,33 @@ async function sendEmail(to, subject, text, attachments = []) {
     const fs = require('fs').promises;
     const inputAttachments = Array.isArray(attachments) ? attachments : [];
     const validAttachments = [];
-    
+
+    console.log(`📧 [${emailId}] Processing ${inputAttachments.length} attachments...`);
+
     if (inputAttachments.length > 0) {
-      for (const att of inputAttachments) {
-        if (!att.path || !att.filename) continue;
-        
+      for (const [idx, att] of inputAttachments.entries()) {
+        console.log(`📧 [${emailId}] Attachment ${idx + 1}: ${att.filename} (${att.path ? 'has path' : 'no path'})`);
+
+        if (!att.path || !att.filename) {
+          console.log(`📧 [${emailId}] ❌ Skipping attachment ${idx + 1}: missing path or filename`);
+          continue;
+        }
+
         try {
           const stats = await fs.stat(att.path);
           if (stats.size > 0 && stats.size <= 25 * 1024 * 1024) { // Valid file size
             validAttachments.push(att);
+            console.log(`📧 [${emailId}] ✅ Valid attachment ${idx + 1}: ${att.filename} (${stats.size} bytes)`);
+          } else {
+            console.log(`📧 [${emailId}] ❌ Invalid file size for ${att.filename}: ${stats.size} bytes`);
           }
         } catch (validationError) {
-          // Skip files with validation errors silently
+          console.log(`📧 [${emailId}] ❌ File validation error for ${att.filename}: ${validationError.message}`);
         }
       }
     }
+
+    console.log(`📧 [${emailId}] Valid attachments: ${validAttachments.length}/${inputAttachments.length}`);
     
     // Only log attachment issues if there were problems
     if (inputAttachments.length > 0 && validAttachments.length === 0) {

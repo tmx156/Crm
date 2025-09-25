@@ -191,11 +191,36 @@ async function findLeadByPhone(phone) {
   const variations = generatePhoneVariations(phone);
   console.log(`📱 SMS Phone Matching: Will try ${variations.length} variations`);
 
-  // Try each variation
+  // PHASE 1: Try EXACT matches first (highest priority)
   for (const variation of variations) {
     if (!variation || variation.length < 7) continue;
 
-    console.log(`🔍 Trying phone variation: ${variation}`);
+    console.log(`🎯 Trying EXACT phone match: ${variation}`);
+
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, name, phone, email, status, booker_id, created_at, updated_at')
+        .eq('phone', variation) // EXACT MATCH ONLY
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        console.log(`✅ SMS Phone EXACT Match SUCCESS: Found "${data[0].name}" (${data[0].phone}) - ID: ${data[0].id}`);
+        return data[0];
+      }
+    } catch (error) {
+      console.log(`⚠️ SMS Phone exact match error for "${variation}":`, error.message);
+    }
+  }
+
+  // PHASE 2: Try substring matches ONLY if no exact match (lower priority)
+  console.log(`🔍 No exact matches found, trying substring matches...`);
+
+  for (const variation of variations) {
+    if (!variation || variation.length < 10) continue; // Require longer numbers for substring matching
+
+    console.log(`🔍 Trying substring phone match: ${variation}`);
 
     try {
       const { data, error } = await supabase
@@ -203,24 +228,58 @@ async function findLeadByPhone(phone) {
         .select('id, name, phone, email, status, booker_id, created_at, updated_at')
         .ilike('phone', `%${variation}%`)
         .order('created_at', { ascending: false })
-        .limit(5); // Get multiple to see potential matches
+        .limit(5);
 
       if (!error && data && data.length > 0) {
-        console.log(`✅ SMS Phone Match SUCCESS: Found ${data.length} matches for variation "${variation}"`);
-        data.forEach((lead, i) => {
-          console.log(`   ${i + 1}. ${lead.name} (${lead.phone}) - ID: ${lead.id}`);
+        // VALIDATE substring matches to prevent false positives
+        const validMatches = data.filter(lead => {
+          const leadVariations = generatePhoneVariations(lead.phone);
+          const incomingVariations = generatePhoneVariations(phone);
+
+          // Check if any variation from the lead matches any variation from incoming
+          return leadVariations.some(lv => incomingVariations.some(iv => lv === iv));
         });
 
-        // Return the most recent match
-        return data[0];
+        if (validMatches.length > 0) {
+          console.log(`✅ SMS Phone SUBSTRING Match SUCCESS: Found ${validMatches.length} validated matches`);
+          validMatches.forEach((lead, i) => {
+            console.log(`   ${i + 1}. ${lead.name} (${lead.phone}) - ID: ${lead.id}`);
+          });
+          return validMatches[0];
+        } else {
+          console.log(`⚠️ SMS Phone: Found ${data.length} substring matches but none validated - potential false positives avoided`);
+        }
       }
     } catch (error) {
-      console.log(`⚠️ SMS Phone Match error for "${variation}":`, error.message);
+      console.log(`⚠️ SMS Phone substring match error for "${variation}":`, error.message);
     }
   }
 
-  // Reduced logging for Railway rate limits
-  console.log(`❌ SMS Phone Match FAILURE: No lead found for phone "${phone}" (tried ${variations.length} variations)`);
+  // PHASE 3: Create orphaned message entry for admin review
+  console.log(`❌ SMS Phone Match FAILURE: No lead found for phone "${phone}"`);
+  console.log(`📝 Creating orphaned message entry for admin review...`);
+
+  try {
+    // Insert orphaned message with null lead_id for admin to review later
+    const messageId = require('crypto').randomUUID();
+    await supabase.from('messages').insert({
+      id: messageId,
+      lead_id: null, // NULL = orphaned message
+      type: 'sms',
+      status: 'received',
+      sms_body: `ORPHANED: ${phone}`, // Mark as orphaned for admin review
+      recipient_phone: phone,
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      read_status: false,
+      error_message: `No matching lead found for phone: ${phone}`
+    });
+
+    console.log(`📝 Orphaned message created with ID: ${messageId} for admin review`);
+  } catch (orphanError) {
+    console.error(`❌ Failed to create orphaned message entry:`, orphanError);
+  }
+
   return null;
 }
 

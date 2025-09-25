@@ -305,64 +305,75 @@ class MessagingService {
               const supabaseStorage = require('./supabaseStorage');
               message.attachments = [];
               
-              arr.forEach(async (a, idx) => {
+              // Process attachments synchronously to avoid race conditions
+              for (const [idx, a] of arr.entries()) {
                 console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Processing attachment:`, a);
-                
+
                 if (a.url) {
                   console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Original URL: ${a.url}`);
-                  
+
                   // Check if this is a Supabase Storage URL
                   if (a.url.includes('supabase.co/storage/v1/object/public/template-attachments/')) {
                     console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Detected Supabase Storage URL`);
-                    
+
                     // Extract filename from URL
                     const urlParts = a.url.split('/');
                     const filename = urlParts[urlParts.length - 1];
-                    
+
                     try {
+                      console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Downloading from Supabase Storage: ${filename}`);
+
                       // Download file from Supabase Storage
                       const downloadResult = await supabaseStorage.downloadFile(filename);
-                      
-                      if (downloadResult.success) {
+
+                      if (downloadResult.success && downloadResult.buffer) {
+                        console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Download successful, buffer size: ${downloadResult.buffer.length} bytes`);
+
                         // Create temporary file
                         const tempDir = path.join(__dirname, '..', 'uploads', 'temp_email_attachments');
                         if (!fs.existsSync(tempDir)) {
                           fs.mkdirSync(tempDir, { recursive: true });
+                          console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Created temp directory: ${tempDir}`);
                         }
-                        
+
                         const tempFilePath = path.join(tempDir, filename);
                         fs.writeFileSync(tempFilePath, downloadResult.buffer);
-                        
+
+                        // Verify file was written
+                        const stats = fs.statSync(tempFilePath);
+                        console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] File written successfully: ${stats.size} bytes`);
+
                         const attachment = {
                           filename: a.originalName || a.filename || filename,
                           path: tempFilePath
                         };
                         message.attachments.push(attachment);
-                        console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ✅ Downloaded attachment from Supabase Storage: ${attachment.filename}`);
+                        console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ✅ Downloaded and attached: ${attachment.filename}`);
                       } else {
-                        console.error(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ❌ Failed to download from Supabase Storage: ${downloadResult.error}`);
+                        console.error(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ❌ Download failed: ${downloadResult.error || 'No buffer returned'}`);
                       }
                     } catch (downloadError) {
                       console.error(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ❌ Error downloading from Supabase Storage:`, downloadError.message);
+                      console.error(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Error stack:`, downloadError.stack);
                     }
                   } else {
                     // Handle legacy local file paths
                     console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Detected legacy local file path`);
-                    
+
                     const cleanUrl = a.url.replace(/^\//, ''); // Remove leading slash
                     let filePath = path.join(__dirname, '..', cleanUrl);
-                    
+
                     console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Clean URL: ${cleanUrl}`);
                     console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Constructed path: ${filePath}`);
-                    
+
                     // If file doesn't exist, try alternative path constructions
                     if (!fs.existsSync(filePath)) {
                       console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] File not found, trying alternative paths...`);
-                      
+
                       // Try absolute path from project root
                       const alternativePath1 = path.resolve(process.cwd(), cleanUrl);
                       console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Trying path 1: ${alternativePath1}`);
-                      
+
                       if (fs.existsSync(alternativePath1)) {
                         filePath = alternativePath1;
                         console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ✅ Found at alternative path 1`);
@@ -370,7 +381,7 @@ class MessagingService {
                         // Try with server directory prefix
                         const alternativePath2 = path.resolve(__dirname, '..', '..', cleanUrl);
                         console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] Trying path 2: ${alternativePath2}`);
-                        
+
                         if (fs.existsSync(alternativePath2)) {
                           filePath = alternativePath2;
                           console.log(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ✅ Found at alternative path 2`);
@@ -379,7 +390,7 @@ class MessagingService {
                         }
                       }
                     }
-                    
+
                     // Final check if file exists
                     if (fs.existsSync(filePath)) {
                       const attachment = {
@@ -395,7 +406,7 @@ class MessagingService {
                 } else {
                   console.warn(`📎 [MSG-${messageResult?.id || 'NEW'}][${idx}] ❌ No URL found in attachment data`);
                 }
-              });
+              }
               
               console.log(`📎 [MSG-${messageResult?.id || 'NEW'}] Final attachments count: ${message.attachments.length}/${arr.length}`);
             } else {
@@ -558,6 +569,17 @@ class MessagingService {
     console.log(`📧 To:         ${message.recipient_email}`);
     console.log(`📧 Subject:    ${message.subject}`);
     console.log(`📧 Body Length: ${message.email_body ? message.email_body.length : 0} characters`);
+
+    // Log attachments information
+    if (message.attachments && message.attachments.length > 0) {
+      console.log(`📎 Attachments: ${message.attachments.length} files`);
+      message.attachments.forEach((att, idx) => {
+        console.log(`   ${idx + 1}. ${att.filename} (${att.path ? '✅ Path exists' : '❌ No path'})`);
+      });
+    } else {
+      console.log(`📎 Attachments: None`);
+    }
+
     console.log('-' .repeat(80));
   
     try {

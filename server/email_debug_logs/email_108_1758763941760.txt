@@ -1,0 +1,185 @@
+Delivered-To: avensismodels.co.uk.crm.bookings@gmail.com
+Received: by 2002:a54:394e:0:b0:2ac:acbc:701 with SMTP id t14csp1587356ecs;
+        Wed, 24 Sep 2025 08:06:22 -0700 (PDT)
+X-Received: by 2002:a05:6e02:b48:b0:425:70b9:243c with SMTP id e9e14a558f8ab-42581e2dee9mr107470975ab.14.1758726381302;
+        Wed, 24 Sep 2025 08:06:21 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758726381; cv=none;
+        d=google.com; s=arc-20240605;
+        b=PY+WabygFcirzb4rCZFX8A7LxxqnDy8Y7qYljmgTLzeERfEZEWmqhwA8vdkhcq18UJ
+         1U8fZxDyb3G6OZAEsoYoh/b0uNLl/HRbDSl5cc9GBySKCpWaxn4K4G+j1THZOovytZOO
+         6KyrlH0o2CPyDqRhZ19AxUCZhFDEcPHrLo01VGEVq4PVmrCZtwzGYhYZWftfeMmWONmz
+         cAPfP98mjop7xPlcvuGv2uOGvDAI20ZivVgZA8Jq/wHI+BQGxhzvtodJeqkJeJjyUu0O
+         3R+F5BgpQXUSGhdhDikBmlYqqv2vLxMyaCuDAc6QfKWr/uXbX6hcaNNeke/Qy1gMmrTt
+         Sqcw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=ssgqafN39KYH5Yd4CxcmHvqMnjeGdv32G4D6dp92RJo=;
+        fh=y7h+yB7sjHZMVA/hkkfQy0c6b2dNmo20704lVdiqOb8=;
+        b=i62OYDBaVBXLNFmUGDJRb2aLJvn2WaZsYSd3ao47RyUrn3IXlS/YFDvXmNE4nTV6rH
+         l241dlbOVOxV3XNVIiO3HW6fr4Dq2U6Gh0inYBX6MzX+HGJhzsCYr5JJ7RGasyg8JM+g
+         WwGORhhn+HScUYMj7Tx66pd3N2e3VN08o2slv9X2XwMCqJyIwhxUyI7rTpy3cg5WUXQu
+         uBM4kRmcvPl9pz+IAIrxfvO1fPi+ClYyKpzauJ+92Sq1A+MtRcPn+wOw14bwoAUmpXhm
+         ZVBuZQjPufr45KXheUTAk4LNFAoyUVUHY+YWKDUot48eYGPM1BxqWR5Jg1D3H4yfAcyO
+         JIlA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=SRGYXa94;
+       spf=pass (google.com: domain of ubzy2021@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=ubzy2021@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <ubzy2021@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id e9e14a558f8ab-4258b83fc80sor10494235ab.3.2025.09.24.08.06.21
+        for <avensismodels.co.uk.crm.bookings@gmail.com>
+        (Google Transport Security);
+        Wed, 24 Sep 2025 08:06:21 -0700 (PDT)
+Received-SPF: pass (google.com: domain of ubzy2021@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=SRGYXa94;
+       spf=pass (google.com: domain of ubzy2021@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=ubzy2021@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1758726380; x=1759331180; dara=google.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=ssgqafN39KYH5Yd4CxcmHvqMnjeGdv32G4D6dp92RJo=;
+        b=SRGYXa94kswJIwB82AIUjYmND0KIhdys+shPc5CFifD9lwHnfxOSHm0jYZPc4rL30q
+         b4GVrUKmuIFBzkMCupXpqc7sUo1Zpsb+XZEa8t7zr4+Gis5qMSR6B85lLTgsx/nMOEMm
+         bhGodnSRYBc2OQs8GW9HXNSVKut4FbOyH08bqPDKlG5IA8ddIxlkrwzJyPdEtxhVonRv
+         gi/dTuqVhyOqz17WGGQgAjv+AgwIBSAYx76GKXV0L33siLvlcZKBNVRtSK3djCLou9yg
+         PVvtfiqvAPgvCdSfKlRc+4VgrHkd0Bfb78MhLYen7qVGyYGhNqDQji9NAgdHaRvYlDW1
+         OHPg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758726380; x=1759331180;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=ssgqafN39KYH5Yd4CxcmHvqMnjeGdv32G4D6dp92RJo=;
+        b=g+/WLeuk4NBaRMAZxmYLctuiXEa/wwz9zW7NQjgZ9VR0THexy44lJwkWmStPr7WevW
+         8/i8J2MdAGo3bZvVzgzS582C9BV620doCnK3gHaS3DEeHrCqbhzj2FJYHpnTNmFEzNCV
+         69BHfuL7keJoUprUl49sfWj27RBXMCuUnZSJuX4vFmmZl/VsSGlBMQOdLhNKhj5/6sPT
+         f/aWTkqeegNXMEUUlbVsjmiqS2BxP2Nne+O32Yll7ow6mlS57AnRImmtK3fjIoK/mmgP
+         gAV6xgi1Nz8EK2UL0HDAPCBYlcKRXFsAP80ae1ffR4P1yTbh4UaXU/tFY/jRr3fKUUcD
+         wRdQ==
+X-Gm-Message-State: AOJu0Yx13sNRbvvhzLR5EK6vTCzdhMjGeDhEBxm9lo5eGOz83FA2tgfl
+	eY32hCQ/nBJzpIQG+xwDYu7LWoaRuBsfhwkXU7p3FYr0UwcwL8AIYZyV1aGgxbhruY971GLcFbE
+	8C6+NKsc0bL0kBBSwrZYS3elciaCYUvXkhmop+rg=
+X-Gm-Gg: ASbGncsaUwlb/S1ckzJyZlAjVZh6KfA1uACaDPoYldT0i1cTFnnbMIrkz99wgQltOZ5
+	505aI54XWdNm4D99e0stKWPUslkQ4dbg6gTkHYiv5Kl1QwwJRBSzUB8umPhXdbL+JYvWftnPEI7
+	qL+HORtdpepg5aHP7RkLVObUAuBV8QQaNzHZ2xJl42cftK4IqAKsx/1gDGlo3/FyUXl6tkqbzXa
+	MhD
+X-Google-Smtp-Source: AGHT+IEbE1wjDFHQY6Vc4dfbfrl1CcDrmOYpFaCjq2eFJEfQxsvCUDTqa1l/j/Z3076MXaxbuOsO2ch2H4a18vdG8V0=
+X-Received: by 2002:a05:6e02:1489:b0:425:51dc:5b7b with SMTP id
+ e9e14a558f8ab-42581e2e258mr111395505ab.13.1758726380184; Wed, 24 Sep 2025
+ 08:06:20 -0700 (PDT)
+MIME-Version: 1.0
+References: <2ca64c83-9e2b-49b7-bce7-a6f9eca20004@gmail.com>
+In-Reply-To: <2ca64c83-9e2b-49b7-bce7-a6f9eca20004@gmail.com>
+From: Muhammad Amar <ubzy2021@gmail.com>
+Date: Wed, 24 Sep 2025 16:06:07 +0100
+X-Gm-Features: AS18NWAQFxe2X4WF8fC8Mx-Wq0nnjoVNnoF4hjhiqHoElERTZM1bN_976fEIXm8
+Message-ID: <CAPDjXqcAn0-B_mEjxEEd=rBZU_dk0hGpt4vVuTgv8dU6-zHgvg@mail.gmail.com>
+Subject: Re: Booking Confirmation
+To: Avensismodels <avensismodels.co.uk.crm.bookings@gmail.com>
+Content-Type: multipart/alternative; boundary="00000000000025ecda063f8d65cf"
+
+--00000000000025ecda063f8d65cf
+Content-Type: text/plain; charset="UTF-8"
+
+Dear Sir,
+
+Is it possible to change this date to next Sunday 5th afternoon at 2:45 as
+my parents are available to bring me then?
+
+Best regards
+Muhammad
+
+
+On Wed, 24 Sept 2025, 15:42 Avensismodels, <
+avensismodels.co.uk.crm.bookings@gmail.com> wrote:
+
+> Client: Muhammad
+> Photoshoot Date: 28/09/2025
+> Photoshoot Time: 17:30:00
+> Studio Address: 60 Higher Ardwick, Manchester, M12 6DA
+> <https://www.google.com/maps/search/60+Higher+Ardwick,+Manchester,+M12+6DA?entry=gmail&source=g>
+>
+> Dear Muhammad
+>
+> Avensis Models UK has confirmed your consultation assessment. This will be
+> an exciting opportunity to see if you have model potential.
+>
+> Summary of your day with us,
+> When you arrive at the studio, you will be greeted by our in-house
+> industry experts, who will guide you through your consultation. After
+> which, our team of photographers will carry out your test shoot assessment.
+> And finally, you will be given your assessment feedback!
+>
+> What you will need to bring,
+> We require you to bring 3 outfits, ranging from smart-casual.
+> We also ask that you come photoshoot ready, with hair and make-up already
+> done. We also require you to bring two forms of ID. For example, a driver's
+> licence/provisional, passport, or bank card. This is to verify you are who
+> you say you are ( this also applies to parents of any children who have an
+> appointment booked with us)
+>
+> If you have any more questions, please don't hesitate to contact us. If,
+> for any reason, you need to reschedule/cancel your appointment, you will
+> need to give us at least 72 hours' notice. However, this is not advised as
+> you will be added to our unreliable list.
+>
+> Applicants under the age of 18  must be accompanied by a parent
+>
+> https://www.avensismodels.co.uk/
+
+--00000000000025ecda063f8d65cf
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto">Dear Sir,<div dir=3D"auto"><br></div><div dir=3D"auto">Is=
+ it possible to change this date to next Sunday 5th afternoon at 2:45 as my=
+ parents are available to bring me then?=C2=A0</div><div dir=3D"auto"><br><=
+/div><div dir=3D"auto">Best regards</div><div dir=3D"auto">Muhammad=C2=A0</=
+div><div dir=3D"auto"><br></div></div><br><div class=3D"gmail_quote gmail_q=
+uote_container"><div dir=3D"ltr" class=3D"gmail_attr">On Wed, 24 Sept 2025,=
+ 15:42 Avensismodels, &lt;<a href=3D"mailto:avensismodels.co.uk.crm.booking=
+s@gmail.com">avensismodels.co.uk.crm.bookings@gmail.com</a>&gt; wrote:<br><=
+/div><blockquote class=3D"gmail_quote" style=3D"margin:0 0 0 .8ex;border-le=
+ft:1px #ccc solid;padding-left:1ex">Client: Muhammad<br>
+Photoshoot Date: 28/09/2025<br>
+Photoshoot Time: 17:30:00<br>
+Studio Address: <a href=3D"https://www.google.com/maps/search/60+Higher+Ard=
+wick,+Manchester,+M12+6DA?entry=3Dgmail&amp;source=3Dg">60 Higher Ardwick, =
+Manchester, M12 6DA</a><br>
+<br>
+Dear Muhammad<br>
+<br>
+Avensis Models UK has confirmed your consultation assessment. This will be =
+an exciting opportunity to see if you have model potential.<br>
+<br>
+Summary of your day with us,<br>
+When you arrive at the studio, you will be greeted by our in-house industry=
+ experts, who will guide you through your consultation. After which, our te=
+am of photographers will carry out your test shoot assessment. And finally,=
+ you will be given your assessment feedback!<br>
+<br>
+What you will need to bring,<br>
+We require you to bring 3 outfits, ranging from smart-casual.<br>
+We also ask that you come photoshoot ready, with hair and make-up already d=
+one. We also require you to bring two forms of ID. For example, a driver&#3=
+9;s licence/provisional, passport, or bank card. This is to verify you are =
+who you say you are ( this also applies to parents of any children who have=
+ an appointment booked with us)<br>
+<br>
+If you have any more questions, please don&#39;t hesitate to contact us. If=
+, for any reason, you need to reschedule/cancel your appointment, you will =
+need to give us at least 72 hours&#39; notice. However, this is not advised=
+ as you will be added to our unreliable list.<br>
+<br>
+Applicants under the age of 18=C2=A0 must be accompanied by a parent<br>
+<br>
+<a href=3D"https://www.avensismodels.co.uk/" rel=3D"noreferrer noreferrer" =
+target=3D"_blank">https://www.avensismodels.co.uk/</a></blockquote></div>
+
+--00000000000025ecda063f8d65cf--

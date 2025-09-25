@@ -631,6 +631,15 @@ testDatabaseConnection().then(() => {
       console.error('❌ Failed to start BulkSMS reply poller:', e?.message || e);
     }
 
+    // CRITICAL FIX: Start Email Poller for Gmail IMAP monitoring
+    try {
+      console.log('📧 Starting Email Poller...');
+      startEmailPoller(io);
+      console.log('✅ Email poller started successfully');
+    } catch (e) {
+      console.error('❌ Failed to start email poller:', e?.message || e);
+    }
+
     // ENABLED: Finance Reminder Service (now converted to Supabase)
     try {
       const financeReminderService = new FinanceReminderService();
