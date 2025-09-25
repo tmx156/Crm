@@ -1,10 +1,8 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 console.log('📧 Email Service: Initializing...');
 console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
-console.log('📧 RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✅ Set' : '❌ NOT SET');
 
 const nodemailer = require('nodemailer');
-const { sendEmail: sendEmailViaResend } = require('./resendEmailService');
 
 // Create SMTP transporter optimized for Railway Pro deployment
 const transporter = nodemailer.createTransport({
@@ -57,11 +55,6 @@ async function sendEmail(to, subject, text, attachments = []) {
     return { success: false, error: errorMsg };
   }
 
-  // Check if we should use Resend (Railway recommended for non-Pro plans)
-  if (process.env.RESEND_API_KEY && !process.env.EMAIL_USER) {
-    console.log(`📧 [${emailId}] Using Resend API (Railway recommended)`);
-    return await sendEmailViaResend(to, subject, text, attachments);
-  }
 
   try {
     // Validate and filter attachments (async to prevent blocking)

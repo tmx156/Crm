@@ -25,10 +25,6 @@
         {
           "host": "tnltvfzltdeilanxhlvy.supabase.co",
           "ports": [443]
-        },
-        {
-          "host": "api.resend.com",
-          "ports": [443]
         }
       ]
     }

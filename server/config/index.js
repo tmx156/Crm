@@ -36,10 +36,7 @@ const config = {
     user: process.env.EMAIL_USER || null,
     password: process.env.EMAIL_PASSWORD || null,
     gmailUser: process.env.GMAIL_USER || null,
-    gmailPass: process.env.GMAIL_PASS || null,
-    // Resend API Configuration (Railway-compatible)
-    resendApiKey: process.env.RESEND_API_KEY || null,
-    resendFromEmail: process.env.RESEND_FROM_EMAIL || 'noreply@avensismodels.co.uk'
+    gmailPass: process.env.GMAIL_PASS || null
   },
 
   // Client Configuration
