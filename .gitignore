@@ -104,9 +104,15 @@ test-*
 debug-*
 check-*
 
+# Email debug logs
+server/email_debug_logs/
+
 # Documentation
 *.md
-README.md
+!README.md
+!RAILWAY-*.md
+!railway-*.md
+!*-setup.md
 
 # Sample data
 *.csv
