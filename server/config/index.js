@@ -28,7 +28,7 @@ const config = {
     password: process.env.BULKSMS_PASSWORD || 'Booker100',
     fromNumber: process.env.BULKSMS_FROM_NUMBER || '+447786201100',
     pollEnabled: true, // Always enabled for SMS reply polling
-    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 5000
+    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000 // 60s (1 min) - optimized for egress (was 30s)
   },
 
   // Email Configuration

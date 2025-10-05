@@ -460,7 +460,7 @@ router.post('/webhook', async (req, res) => {
             recipient_phone: sender, // Store sender phone for debugging and future matching
             sent_at: tsIso,
             created_at: tsIso,
-            updated_at: tsIso,
+            updated_at: new Date().toISOString(),
             read_status: false, // New messages are always unread when received
             read_at: null // Will be set when message is read
           })

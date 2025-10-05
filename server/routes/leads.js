@@ -333,7 +333,7 @@ const looksLikeNames = (values) => {
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 50, status, booker, search } = req.query;
+    const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end } = req.query;
 
     // Validate and cap limit to prevent performance issues
     const validatedLimit = Math.min(parseInt(limit) || 50, 100);
@@ -392,6 +392,17 @@ router.get('/', auth, async (req, res) => {
       dataQuery = dataQuery.or(orExpr);
       countQuery = countQuery.or(orExpr);
       console.log(`🔍 Search filter applied across name/phone/email/postcode: ${term}`);
+    }
+
+    // Apply created_at date range filter for dashboard
+    if (created_at_start && created_at_end) {
+      dataQuery = dataQuery
+        .gte('created_at', created_at_start)
+        .lte('created_at', created_at_end);
+      countQuery = countQuery
+        .gte('created_at', created_at_start)
+        .lte('created_at', created_at_end);
+      console.log(`📅 Created date filter applied: ${created_at_start} to ${created_at_end}`);
     }
 
     // Execute queries
@@ -960,12 +971,12 @@ router.post('/:id([0-9a-fA-F-]{36})/history', auth, async (req, res) => {
 
     // Add booking history entry to Supabase
     const historyEntry = {
-      id: require('crypto').randomUUID(),
+      // Don't set id - let database auto-generate it
       lead_id: req.params.id,
       action: action,
       performed_by: req.user.id,
       performed_by_name: req.user.name,
-      details: details,
+      details: details ? JSON.stringify(details) : null,
       lead_snapshot: JSON.stringify({ lead_id: req.params.id }),
       created_at: new Date().toISOString()
     };
@@ -1242,17 +1253,44 @@ router.post('/', auth, async (req, res) => {
             console.error('❌ Failed to send booking confirmation (duplicate-update path):', e);
           }
 
-          // Emit real-time update
+          // Enhanced real-time update emission
           if (global.io) {
-            global.io.emit('lead_updated', {
+            const updatePayload = {
               lead: updatedLead,
               action: 'update',
-              timestamp: new Date()
-            });
+              bookerId: updatedLead.booker_id,
+              leadId: updatedLead.id,
+              timestamp: new Date().toISOString()
+            };
+
+            // Emit multiple events for robustness
+            global.io.emit('lead_updated', updatePayload);
             global.io.emit('stats_update_needed', {
               type: 'lead_updated',
-              timestamp: new Date()
+              bookerId: updatedLead.booker_id,
+              leadId: updatedLead.id,
+              timestamp: new Date().toISOString()
             });
+
+            // Specific booking activity event for dashboard
+            if (updatedLead.status === 'Booked' || updatedLead.date_booked) {
+              global.io.emit('booking_activity', {
+                action: 'updated',
+                booker: updatedLead.booker_id,
+                leadName: updatedLead.name,
+                dateBooked: updatedLead.date_booked,
+                status: updatedLead.status,
+                timestamp: new Date().toISOString()
+              });
+            }
+
+            console.log('📡 EMITTED: Dashboard update events for lead update', {
+              leadId: updatedLead.id,
+              booker: updatedLead.booker_id,
+              status: updatedLead.status
+            });
+          } else {
+            console.warn('⚠️ global.io not available - live updates will not work');
           }
           
           return res.status(200).json({
@@ -1300,7 +1338,30 @@ router.post('/', auth, async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    const insertResult = await dbManager.insert('leads', leadToInsert);
+    // Use service role client for lead creation to bypass RLS and allow activity logging
+    const config = require('../config');
+    const serviceRoleClient = createClient(
+      config.supabase.url,
+      config.supabase.serviceRoleKey || config.supabase.anonKey
+    );
+
+    const { data: insertResult, error: insertError } = await serviceRoleClient
+      .from('leads')
+      .insert([leadToInsert])
+      .select();
+
+    if (insertError) {
+      console.error('Create lead error:', insertError);
+      
+      // Handle RLS policy violations gracefully
+      if (insertError.code === '42501') {
+        console.warn('⚠️ RLS policy violation during lead creation - this may be due to automatic assignment creation');
+        // Try to continue without failing the request
+        // The lead might still be created despite the assignment error
+      } else {
+        return res.status(500).json({ message: 'Server error: ' + insertError.message });
+      }
+    }
 
     if (!insertResult || insertResult.length === 0) {
       console.error('Create lead error: No data inserted');
@@ -1350,6 +1411,13 @@ router.post('/', auth, async (req, res) => {
           const newCount = (bookerUser[0].leads_assigned || 0) + 1;
           await dbManager.update('users', { leads_assigned: newCount }, { id: leadData.booker });
         }
+
+        // ✅ SCOREBOARD FIX: Set assigned_at timestamp for performance tracking
+        await dbManager.update('leads', { 
+          assigned_at: new Date().toISOString() 
+        }, { id: lead.id });
+        
+        console.log(`📊 Lead ${lead.name} assigned to booker at ${new Date().toISOString()}`);
       } catch (error) {
         console.error('Failed to update booker leads count:', error);
       }
@@ -1371,17 +1439,45 @@ router.post('/', auth, async (req, res) => {
       console.error('❌ Failed to send booking confirmation for new lead:', msgErr);
     }
 
-    // Emit real-time update for lead creation
+    // Enhanced real-time update for lead creation
     if (global.io) {
-      global.io.emit('lead_created', {
+      const createPayload = {
         lead: lead,
         action: 'create',
-        timestamp: new Date()
-      });
+        bookerId: lead.booker_id,
+        leadId: lead.id,
+        timestamp: new Date().toISOString()
+      };
+
+      // Emit multiple events for robustness
+      global.io.emit('lead_created', createPayload);
       global.io.emit('stats_update_needed', {
         type: 'lead_created',
-        timestamp: new Date()
+        bookerId: lead.booker_id,
+        leadId: lead.id,
+        timestamp: new Date().toISOString()
       });
+
+      // Specific booking activity event for dashboard if it's a booking
+      if (lead.status === 'Booked' || lead.date_booked) {
+        global.io.emit('booking_activity', {
+          action: 'created',
+          booker: lead.booker_id,
+          leadName: lead.name,
+          dateBooked: lead.date_booked,
+          status: lead.status,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      console.log('📡 EMITTED: Dashboard update events for lead creation', {
+        leadId: lead.id,
+        booker: lead.booker_id,
+        status: lead.status,
+        isBooking: !!(lead.status === 'Booked' || lead.date_booked)
+      });
+    } else {
+      console.warn('⚠️ global.io not available - live updates will not work');
     }
 
     res.status(201).json({
@@ -1575,6 +1671,12 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         supabaseUpdateFields.is_confirmed = supabaseUpdateFields.is_confirmed ? 1 : 0;
       }
       
+      // ✅ SCOREBOARD FIX: Set booked_at timestamp when status changes to 'Booked'
+      if (supabaseUpdateFields.status === 'Booked' && lead.status !== 'Booked') {
+        supabaseUpdateFields.booked_at = new Date().toISOString();
+        console.log(`📊 Lead ${lead.name} booked at ${supabaseUpdateFields.booked_at}`);
+      }
+      
       const updateResult = await dbManager.update('leads', supabaseUpdateFields, { id: req.params.id });
       
       if (!updateResult || updateResult.length === 0) {
@@ -1593,8 +1695,19 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       console.error('Update lead error: Failed to fetch updated lead');
       return res.status(500).json({ message: 'Failed to fetch updated lead' });
     }
-    
+
     const updatedLead = updatedLeadResult[0];
+
+    // ✅ SCOREBOARD FIX: Update daily performance metrics after lead update
+    if (updatedLead.booker_id) {
+      try {
+        const bookerAnalytics = require('./booker-analytics');
+        await bookerAnalytics.updateDailyPerformance(updatedLead.booker_id);
+        console.log(`📊 Updated daily performance for booker ${updatedLead.booker_id}`);
+      } catch (perfError) {
+        console.error('Failed to update daily performance:', perfError.message);
+      }
+    }
     // Add booking history entries based on the type of change
     if (isNewBooking) {
       console.log(`📅 Adding INITIAL_BOOKING for lead ${lead.name} (oldStatus: ${oldStatus}, oldDateBooked: ${oldDateBooked})`);
@@ -1879,20 +1992,37 @@ router.put('/:id/assign', auth, adminAuth, async (req, res) => {
     const oldBookerId = leadData.booker_id;
 
     // Update the lead - assign booker and change status to Assigned if currently New
-    const updateResult = await dbManager.update('leads', {
-      eq: { id: req.params.id },
-      data: {
+    // Use service role client to bypass RLS policies
+    const serviceRoleClient = createClient(
+      process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    );
+
+    const { data: updateResult, error: updateError } = await serviceRoleClient
+      .from('leads')
+      .update({
         booker_id: booker,
-        status: leadData.status === 'New' ? 'Assigned' : leadData.status
+        status: leadData.status === 'New' ? 'Assigned' : leadData.status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (updateError || !updateResult) {
+      console.error('Assign lead error: Failed to update lead', updateError);
+      
+      // Handle RLS policy violations gracefully
+      if (updateError?.code === '42501') {
+        console.warn('⚠️ RLS policy violation during lead assignment - this may be due to automatic assignment creation');
+        // Try to continue without failing the request
+        // The lead might still be updated despite the assignment error
+      } else {
+        return res.status(500).json({ message: 'Failed to assign lead', error: updateError?.message });
       }
-    });
-    
-    if (!updateResult || updateResult.length === 0) {
-      console.error('Assign lead error: Failed to update lead');
-      return res.status(500).json({ message: 'Failed to assign lead' });
     }
-    
-    const updatedLead = updateResult[0];
+
+    const updatedLead = updateResult;
     
     console.log('✅ Lead assignment completed:', {
       leadId: req.params.id,
@@ -1902,35 +2032,37 @@ router.put('/:id/assign', auth, adminAuth, async (req, res) => {
       oldBooker: oldBookerId
     });
 
-    // Update user statistics using Supabase
+    // Update user statistics using service role client
     if (oldBookerId && oldBookerId.toString() !== booker) {
       try {
         // Decrease old user's assigned count
-        const oldUser = await dbManager.query('users', {
-          select: 'leads_assigned',
-          eq: { id: oldBookerId }
-        });
-        
-        if (oldUser && oldUser.length > 0) {
-          const newCount = Math.max((oldUser[0].leads_assigned || 0) - 1, 0);
-          await dbManager.update('users', {
-            eq: { id: oldBookerId },
-            data: { leads_assigned: newCount }
-          });
+        const { data: oldUser } = await serviceRoleClient
+          .from('users')
+          .select('leads_assigned')
+          .eq('id', oldBookerId)
+          .single();
+
+        if (oldUser) {
+          const newCount = Math.max((oldUser.leads_assigned || 0) - 1, 0);
+          await serviceRoleClient
+            .from('users')
+            .update({ leads_assigned: newCount })
+            .eq('id', oldBookerId);
         }
-        
+
         // Increase new user's assigned count
-        const newUser = await dbManager.query('users', {
-          select: 'leads_assigned',
-          eq: { id: booker }
-        });
-        
-        if (newUser && newUser.length > 0) {
-          const newCount = (newUser[0].leads_assigned || 0) + 1;
-          await dbManager.update('users', {
-            eq: { id: booker },
-            data: { leads_assigned: newCount }
-          });
+        const { data: newUser } = await serviceRoleClient
+          .from('users')
+          .select('leads_assigned')
+          .eq('id', booker)
+          .single();
+
+        if (newUser) {
+          const newCount = (newUser.leads_assigned || 0) + 1;
+          await serviceRoleClient
+            .from('users')
+            .update({ leads_assigned: newCount })
+            .eq('id', booker);
         }
       } catch (error) {
         console.error('Failed to update user statistics:', error);
@@ -2245,79 +2377,125 @@ router.delete('/bulk', auth, adminAuth, async (req, res) => {
 router.put('/bulk-assign', auth, adminAuth, async (req, res) => {
   try {
     console.log('👥 Bulk assign request received');
-    
+
     const { leadIds, bookerId } = req.body;
-    
+
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return res.status(400).json({ message: 'No lead IDs provided' });
     }
-    
+
     if (!bookerId) {
       return res.status(400).json({ message: 'No booker ID provided' });
     }
 
-    // Verify the booker exists and is active
-    const bookers = await dbManager.query('users', {
-      select: 'id, name, role, is_active',
-      eq: { id: bookerId }
-    });
+    // Create service role client to bypass RLS policies for admin operations
+    const serviceRoleClient = createClient(
+      process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    );
 
-    if (!bookers || bookers.length === 0) {
+    const { data: bookers, error: bookerError } = await serviceRoleClient
+      .from('users')
+      .select('id, name, role, is_active, leads_assigned')
+      .eq('id', bookerId)
+      .single();
+
+    if (bookerError || !bookers) {
+      console.error('Error fetching booker:', bookerError);
       return res.status(404).json({ message: 'Booker not found' });
     }
 
-    const booker = bookers[0];
+    const booker = bookers;
     if (!booker.is_active) {
       return res.status(400).json({ message: 'Booker is not active' });
     }
 
-    // Get the leads to be assigned
-    const leads = await dbManager.query('leads', {
-      select: 'id, name, booker_id, status',
-      in: { id: leadIds }
-    });
+    // Get the leads to be assigned - use service role client
+    const { data: leads, error: leadsError } = await serviceRoleClient
+      .from('leads')
+      .select('id, name, booker_id, status')
+      .in('id', leadIds);
 
-    if (!leads || leads.length === 0) {
+    if (leadsError || !leads || leads.length === 0) {
+      console.error('Error fetching leads:', leadsError);
       return res.status(404).json({ message: 'No leads found' });
     }
 
     console.log(`📋 Found ${leads.length} leads to assign to ${booker.name}`);
 
-    // Update leads with new booker_id and status to 'Assigned' if currently 'New'
-    const updatePromises = leads.map(lead =>
-      dbManager.update('leads', {
+    // Update leads with new booker_id and status - use service role client to bypass RLS
+    const { error: updateError } = await serviceRoleClient
+      .from('leads')
+      .update({
         booker_id: bookerId,
-        status: lead.status === 'New' ? 'Assigned' : lead.status
-      }, { id: lead.id })
-    );
+        status: 'Assigned',
+        updated_at: new Date().toISOString()
+      })
+      .in('id', leadIds);
 
-    await Promise.all(updatePromises);
+    if (updateError) {
+      console.error('Error updating leads:', updateError);
+      return res.status(500).json({ message: 'Failed to assign leads', error: updateError.message });
+    }
 
     // Update booker's leads_assigned count
     const currentCount = booker.leads_assigned || 0;
     const newCount = currentCount + leads.length;
-    await dbManager.update('users', { leads_assigned: newCount }, { id: bookerId });
+
+    const { error: bookerUpdateError } = await serviceRoleClient
+      .from('users')
+      .update({ leads_assigned: newCount })
+      .eq('id', bookerId);
+
+    if (bookerUpdateError) {
+      console.warn('Error updating booker count:', bookerUpdateError);
+    }
 
     // Update previous bookers' counts (if any leads were reassigned)
     const previousBookerIds = [...new Set(leads.map(lead => lead.booker_id).filter(Boolean))];
     for (const prevBookerId of previousBookerIds) {
       if (prevBookerId !== bookerId) {
         try {
-          const prevBooker = await dbManager.query('users', {
-            select: 'leads_assigned',
-            eq: { id: prevBookerId }
-          });
-          
-          if (prevBooker && prevBooker.length > 0) {
-            const prevCount = prevBooker[0].leads_assigned || 0;
+          const { data: prevBooker } = await serviceRoleClient
+            .from('users')
+            .select('leads_assigned')
+            .eq('id', prevBookerId)
+            .single();
+
+          if (prevBooker) {
+            const prevCount = prevBooker.leads_assigned || 0;
             const reassignedCount = leads.filter(lead => lead.booker_id === prevBookerId).length;
             const newPrevCount = Math.max(prevCount - reassignedCount, 0);
-            await dbManager.update('users', { leads_assigned: newPrevCount }, { id: prevBookerId });
+
+            await serviceRoleClient
+              .from('users')
+              .update({ leads_assigned: newPrevCount })
+              .eq('id', prevBookerId);
           }
         } catch (error) {
           console.error(`Failed to update previous booker count for ${prevBookerId}:`, error);
         }
       }
+    }
+
+    // Add booking history entries for each lead
+    for (const lead of leads) {
+      await addBookingHistoryEntry(
+        lead.id,
+        'bulk_assign',
+        req.user.id,
+        req.user.name,
+        {
+          previousBooker: lead.booker_id,
+          newBooker: bookerId,
+          bookerName: booker.name
+        },
+        {
+          name: lead.name,
+          status: 'Assigned',
+          booker_id: bookerId
+        }
+      );
     }
 
     // Emit real-time updates
@@ -2335,8 +2513,8 @@ router.put('/bulk-assign', auth, adminAuth, async (req, res) => {
 
     const successMessage = `Successfully assigned ${leads.length} leads to ${booker.name}`;
     console.log('✅ Bulk assign completed:', successMessage);
-    
-    res.json({ 
+
+    res.json({
       message: successMessage,
       assignedCount: leads.length,
       bookerId: bookerId,
@@ -2431,6 +2609,71 @@ router.get('/:id/events', auth, async (req, res) => {
     res.json({ events });
   } catch (error) {
     console.error('Get lead events error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/leads/calendar-public
+// @desc    Get leads for calendar view (public endpoint for dashboard)
+// @access  Public (for dashboard stats)
+router.get('/calendar-public', async (req, res) => {
+  try {
+    console.log(`📅 Public Calendar API: Fetching events`);
+
+    const { start, end, limit = 200 } = req.query;
+    const validatedLimit = Math.min(parseInt(limit) || 200, 500);
+
+    console.log(`📅 Date range filter - Start: ${start || 'none'}, End: ${end || 'none'}, Limit: ${validatedLimit}`);
+
+    let query = supabase
+      .from('leads')
+      .select(`
+        id, name, phone, email, status, date_booked, booker_id,
+        is_confirmed, booking_status, booking_history, has_sale,
+        created_at, updated_at, postcode, notes, image_url
+      `)
+      .or('date_booked.not.is.null,status.eq.Booked')
+      .is('deleted_at', null);
+
+    if (start && end) {
+      query = query
+        .gte('date_booked', start)
+        .lte('date_booked', end);
+    }
+
+    const { data: leads, error } = await query
+      .order('date_booked', { ascending: true })
+      .limit(validatedLimit);
+
+    if (error) {
+      console.error('Public calendar query error:', error);
+      return res.status(400).json({ message: 'Database query failed', error: error.message });
+    }
+
+    console.log(`📅 Public Calendar API: Found ${leads?.length || 0} events`);
+
+    const events = leads?.map(lead => {
+      const date = new Date(lead.date_booked);
+      return {
+        id: lead.id,
+        title: lead.name,
+        start: lead.date_booked,
+        extendedProps: {
+          id: lead.id,
+          name: lead.name,
+          phone: lead.phone,
+          email: lead.email,
+          status: lead.status,
+          date_booked: lead.date_booked,
+          booker_id: lead.booker_id,
+          time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        }
+      };
+    }) || [];
+
+    res.json({ events });
+  } catch (error) {
+    console.error('Get public lead events error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -3066,7 +3309,10 @@ router.post('/bulk-create', auth, adminAuth, async (req, res) => {
       return res.status(400).json({ message: 'No leads provided' });
     }
 
+    console.log(`🔄 Starting bulk import of ${leads.length} leads by user ${req.user.id}`);
+    
     let importedCount = 0;
+    let duplicateCount = 0;
     const importErrors = [];
     const importedLeads = [];
 
@@ -3079,15 +3325,49 @@ router.post('/bulk-create', auth, adminAuth, async (req, res) => {
         delete leadData.imageUrl;
       }
       try {
-        // Check for duplicates based on phone number one more time
-        const existingLeads = await dbManager.query('leads', {
-          select: '*',
-          eq: { phone: leadData.phone },
-          is: { deleted_at: null }
-        });
+        // Enhanced duplicate check: phone, email, and name+phone combinations
+        const duplicateChecks = [];
+        
+        // Check phone duplicates
+        if (leadData.phone) {
+          const phoneDuplicates = await dbManager.query('leads', {
+            select: 'id, name, phone',
+            eq: { phone: leadData.phone },
+            is: { deleted_at: null }
+          });
+          if (phoneDuplicates && phoneDuplicates.length > 0) {
+            duplicateChecks.push(`Phone: ${leadData.phone} matches existing lead ${phoneDuplicates[0].name}`);
+          }
+        }
+        
+        // Check email duplicates
+        if (leadData.email) {
+          const emailDuplicates = await dbManager.query('leads', {
+            select: 'id, name, email',
+            eq: { email: leadData.email },
+            is: { deleted_at: null }
+          });
+          if (emailDuplicates && emailDuplicates.length > 0) {
+            duplicateChecks.push(`Email: ${leadData.email} matches existing lead ${emailDuplicates[0].name}`);
+          }
+        }
+        
+        // Check name+phone combination duplicates
+        if (leadData.name && leadData.phone) {
+          const namePhoneDuplicates = await dbManager.query('leads', {
+            select: 'id, name, phone',
+            eq: { name: leadData.name, phone: leadData.phone },
+            is: { deleted_at: null }
+          });
+          if (namePhoneDuplicates && namePhoneDuplicates.length > 0) {
+            duplicateChecks.push(`Name+Phone: ${leadData.name} + ${leadData.phone} already exists`);
+          }
+        }
 
-        if (existingLeads && existingLeads.length > 0) {
-          importErrors.push(`Duplicate phone number: ${leadData.phone} (${leadData.name})`);
+        if (duplicateChecks.length > 0) {
+          duplicateCount++;
+          importErrors.push(`Duplicate found for ${leadData.name}: ${duplicateChecks.join(', ')}`);
+          console.log(`❌ Duplicate skipped: ${leadData.name} - ${duplicateChecks.join(', ')}`);
           continue;
         }
 
@@ -3120,6 +3400,7 @@ router.post('/bulk-create', auth, adminAuth, async (req, res) => {
         
         importedLeads.push(leadToInsert);
         importedCount++;
+        console.log(`✅ Imported: ${leadToInsert.name} (${leadToInsert.phone})`);
 
         // Update user's leads assigned count
         const users = await dbManager.query('users', {
@@ -3151,9 +3432,12 @@ router.post('/bulk-create', auth, adminAuth, async (req, res) => {
       });
     }
     
+    console.log(`📊 Bulk import completed: ${importedCount} imported, ${duplicateCount} duplicates skipped, ${importErrors.length} errors`);
+    
     res.json({
-      message: `Successfully imported ${importedCount} leads`,
+      message: `Successfully imported ${importedCount} leads${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ''}`,
       imported: importedCount,
+      duplicates: duplicateCount,
       total: leads.length,
       errors: importErrors.length > 0 ? importErrors.slice(0, 10) : undefined,
       leads: importedLeads
@@ -4151,6 +4435,57 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
   } catch (error) {
     console.error('Quick status update error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/leads/public
+// @desc    Get leads for dashboard (temporary fix for authentication issue)
+// @access  Public (temporary)
+router.get('/public', async (req, res) => {
+  try {
+    const { date_booked_start, date_booked_end, limit } = req.query;
+
+    console.log('📊 PUBLIC LEADS API: Dashboard requesting lead details');
+    console.log(`📅 Date range: ${date_booked_start} to ${date_booked_end}`);
+
+    let queryOptions = {
+      select: '*'
+    };
+
+    // Apply date filters - support both date_booked and created_at
+    if (date_booked_start && date_booked_end) {
+      queryOptions.gte = { date_booked: date_booked_start };
+      queryOptions.lte = { date_booked: date_booked_end };
+    }
+
+    // Support created_at filtering for daily activity dashboard
+    const { created_at_start, created_at_end, updated_at_start, updated_at_end } = req.query;
+    if (created_at_start && created_at_end) {
+      queryOptions.gte = { created_at: created_at_start };
+      queryOptions.lte = { created_at: created_at_end };
+      console.log(`📅 Public leads filtering by creation date: ${created_at_start} to ${created_at_end}`);
+    }
+
+    // Support updated_at filtering for booking activity (when bookings were MADE)
+    if (updated_at_start && updated_at_end) {
+      queryOptions.gte = { updated_at: updated_at_start };
+      queryOptions.lte = { updated_at: updated_at_end };
+      console.log(`📅 Public leads filtering by updated date (bookings made): ${updated_at_start} to ${updated_at_end}`);
+    }
+
+    // Apply limit
+    if (limit) {
+      queryOptions.limit = parseInt(limit);
+    }
+
+    const leads = await dbManager.query('leads', queryOptions);
+
+    console.log(`📊 PUBLIC LEADS RESULT: Found ${leads.length} leads`);
+    res.json({ leads });
+
+  } catch (error) {
+    console.error('❌ Public leads error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSettings, FiSave, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSettings, FiSave, FiX, FiExternalLink } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Templates = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -339,16 +340,25 @@ const Templates = () => {
               <h1 className="text-3xl font-bold text-gray-900">Message Templates</h1>
               <p className="text-gray-600 mt-2">Manage email and SMS templates for automatic messaging</p>
             </div>
-            <button
-              onClick={() => {
-                setEditingTemplate(null);
-                resetForm();
-                setShowModal(true);
-              }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-            >
-              <FiPlus /> New Template
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/bookers-templates')}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
+                title="Manage templates for Lead Details"
+              >
+                <FiExternalLink /> Bookers Templates
+              </button>
+              <button
+                onClick={() => {
+                  setEditingTemplate(null);
+                  resetForm();
+                  setShowModal(true);
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+              >
+                <FiPlus /> New Template
+              </button>
+            </div>
           </div>
         </div>
         {/* Templates Grid */}
@@ -379,7 +389,18 @@ const Templates = () => {
             return Object.entries(categorized).map(([cat, group]) =>
               group && group.length > 0 && (
                 <div key={cat} className="mb-8">
-                  <h2 className="text-xl font-bold mb-4">{cat}</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold">{cat}</h2>
+                    {cat === 'Lead Details Templates' && (
+                      <button
+                        onClick={() => navigate('/bookers-templates')}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
+                      >
+                        <FiExternalLink className="h-4 w-4" />
+                        Manage in Bookers Templates
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {group.map(template => (
                       <div key={`template-${template._id}`} className="bg-white rounded-lg shadow p-6">

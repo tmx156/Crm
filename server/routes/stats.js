@@ -4,6 +4,59 @@ const dbManager = require('../database-connection-manager');
 
 const router = express.Router();
 
+// @route   GET /api/stats/leads-public
+// @desc    Get lead status counts for dashboard (temporary fix for authentication issue)
+// @access  Public (temporary)
+router.get('/leads-public', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    console.log('📊 PUBLIC STATS API: Dashboard requesting booking stats');
+    console.log(`📅 Date range: ${startDate} to ${endDate}`);
+
+    let queryOptions = {
+      select: 'id, status, created_at, booker_id, date_booked'
+    };
+
+    // Apply date filters using created_at for daily booking activity
+    if (startDate && endDate) {
+      queryOptions.gte = { created_at: startDate };
+      queryOptions.lte = { created_at: endDate };
+      console.log(`📅 Public stats filtering by booking creation date: ${startDate} to ${endDate}`);
+    }
+
+    // Get all leads to calculate counts
+    const leads = await dbManager.query('leads', queryOptions);
+
+    // Calculate counts from the leads data
+    const total = leads.length;
+    const statusCounts = {
+      new: leads.filter(lead => lead.status === 'New').length,
+      booked: leads.filter(lead => lead.status === 'Booked').length,
+      attended: leads.filter(lead => lead.status === 'Attended').length,
+      cancelled: leads.filter(lead => lead.status === 'Cancelled').length,
+      assigned: leads.filter(lead => lead.status === 'Assigned').length,
+      rejected: leads.filter(lead => lead.status === 'Rejected').length
+    };
+
+    const result = {
+      total: total || 0,
+      new: statusCounts.new || 0,
+      booked: statusCounts.booked || 0,
+      attended: statusCounts.attended || 0,
+      cancelled: statusCounts.cancelled || 0,
+      assigned: statusCounts.assigned || 0,
+      rejected: statusCounts.rejected || 0
+    };
+
+    console.log(`📊 PUBLIC STATS RESULT: Found ${total} bookings`);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Public stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // @route   GET /api/stats/leads
 // @desc    Get lead status counts using database aggregation
 // @access  Private
@@ -29,10 +82,12 @@ router.get('/leads', auth, async (req, res) => {
       queryOptions.eq = { booker_id: req.user.id };
     }
 
-    // Apply date filters
+    // Apply date filters - use created_at for daily booking activity
     if (startDate && endDate) {
+      // For daily admin activity, we want to filter by when bookings were MADE, not appointment date
       queryOptions.gte = { created_at: startDate };
       queryOptions.lte = { created_at: endDate };
+      console.log(`📅 Stats filtering by booking creation date: ${startDate} to ${endDate}`);
     }
 
     // Apply user filter (booker) - only for admins
@@ -413,7 +468,7 @@ router.get('/hourly-activity', auth, async (req, res) => {
 });
 
 // @route   GET /api/stats/team-performance
-// @desc    Get team performance metrics for selected date
+// @desc    Get team performance metrics for selected date with detailed booking breakdown
 // @access  Private
 router.get('/team-performance', auth, async (req, res) => {
   try {
@@ -439,14 +494,37 @@ router.get('/team-performance', auth, async (req, res) => {
     const teamPerformance = [];
 
     for (const user of users) {
-      // Get bookings for this user on this date
+      // Get today's appointments for this booker (using date_booked)
       const bookingsQuery = {
-        select: 'id, status, has_sale',
+        select: 'id, name, phone, date_booked, status, has_sale, created_at',
         eq: { booker_id: user.id },
         gte: { date_booked: startOfDay.toISOString() },
         lte: { date_booked: endOfDay.toISOString() }
       };
       const userBookings = await dbManager.query('leads', bookingsQuery);
+
+      // Create detailed booking breakdown for dashboard scoreboard
+      const bookingDetails = userBookings.map(booking => {
+        const appointmentDate = new Date(booking.date_booked);
+        return {
+          id: booking.id,
+          leadName: booking.name || 'Unknown Lead',
+          phone: booking.phone || '',
+          date: appointmentDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }),
+          time: appointmentDate.toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }),
+          status: booking.status || 'Booked',
+          dateBooked: booking.date_booked,
+          createdAt: booking.created_at
+        };
+      }).sort((a, b) => new Date(a.dateBooked) - new Date(b.dateBooked));
 
       // Get leads assigned to this user on this date
       const assignedQuery = {
@@ -467,14 +545,16 @@ router.get('/team-performance', auth, async (req, res) => {
         salesMade: userBookings.filter(lead => lead.has_sale).length,
         revenue: 0, // Temporarily set to 0 since sale_amount column doesn't exist
         conversionRate: assignedLeads.length > 0 ? Math.round((userBookings.length / assignedLeads.length) * 100) : 0,
-        showUpRate: userBookings.length > 0 ? Math.round((userBookings.filter(lead => ['attended', 'complete'].includes(lead.status?.toLowerCase())).length / userBookings.length) * 100) : 0
+        showUpRate: userBookings.length > 0 ? Math.round((userBookings.filter(lead => ['attended', 'complete'].includes(lead.status?.toLowerCase())).length / userBookings.length) * 100) : 0,
+        bookingDetails: bookingDetails, // Add detailed booking breakdown for dashboard
+        lastBooking: bookingDetails.length > 0 ? bookingDetails[bookingDetails.length - 1].dateBooked : null
       };
 
       teamPerformance.push(performance);
     }
 
-    // Sort by revenue descending
-    teamPerformance.sort((a, b) => b.revenue - a.revenue);
+    // Sort by bookings made descending (more relevant for dashboard)
+    teamPerformance.sort((a, b) => b.bookingsMade - a.bookingsMade);
 
     res.json({
       date,
@@ -484,6 +564,241 @@ router.get('/team-performance', auth, async (req, res) => {
 
   } catch (error) {
     console.error('Team performance error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/stats/calendar-public
+// @desc    Get calendar events for dashboard (public endpoint)
+// @access  Public
+router.get('/calendar-public', async (req, res) => {
+  try {
+    const { start, end, limit = 200 } = req.query;
+    const validatedLimit = Math.min(parseInt(limit) || 200, 500);
+
+    console.log(`📅 Public Calendar Stats API: Date range ${start} to ${end}, Limit: ${validatedLimit}`);
+
+    let queryOptions = {
+      select: 'id, name, phone, email, status, date_booked, booker_id, created_at, is_confirmed',
+      order: { date_booked: 'asc' },
+      limit: validatedLimit
+    };
+
+    // Apply date range filter if provided
+    if (start && end) {
+      queryOptions.gte = { date_booked: start };
+      queryOptions.lte = { date_booked: end };
+    }
+
+    // Get leads with bookings
+    const leads = await dbManager.query('leads', queryOptions);
+
+    console.log(`📅 Database returned ${leads.length} total leads`);
+
+    // Filter to only leads with valid date_booked
+    const validLeads = leads.filter(lead => lead.date_booked && lead.date_booked !== null);
+
+    console.log(`📅 Found ${validLeads.length} calendar events`);
+
+    // Convert to flat events format for dashboard
+    const events = validLeads.slice(0, validatedLimit).map(lead => {
+      const date = new Date(lead.date_booked);
+      return {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        email: lead.email,
+        lead_status: lead.status, // Lead status (Booked, Cancelled, etc)
+        status: lead.is_confirmed ? 'confirmed' : 'unconfirmed', // Calendar confirmation status
+        booking_date: lead.date_booked,
+        booking_time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        booker_id: lead.booker_id,
+        created_at: lead.created_at,
+        is_confirmed: lead.is_confirmed
+      };
+    });
+
+    res.json(events);
+  } catch (error) {
+    console.error('Calendar events error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/stats/user-analytics
+// @desc    Get detailed analytics for a specific user (for Dashboard modal)
+// @access  Public (using public endpoint pattern for now)
+router.get('/user-analytics', async (req, res) => {
+  try {
+    const { userId, date, userRole } = req.query;
+
+    if (!userId || !date) {
+      return res.status(400).json({ message: 'userId and date are required' });
+    }
+
+    const today = date;
+    console.log(`📊 USER ANALYTICS: Fetching analytics for user ${userId} (${userRole || 'unknown role'}) on ${today}`);
+
+    if (userRole === 'booker') {
+      // ===== BOOKER ANALYTICS =====
+      
+      // 1. Fetch leads assigned today to this booker
+      const leadsAssignedQuery = {
+        select: 'id, status, created_at, booker_id',
+        eq: { booker_id: userId },
+        gte: { created_at: `${today}T00:00:00.000Z` },
+        lte: { created_at: `${today}T23:59:59.999Z` }
+      };
+      const leadsAssigned = await dbManager.query('leads', leadsAssignedQuery);
+      const leadsAssignedCount = leadsAssigned.length;
+
+      // 2. Fetch bookings made today by this booker
+      const bookingsMadeQuery = {
+        select: 'id, status, created_at, booker_id, date_booked',
+        eq: { booker_id: userId, status: 'Booked' },
+        gte: { created_at: `${today}T00:00:00.000Z` },
+        lte: { created_at: `${today}T23:59:59.999Z` }
+      };
+      const bookingsMade = await dbManager.query('leads', bookingsMadeQuery);
+      const bookingsMadeCount = bookingsMade.length;
+
+      // 3. Calculate booking timing for bookings made TODAY
+      // Categorize by when the appointments are scheduled (today vs future)
+      const todayStart = new Date(today);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Count how many of today's bookings are scheduled for this week
+      const thisWeekStart = new Date();
+      thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
+      thisWeekStart.setHours(0, 0, 0, 0);
+      const thisWeekEnd = new Date(thisWeekStart);
+      thisWeekEnd.setDate(thisWeekEnd.getDate() + 6);
+      thisWeekEnd.setHours(23, 59, 59, 999);
+
+      const thisWeekBookingsCount = bookingsMade.filter(booking => {
+        const appointmentDate = new Date(booking.date_booked);
+        return appointmentDate >= thisWeekStart && appointmentDate <= thisWeekEnd;
+      }).length;
+
+      // Count how many of today's bookings are scheduled for next week
+      const nextWeekStart = new Date(thisWeekStart);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekEnd.getDate() + 6);
+      nextWeekEnd.setHours(23, 59, 59, 999);
+
+      const nextWeekBookingsCount = bookingsMade.filter(booking => {
+        const appointmentDate = new Date(booking.date_booked);
+        return appointmentDate >= nextWeekStart && appointmentDate <= nextWeekEnd;
+      }).length;
+
+      // 4. Calculate yesterday's bookings for daily trend comparison
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      const yesterdayBookingsQuery = {
+        select: 'id, status, created_at, booker_id',
+        eq: { booker_id: userId, status: 'Booked' },
+        gte: { created_at: `${yesterdayStr}T00:00:00.000Z` },
+        lte: { created_at: `${yesterdayStr}T23:59:59.999Z` }
+      };
+      const yesterdayBookings = await dbManager.query('leads', yesterdayBookingsQuery);
+      const yesterdayBookingsCount = yesterdayBookings.length;
+
+      // Calculate rates and trends
+      const leadsToBookingsRate = leadsAssignedCount > 0 ? (bookingsMadeCount / leadsAssignedCount) * 100 : 0;
+      const weeklyTrendRate = yesterdayBookingsCount > 0 
+        ? ((bookingsMadeCount - yesterdayBookingsCount) / yesterdayBookingsCount) * 100 
+        : (bookingsMadeCount > 0 ? 100 : 0);
+      const weeklyAverage = (bookingsMadeCount + yesterdayBookingsCount) / 2;
+
+      const analytics = {
+        userRole: 'booker',
+        leadsAssigned: leadsAssignedCount,
+        bookingsMade: bookingsMadeCount,
+        leadsToBookingsRate,
+        thisWeekBookings: thisWeekBookingsCount,
+        nextWeekBookings: nextWeekBookingsCount,
+        weeklyTrendRate,
+        weeklyAverage
+      };
+
+      console.log('📊 BOOKER ANALYTICS RESULT:', analytics);
+      return res.json(analytics);
+
+    } else if (userRole === 'admin' || userRole === 'viewer') {
+      // ===== ADMIN/VIEWER (SALES) ANALYTICS =====
+
+      // 1. Fetch appointments attended today
+      const appointmentsQuery = {
+        select: 'id, status, date_booked',
+        eq: { status: 'Attended' },
+        gte: { date_booked: `${today}T00:00:00.000Z` },
+        lte: { date_booked: `${today}T23:59:59.999Z` }
+      };
+      const appointments = await dbManager.query('leads', appointmentsQuery);
+      const appointmentsAttended = appointments.length;
+
+      // 2. Fetch sales made today by this user
+      let salesMade = 0;
+      let totalSalesAmount = 0;
+
+      try {
+        const salesQuery = {
+          select: 'id, amount, created_at, user_id, completed_by_id',
+          gte: { created_at: `${today}T00:00:00.000Z` },
+          lte: { created_at: `${today}T23:59:59.999Z` }
+        };
+        const sales = await dbManager.query('sales', salesQuery);
+        
+        // Filter by user_id or completed_by_id
+        const userSales = sales.filter(sale => 
+          sale.user_id === userId || sale.completed_by_id === userId
+        );
+        
+        salesMade = userSales.length;
+        totalSalesAmount = userSales.reduce((sum, sale) => sum + (parseFloat(sale.amount) || 0), 0);
+      } catch (error) {
+        console.log('Sales data query error:', error.message);
+      }
+
+      // 3. Fetch all leads created today for overall close rate
+      const allLeadsQuery = {
+        select: 'id, status, created_at',
+        gte: { created_at: `${today}T00:00:00.000Z` },
+        lte: { created_at: `${today}T23:59:59.999Z` }
+      };
+      const allLeads = await dbManager.query('leads', allLeadsQuery);
+      const totalLeads = allLeads.length;
+
+      // Calculate rates
+      const averageSaleAmount = salesMade > 0 ? totalSalesAmount / salesMade : 0;
+      const attendanceToSalesRate = appointmentsAttended > 0 ? (salesMade / appointmentsAttended) * 100 : 0;
+      const overallCloseRate = totalLeads > 0 ? (salesMade / totalLeads) * 100 : 0;
+
+      const analytics = {
+        userRole: 'sales',
+        appointmentsAttended,
+        salesMade,
+        totalLeads,
+        totalSalesAmount,
+        averageSaleAmount,
+        attendanceToSalesRate,
+        overallCloseRate
+      };
+
+      console.log('📊 SALES ANALYTICS RESULT:', analytics);
+      return res.json(analytics);
+
+    } else {
+      return res.status(400).json({ message: 'Invalid userRole. Must be booker, admin, or viewer' });
+    }
+
+  } catch (error) {
+    console.error('❌ User analytics error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

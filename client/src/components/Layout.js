@@ -300,6 +300,7 @@ const Layout = ({ children }) => {
   // Ultra-fast polling for SMS notifications
   useEffect(() => {
     if (!notificationsEnabled) return;
+    let lastSince = (() => { try { return localStorage.getItem('messagesSince') || ''; } catch { return ''; } })();
     const pollForNotifications = async () => {
       try {
         // Skip polling if notifications are disabled
@@ -318,12 +319,22 @@ const Layout = ({ children }) => {
         setLastPollTime(now);
 
         const token = localStorage.getItem('token');
+        const params = {};
+        if (lastSince) params.since = lastSince;
+        params.limit = 200;
         const response = await axios.get('/api/messages-list', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          timeout: 10000 // 10 second timeout to prevent hanging
+          timeout: 10000, // 10 second timeout to prevent hanging
+          params
         });
         const messages = response.data.messages || [];
         console.log('🔔 Total messages fetched:', messages.length);
+        // Update since cursor for next poll
+        const newSince = response.data?.meta?.latestCreatedAt || response.data?.meta?.since;
+        if (newSince) {
+          lastSince = newSince;
+          try { localStorage.setItem('messagesSince', newSince); } catch {}
+        }
         
         // Scope to recent window to avoid historical backlog dominating
         const recentThresholdMs = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -347,11 +358,21 @@ const Layout = ({ children }) => {
 
         // Convert to notifications format and update state
         const newNotifications = recentMessages.map(msg => {
-          // Fix timestamp formatting
+          // Fix timestamp formatting with timezone correction
           let formattedTime = 'Just now';
           if (msg.timestamp) {
             try {
-              const date = new Date(msg.timestamp);
+              // Handle timestamps without Z suffix by treating them as UTC
+              let timestampToUse = msg.timestamp;
+              if (typeof timestampToUse === 'string' &&
+                  timestampToUse.includes('T') &&
+                  !timestampToUse.endsWith('Z') &&
+                  !timestampToUse.includes('+') &&
+                  !timestampToUse.includes('-', 10)) { // Don't add Z if timezone offset already present
+                timestampToUse = timestampToUse + 'Z';
+              }
+
+              const date = new Date(timestampToUse);
               if (!isNaN(date.getTime())) {
                 const now = new Date();
                 const diffMs = now - date;
@@ -454,11 +475,11 @@ const Layout = ({ children }) => {
     // Initial poll
     pollForNotifications();
     
-    // Poll for notifications every 30 seconds (more reasonable)
+    // Poll for notifications every 60 seconds (lighter)
     const pollingInterval = setInterval(() => {
       console.log('🔔 Layout: Polling for notifications...');
       pollForNotifications();
-    }, 30000); // 30 seconds instead of 2
+    }, 60000);
     
     return () => {
       clearInterval(pollingInterval);

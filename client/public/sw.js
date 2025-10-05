@@ -21,6 +21,11 @@ self.addEventListener('install', event => {
 // Intercept calendar API requests
 self.addEventListener('fetch', event => {
   try {
+    // Skip iframe requests that cause frame removal errors
+    if (event.request.mode === 'navigate' && event.request.destination === 'iframe') {
+      return; // Let browser handle iframe requests
+    }
+
     const url = new URL(event.request.url);
 
     // Calendar API caching strategy
@@ -39,7 +44,11 @@ self.addEventListener('fetch', event => {
     // Default to network first
     event.respondWith(networkFirst(event.request));
   } catch (error) {
-    // Handle frame removal or other lifecycle errors
+    // Handle frame removal or other lifecycle errors silently
+    if (error.message && error.message.includes('Frame')) {
+      // Silently ignore frame-related errors
+      return;
+    }
     console.warn('SW: Fetch event handler error:', error.message);
     // Let the request proceed normally
   }

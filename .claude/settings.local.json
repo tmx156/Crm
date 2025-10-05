@@ -2,24 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(node:*)",
-      "Bash(npm start)",
-      "Bash(echo:*)",
-      "Bash(curl:*)",
-      "Bash(start http://localhost:3000)",
-      "Bash(taskkill:*)",
-      "Bash(netstat:*)",
-      "Bash(findstr:*)",
-      "Bash(dir)",
-      "Bash(npm run kill-port:*)",
-      "Bash(where taskkill)",
-      "Bash(C:WindowsSystem32taskkill.exe /F /PID 8340)",
-      "Bash(start cmd /c \"npm start\")",
-      "Bash(dir:*)",
-      "Bash(where:*)",
-      "Bash(C:\\Windows\\System32\\taskkill.exe /F /PID 25756)",
-      "Bash(\"C:\\Windows\\System32\\taskkill.exe\" /F /PID 25756)",
-      "Bash(Get-Process -Name node)",
-      "Bash(Stop-Process -Force)"
+      "Bash(cat:*)",
+      "Bash(curl -s http://localhost:3001/api/leads/public?limit=100)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

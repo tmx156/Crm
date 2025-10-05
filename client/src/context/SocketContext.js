@@ -262,12 +262,20 @@ export const SocketProvider = ({ children }) => {
       setLastUpdate({ type: 'STATS_UPDATE_NEEDED', timestamp: new Date(), data });
     };
 
-    // Subscribe to stats events
+    const handleBookingActivity = (data) => {
+      console.log('📅 Real-time: Booking activity', data);
+      callback({ type: 'BOOKING_ACTIVITY', data });
+      setLastUpdate({ type: 'BOOKING_ACTIVITY', timestamp: new Date(), data });
+    };
+
+    // Subscribe to stats and booking events
     socket.on('stats_update_needed', handleStatsUpdateNeeded);
+    socket.on('booking_activity', handleBookingActivity);
 
     // Return cleanup function
     return () => {
       socket.off('stats_update_needed', handleStatsUpdateNeeded);
+      socket.off('booking_activity', handleBookingActivity);
     };
   }, [socket]);
 

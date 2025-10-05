@@ -64,6 +64,7 @@ const LeadsNew = () => {
   const [showLeadAnalysisModal, setShowLeadAnalysisModal] = useState(false);
   const [analysisReport, setAnalysisReport] = useState(null);
   const [distanceStats, setDistanceStats] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
   
   const [newLead, setNewLead] = useState({
     name: '',
@@ -321,7 +322,13 @@ const LeadsNew = () => {
 
   // Import leads to database
   const importLeads = async (leadsToImport) => {
+    if (isImporting) {
+      console.log('⚠️ Import already in progress, skipping duplicate request');
+      return;
+    }
+    
     try {
+      setIsImporting(true);
       setUploadStatus('Importing leads...');
       
       const token = localStorage.getItem('token');
@@ -331,7 +338,22 @@ const LeadsNew = () => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
-      setUploadStatus('Upload Complete!');
+      console.log('📊 Import response:', response.data);
+      
+      // Show detailed results
+      const { imported, duplicates, errors } = response.data;
+      let statusMessage = `Import Complete! ${imported} leads imported`;
+      if (duplicates > 0) {
+        statusMessage += `, ${duplicates} duplicates skipped`;
+      }
+      if (errors && errors.length > 0) {
+        statusMessage += `, ${errors.length} errors`;
+        console.warn('Import errors:', errors);
+      }
+      
+      setUploadStatus(statusMessage);
+      
+      // Close all modals
       setShowUploadModal(false);
       setShowDuplicateModal(false);
       setShowLeadAnalysisModal(false);
@@ -345,12 +367,14 @@ const LeadsNew = () => {
         setUploadStatus('');
         fetchLeads();
         fetchLeadCounts();
-      }, 2000);
+      }, 3000);
       
     } catch (error) {
       console.error('Error importing leads:', error);
-      setUploadStatus('Import failed');
+      setUploadStatus('Import failed: ' + (error.response?.data?.message || error.message));
       setTimeout(() => setUploadStatus(''), 3000);
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -372,13 +396,14 @@ const LeadsNew = () => {
 
   // Handle LeadAnalysisModal actions
   const handleAcceptAll = async () => {
-    if (!duplicateAnalysis) return;
+    if (!duplicateAnalysis || isImporting) return;
+    console.log('🔄 Accepting all leads:', duplicateAnalysis.processedLeads.length);
     await importLeads(duplicateAnalysis.processedLeads);
     setShowLeadAnalysisModal(false);
   };
 
   const handleDiscardDuplicates = async () => {
-    if (!duplicateAnalysis || !analysisReport) return;
+    if (!duplicateAnalysis || !analysisReport || isImporting) return;
 
     // Filter out leads that are marked as duplicates
     const uniqueLeads = duplicateAnalysis.processedLeads.filter((lead, index) => {
@@ -386,12 +411,13 @@ const LeadsNew = () => {
       return !reportItem || !reportItem.duplicateOf;
     });
 
+    console.log('🔄 Discarding duplicates - importing unique leads:', uniqueLeads.length);
     await importLeads(uniqueLeads);
     setShowLeadAnalysisModal(false);
   };
 
   const handleSaveValidLeads = async () => {
-    if (!duplicateAnalysis || !analysisReport) return;
+    if (!duplicateAnalysis || !analysisReport || isImporting) return;
 
     // Filter out leads that have any issues (duplicates or far flags)
     const validLeads = duplicateAnalysis.processedLeads.filter((lead, index) => {
@@ -399,6 +425,7 @@ const LeadsNew = () => {
       return !reportItem;
     });
 
+    console.log('🔄 Saving valid leads only:', validLeads.length);
     await importLeads(validLeads);
     setShowLeadAnalysisModal(false);
   };
@@ -1385,6 +1412,7 @@ const LeadsNew = () => {
         onDiscardDuplicates={handleDiscardDuplicates}
         onExportCSV={handleExportCSV}
         onSaveValidLeads={handleSaveValidLeads}
+        isImporting={isImporting}
       />
 
       {/* Image Lightbox */}

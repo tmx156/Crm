@@ -29,17 +29,10 @@ const LeadDetail = () => {
     filteredLeads: []
   });
 
-  // SMS functionality state
+  // SMS & Email templates state (for Messages section)
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [smsMessage, setSmsMessage] = useState('');
-  const [smsExpanded, setSmsExpanded] = useState(false);
-  const [smsTemplates, setSmsTemplates] = useState([]);
-
-  // Email functionality state
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailMessage, setEmailMessage] = useState('');
-  const [emailExpanded, setEmailExpanded] = useState(false);
+  const [smsTemplates, setSmsTemplates] = useState([]);
   const [emailTemplates, setEmailTemplates] = useState([]);
 
   // Photo modal state
@@ -68,6 +61,14 @@ const LeadDetail = () => {
   const [conversationLoading, setConversationLoading] = useState(false);
   const [newReply, setNewReply] = useState('');
   const [replyMode, setReplyMode] = useState('sms'); // 'sms' or 'email'
+  
+  // Auto-resize textarea function
+  const autoResizeTextarea = (textarea) => {
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 500) + 'px'; // Max height 500px
+    }
+  };
 
   // Add state for reject modal
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -108,15 +109,13 @@ const LeadDetail = () => {
     }
   ];
 
-  // Utility to group templates by category
+  // Utility to group templates by category (Bookers Templates)
   const categorizeTemplates = (templates) => {
     const categories = {
-      'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
-      'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
-      'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
-      'Lead Details Templates': ['custom', 'booker'],
+      'Booking & Reminders': ['booking_confirmation', 'appointment_reminder'],
+      'Custom Templates': ['custom'],
     };
-    const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Lead Details Templates': [] };
+    const grouped = { 'Booking & Reminders': [], 'Custom Templates': [] };
     templates.forEach(t => {
       let found = false;
       for (const [cat, types] of Object.entries(categories)) {
@@ -126,20 +125,16 @@ const LeadDetail = () => {
           break;
         }
       }
-      if (!found) grouped['Diary Templates'].push(t); // Default to Diary Templates if unknown
+      if (!found) grouped['Custom Templates'].push(t); // Default to Custom Templates if unknown
     });
     return grouped;
   };
 
-  // Show Diary Templates and Lead Details templates in dropdowns (relevant for lead communication)
+  // Show only Bookers Templates (matching BookersTemplates page)
   const isLeadTemplate = (t) => [
     'booking_confirmation',
     'appointment_reminder',
-    'no_show',
-    'reschedule',
-    'cancellation',
-    'custom',
-    'booker'
+    'custom'
   ].includes(t.type);
 
   // Preload adjacent lead images for smooth navigation
@@ -253,15 +248,32 @@ const LeadDetail = () => {
     }
   }, [messagesExpanded, lead]);
 
+  // Auto-resize textarea when reply changes or mode changes
+  useEffect(() => {
+    if (newReply && messagesExpanded) {
+      setTimeout(() => {
+        const textarea = document.querySelector('textarea[placeholder*="reply"]');
+        autoResizeTextarea(textarea);
+      }, 0);
+    }
+  }, [newReply, replyMode, messagesExpanded]);
+
   const fetchTemplates = async () => {
     try {
-      // Fetch SMS templates
-      const smsResponse = await axios.get('/api/templates/active/sms');
-      setSmsTemplates(smsResponse.data.filter(isLeadTemplate));
-
-      // Fetch Email templates
-      const emailResponse = await axios.get('/api/templates/active/email');
-      setEmailTemplates(emailResponse.data.filter(isLeadTemplate));
+      // Fetch user-specific templates (bookersOnly=true means only their templates)
+      const response = await axios.get('/api/templates?bookersOnly=true');
+      const allTemplates = response.data.map(template => ({
+        ...template,
+        _id: template.id || template._id // Ensure _id field exists
+      }));
+      
+      // Filter for Bookers Template types only
+      const bookersTemplates = allTemplates.filter(isLeadTemplate);
+      
+      // Set both SMS and Email templates to the same filtered list
+      // (templates can have both smsBody and emailBody)
+      setSmsTemplates(bookersTemplates.filter(t => t.smsBody || t.sendSMS));
+      setEmailTemplates(bookersTemplates.filter(t => t.emailBody || t.sendEmail));
     } catch (error) {
       console.error('Error fetching templates:', error);
       // Use fallback templates
@@ -478,23 +490,7 @@ const LeadDetail = () => {
     return currentIndex < allLeads.length - 1 && allLeads.length > 0;
   };
 
-  // SMS Functions
-  const handleTemplateChange = (e) => {
-    const templateId = e.target.value;
-    setSelectedTemplate(templateId);
-    if (templateId) {
-      const template = smsTemplates.find(t => t._id === templateId);
-      if (template) {
-        // Use smsBody if present, else fallback to message
-        const msg = template.smsBody || template.message || '';
-        const message = replacePlaceholders(msg);
-        setSmsMessage(message);
-      }
-    } else {
-      setSmsMessage('');
-    }
-  };
-
+  // Template placeholder replacement
   const replacePlaceholders = (message) => {
     const defaultDate = new Date(lead.dateBooked).toLocaleDateString('en-US', { 
       weekday: 'long', 
@@ -525,100 +521,6 @@ const LeadDetail = () => {
     } catch (error) {
       console.error('Error adding history entry:', error);
     }
-  };
-
-  const handleSendSMS = async () => {
-    if (!smsMessage.trim()) {
-      alert('Please enter a message to send.');
-      return;
-    }
-    
-    if (!lead.phone) {
-      alert('This lead does not have a phone number.');
-      return;
-    }
-    
-    try {
-      const response = await axios.post(`/api/leads/${lead.id}/send-sms`, {
-        message: smsMessage,
-        type: 'custom'
-      });
-
-      if (response.data.success) {
-        alert(`SMS sent successfully to ${lead.phone}!`);
-        
-        // Add to booking history
-        await addHistoryEntry('SMS_SENT', {
-          recipient: lead.phone,
-          message: smsMessage,
-          template: selectedTemplate || 'Custom message',
-          sid: response.data.sid
-        });
-        
-        // Clear the form after sending
-        setSelectedTemplate('');
-        setSmsMessage('');
-      } else {
-        alert(`Failed to send SMS: ${response.data.message}`);
-      }
-    } catch (error) {
-      console.error('SMS sending error:', error);
-      alert(`Error sending SMS: ${error.response?.data?.message || error.message}`);
-    }
-  };
-
-  // Email Functions
-  const handleEmailTemplateChange = (e) => {
-    const templateId = e.target.value;
-    setSelectedEmailTemplate(templateId);
-    if (templateId) {
-      const template = emailTemplates.find(t => t._id === templateId);
-      if (template) {
-        // Use emailBody if present, else fallback to message
-        const subj = template.subject || '';
-        const msg = template.emailBody || template.message || '';
-        const subject = replacePlaceholders(subj);
-        const message = replacePlaceholders(msg);
-        setEmailSubject(subject);
-        setEmailMessage(message);
-      }
-    } else {
-      setEmailSubject('');
-      setEmailMessage('');
-    }
-  };
-
-  const handleSendEmail = async () => {
-    if (!emailMessage.trim()) {
-      alert('Please enter a message to send.');
-      return;
-    }
-    
-    if (!emailSubject.trim()) {
-      alert('Please enter a subject line.');
-      return;
-    }
-    
-    if (!lead.email) {
-      alert('This lead does not have an email address.');
-      return;
-    }
-    
-    // For now, show an alert with the email details
-    alert(`Email would be sent to: ${lead.email}\n\nSubject: ${emailSubject}\n\nMessage: ${emailMessage}`);
-    
-    // Add to booking history
-    await addHistoryEntry('EMAIL_SENT', {
-      recipient: lead.email,
-      subject: emailSubject,
-      message: emailMessage,
-      template: selectedEmailTemplate || 'Custom email'
-    });
-    
-    // Clear the form after sending
-    setSelectedEmailTemplate('');
-    setEmailSubject('');
-    setEmailMessage('');
   };
 
   // Conversation Functions
@@ -692,19 +594,33 @@ const LeadDetail = () => {
           return;
         }
         
-        alert(`Email would be sent to: ${lead.email}\n\nMessage: ${newReply}`);
+        // Parse subject and body from newReply if email template was used
+        let emailSubject = 'Reply';
+        let emailBody = newReply;
         
-        // Add to booking history
-        await addHistoryEntry('EMAIL_SENT', {
-          recipient: lead.email,
-          subject: 'Reply',
-          message: newReply,
-          template: 'Quick reply'
+        // If template contained subject (first line before double newline)
+        if (newReply.includes('\n\n')) {
+          const parts = newReply.split('\n\n');
+          if (parts[0].length < 100) { // First part is likely subject if short
+            emailSubject = parts[0];
+            emailBody = parts.slice(1).join('\n\n');
+          }
+        }
+        
+        const response = await axios.post(`/api/leads/${lead.id}/send-email`, {
+          subject: emailSubject,
+          body: emailBody
         });
         
-        setNewReply('');
-        // Refresh conversation
-        setTimeout(() => fetchConversationHistory(), 1000);
+        if (response.data.success) {
+          alert(`Email sent successfully to ${lead.email}!`);
+          
+          setNewReply('');
+          // Refresh conversation
+          setTimeout(() => fetchConversationHistory(), 1000);
+        } else {
+          alert(`Failed to send email: ${response.data.message}`);
+        }
       }
     } catch (error) {
       console.error('Error sending reply:', error);
@@ -1315,159 +1231,24 @@ const LeadDetail = () => {
                 )}
               </div>
 
-              {/* Booking History */}
-              <div className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">📋 Booking History</h3>
-                  {historyLoading && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                  )}
-                </div>
-                
-                {bookingHistory.length > 0 ? (
-                  <div className="space-y-4">
-                    {bookingHistory
-                      // Filter out empty entries with no action, name, or timestamp
-                      .filter(entry => 
-                        entry.action && 
-                        entry.action.trim() !== '' && 
-                        (entry.performedByName || entry.timestamp)
-                      )
-                      .map((entry, index) => (
-                      <div key={index} className="border-l-4 border-blue-500 pl-4 py-3 bg-gray-50 rounded-r-lg">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="font-semibold text-gray-900">
-                                {entry.action}
-                              </span>
-                              <span className="text-sm text-gray-500">
-                                by {entry.performedByName}
-                              </span>
-                            </div>
-                            
-                            {entry.details && Object.keys(entry.details).length > 0 && (
-                              <div className="text-sm text-gray-600 mb-2">
-                                {entry.action === 'NOTES_UPDATED' ? (
-                                  <div className="space-y-2">
-                                    <div className="bg-blue-50 p-3 rounded-lg">
-                                      <div className="font-medium text-blue-800 mb-1">
-                                        Notes {entry.details.changeType === 'added' ? 'Added' : 'Modified'}
-                                      </div>
-                                      {entry.details.oldNotes && (
-                                        <div className="text-xs text-gray-600 mb-1">
-                                          <span className="font-medium">Previous:</span> {entry.details.oldNotes}
-                                        </div>
-                                      )}
-                                      <div className="text-sm text-gray-800">
-                                        <span className="font-medium">New:</span> {entry.details.newNotes}
-                                      </div>
-                                      <div className="text-xs text-gray-500 mt-1">
-                                        {entry.details.characterCount} characters
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  Object.entries(entry.details).map(([key, value]) => (
-                                    <div key={key} className="mb-1">
-                                      <span className="font-medium">{key}:</span> {value}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            )}
-                            
-                            {entry.leadSnapshot && Object.keys(entry.leadSnapshot).length > 0 && (
-                              <div className="text-xs text-gray-500 bg-white p-2 rounded border">
-                                <div className="font-medium mb-1">Lead State:</div>
-                                {Object.entries(entry.leadSnapshot).map(([key, value]) => (
-                                  <div key={key}>
-                                    <span className="font-medium">{key}:</span> {value || 'N/A'}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="text-xs text-gray-400 ml-4">
-                            {(() => {
-                              try {
-                                if (!entry.timestamp) return 'Unknown time';
-                                
-                                let date;
-                                if (typeof entry.timestamp === 'string') {
-                                  date = new Date(entry.timestamp);
-                                } else if (typeof entry.timestamp === 'number') {
-                                  date = new Date(entry.timestamp > 1000000000000 ? entry.timestamp : entry.timestamp * 1000);
-                                } else {
-                                  date = new Date(entry.timestamp);
-                                }
-                                
-                                if (isNaN(date.getTime())) {
-                                  return 'Invalid date';
-                                }
-                                
-                                const now = new Date();
-                                const diffMs = now - date;
-                                const diffHours = diffMs / (1000 * 60 * 60);
-                                const diffDays = diffMs / (1000 * 60 * 60 * 24);
-                                
-                                if (diffHours < 1) {
-                                  const minutes = Math.floor(diffMs / (1000 * 60));
-                                  return minutes <= 0 ? 'Just now' : `${minutes} min ago`;
-                                } else if (diffHours < 24) {
-                                  return date.toLocaleTimeString([], { 
-                                    hour: '2-digit', 
-                                    minute: '2-digit', 
-                                    hour12: true 
-                                  });
-                                } else if (diffDays < 7) {
-                                  const days = Math.floor(diffDays);
-                                  return `${days} day${days === 1 ? '' : 's'} ago`;
-                                } else {
-                                  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { 
-                                    hour: '2-digit', 
-                                    minute: '2-digit', 
-                                    hour12: true 
-                                  });
-                                }
-                              } catch (error) {
-                                console.error('Error formatting timestamp:', error, 'Timestamp:', entry.timestamp);
-                                return 'Unknown time';
-                              }
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <div className="text-4xl mb-2">📋</div>
-                    <p>No booking history available</p>
-                    <p className="text-sm">History will appear here when actions are taken on this lead</p>
-                  </div>
-                )}
-              </div>
-
-              {/* 📱 Send Text Message Section */}
+              {/* 📨 Messages Conversation Section */}
               {!editing && (
                 <div className="card">
                   <div className="flex items-center justify-between">
                     <button
-                      onClick={() => setSmsExpanded(!smsExpanded)}
+                      onClick={() => setMessagesExpanded(!messagesExpanded)}
                       className="flex items-center space-x-2 flex-1 text-left hover:bg-gray-50 p-2 -m-2 rounded-md transition-colors"
                     >
                       <div className="flex items-center space-x-2">
-                        <FiMessageSquare className="h-5 w-5 text-blue-500" />
-                        <h3 className="text-lg font-medium text-gray-900">📱 Send Text Message</h3>
-                        {!smsExpanded && smsMessage && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Draft Ready
+                        <FiMessageSquare className="h-5 w-5 text-indigo-500" />
+                        <h3 className="text-lg font-medium text-gray-900">📨 Messages</h3>
+                        {conversationHistory.length > 0 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                            {conversationHistory.length} messages
                           </span>
                         )}
                       </div>
-                      {smsExpanded ? (
+                      {messagesExpanded ? (
                         <FiChevronUp className="h-5 w-5 text-gray-400" />
                       ) : (
                         <FiChevronDown className="h-5 w-5 text-gray-400" />
@@ -1476,193 +1257,14 @@ const LeadDetail = () => {
 
                     {/* Templates Management Link */}
                     <button
-                      onClick={() => navigate('/templates')}
-                      className="ml-3 px-3 py-2 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md flex items-center space-x-1 transition-colors border border-blue-200"
-                      title="Manage all templates - Create & edit Diary, Retargeting, Sale & Lead Details templates"
+                      onClick={() => navigate('/bookers-templates')}
+                      className="ml-3 px-3 py-2 text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-md flex items-center space-x-1 transition-colors border border-indigo-200"
+                      title="Manage Bookers Templates - Create & edit templates for Lead Details"
                     >
                       <FiSettings className="h-4 w-4" />
                       <span>Manage Templates</span>
                     </button>
                   </div>
-                  
-                  {smsExpanded && (
-                    <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">
-                      {/* Template Dropdown */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Choose Template
-                        </label>
-                        <select
-                          value={selectedTemplate}
-                          onChange={handleTemplateChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select a message template...</option>
-                          {Object.entries(categorizeTemplates(smsTemplates)).map(([cat, templates]) =>
-                            templates.length > 0 && (
-                              <optgroup key={cat} label={cat}>
-                                {templates.map(template => (
-                                  <option key={template._id} value={template._id}>
-                                    {template.name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Message Textarea */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Message
-                        </label>
-                        <textarea
-                          value={smsMessage}
-                          onChange={(e) => setSmsMessage(e.target.value)}
-                          rows="4"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Type your message here or select a template above..."
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Send to: {lead.phone}
-                        </p>
-                      </div>
-
-                      {/* Send Button */}
-                      <div className="flex justify-end">
-                        <button
-                          onClick={handleSendSMS}
-                          disabled={!smsMessage.trim()}
-                          className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <FiSend className="h-4 w-4" />
-                          <span>Send SMS</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 📧 Send Email Section */}
-              {!editing && lead.email && (
-                <div className="card">
-                  <button
-                    onClick={() => setEmailExpanded(!emailExpanded)}
-                    className="flex items-center justify-between w-full text-left hover:bg-gray-50 p-2 -m-2 rounded-md transition-colors"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <FiMail className="h-5 w-5 text-blue-500" />
-                      <h3 className="text-lg font-medium text-gray-900">📧 Send Email</h3>
-                      {!emailExpanded && emailMessage && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Draft Ready
-                        </span>
-                      )}
-                    </div>
-                    {emailExpanded ? (
-                      <FiChevronUp className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <FiChevronDown className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
-                  
-                  {emailExpanded && (
-                    <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">
-                      {/* Template Dropdown */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Choose Template
-                        </label>
-                        <select
-                          value={selectedEmailTemplate}
-                          onChange={handleEmailTemplateChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select an email template...</option>
-                          {Object.entries(categorizeTemplates(emailTemplates)).map(([cat, templates]) =>
-                            templates.length > 0 && (
-                              <optgroup key={cat} label={cat}>
-                                {templates.map(template => (
-                                  <option key={template._id} value={template._id}>
-                                    {template.name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Subject Input */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Subject
-                        </label>
-                        <input
-                          type="text"
-                          value={emailSubject}
-                          onChange={(e) => setEmailSubject(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-
-                      {/* Message Textarea */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Message
-                        </label>
-                        <textarea
-                          value={emailMessage}
-                          onChange={(e) => setEmailMessage(e.target.value)}
-                          rows="4"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Type your message here or select a template above..."
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Send to: {lead.email}
-                        </p>
-                      </div>
-
-                      {/* Send Button */}
-                      <div className="flex justify-end">
-                        <button
-                          onClick={handleSendEmail}
-                          disabled={!emailMessage.trim() || !emailSubject.trim()}
-                          className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <FiSend className="h-4 w-4" />
-                          <span>Send Email</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 📨 Messages Conversation Section */}
-              {!editing && (
-                <div className="card">
-                  <button
-                    onClick={() => setMessagesExpanded(!messagesExpanded)}
-                    className="flex items-center justify-between w-full text-left hover:bg-gray-50 p-2 -m-2 rounded-md transition-colors"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <FiMessageSquare className="h-5 w-5 text-indigo-500" />
-                      <h3 className="text-lg font-medium text-gray-900">📨 Messages</h3>
-                      {conversationHistory.length > 0 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                          {conversationHistory.length} messages
-                        </span>
-                      )}
-                    </div>
-                    {messagesExpanded ? (
-                      <FiChevronUp className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <FiChevronDown className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
                   
                   {messagesExpanded && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
@@ -1767,14 +1369,90 @@ const LeadDetail = () => {
                             </button>
                           </div>
                         </div>
+
+                        {/* Template Selection */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Choose Template (Optional)
+                          </label>
+                          <select
+                            value={replyMode === 'sms' ? selectedTemplate : selectedEmailTemplate}
+                            onChange={(e) => {
+                              const templateId = e.target.value;
+                              if (replyMode === 'sms') {
+                                setSelectedTemplate(templateId);
+                                if (templateId) {
+                                  const template = smsTemplates.find(t => t._id === templateId);
+                                  if (template) {
+                                    const msg = template.smsBody || template.message || '';
+                                    const processedMsg = replacePlaceholders(msg);
+                                    setNewReply(processedMsg);
+                                    // Auto-resize textarea after setting new content
+                                    setTimeout(() => {
+                                      const textarea = document.querySelector('textarea[placeholder*="reply"]');
+                                      autoResizeTextarea(textarea);
+                                    }, 0);
+                                  }
+                                }
+                              } else {
+                                setSelectedEmailTemplate(templateId);
+                                if (templateId) {
+                                  const template = emailTemplates.find(t => t._id === templateId);
+                                  if (template) {
+                                    const subj = template.subject || '';
+                                    const msg = template.emailBody || template.message || '';
+                                    const processedMsg = replacePlaceholders(subj) + '\n\n' + replacePlaceholders(msg);
+                                    setNewReply(processedMsg);
+                                    // Auto-resize textarea after setting new content
+                                    setTimeout(() => {
+                                      const textarea = document.querySelector('textarea[placeholder*="reply"]');
+                                      autoResizeTextarea(textarea);
+                                    }, 0);
+                                  }
+                                }
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="">Select a template...</option>
+                            {replyMode === 'sms' ? (
+                              Object.entries(categorizeTemplates(smsTemplates)).map(([cat, templates]) =>
+                                templates.length > 0 && (
+                                  <optgroup key={cat} label={cat}>
+                                    {templates.map(template => (
+                                      <option key={template._id} value={template._id}>
+                                        {template.name}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )
+                              )
+                            ) : (
+                              Object.entries(categorizeTemplates(emailTemplates)).map(([cat, templates]) =>
+                                templates.length > 0 && (
+                                  <optgroup key={cat} label={cat}>
+                                    {templates.map(template => (
+                                      <option key={template._id} value={template._id}>
+                                        {template.name}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )
+                              )
+                            )}
+                          </select>
+                        </div>
                         
                         <div className="flex space-x-2">
                           <textarea
                             value={newReply}
-                            onChange={(e) => setNewReply(e.target.value)}
+                            onChange={(e) => {
+                              setNewReply(e.target.value);
+                              autoResizeTextarea(e.target);
+                            }}
                             placeholder={`Type your ${replyMode === 'sms' ? 'SMS' : 'email'} reply...`}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                            rows="2"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none overflow-hidden"
+                            style={{ minHeight: '60px' }}
                             maxLength={replyMode === 'sms' ? 160 : 5000}
                           />
                           <button
@@ -1801,108 +1479,137 @@ const LeadDetail = () => {
 
               {/* Booking History */}
               <div className="card">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Booking History</h3>
-                <div className="space-y-3">
-                  {lead.bookingHistory && lead.bookingHistory.length > 0 ? (
-                    lead.bookingHistory
-                      // Filter out empty entries with no action, name, or timestamp
-                      .filter(history => 
-                        history.action && 
-                        history.action.trim() !== '' && 
-                        (history.performedByName || history.timestamp)
-                      )
-                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                      .map((history, index) => (
-                        <div
-                          key={history._id || index}
-                          className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-3">
-                              {/* Existing icons */}
-                              {history.action === 'INITIAL_BOOKING' && <FiCalendar className="h-5 w-5 text-blue-500" />}
-                              {history.action === 'RESCHEDULE' && <FiClock className="h-5 w-5 text-orange-500" />}
-                              {history.action === 'STATUS_CHANGE' && <FiActivity className="h-5 w-5 text-green-500" />}
-                              {history.action === 'CANCELLATION' && <FiX className="h-5 w-5 text-red-500" />}
-                              {/* New message icons */}
-                              {history.action === 'EMAIL_SENT' && <FiMail className="h-5 w-5 text-blue-600" />}
-                              {history.action === 'EMAIL_RECEIVED' && <FiMail className="h-5 w-5 text-green-600" />}
-                              {history.action === 'SMS_SENT' && <FiMessageSquare className="h-5 w-5 text-blue-400" />}
-                              {history.action === 'SMS_RECEIVED' && <FiMessageSquare className="h-5 w-5 text-green-400" />}
-                              <div>
-                                <h4 className="font-semibold text-gray-900">
-                                  {/* Existing actions */}
-                                  {history.action === 'INITIAL_BOOKING' && 'Initial Booking'}
-                                  {history.action === 'RESCHEDULE' && 'Appointment Rescheduled'}
-                                  {history.action === 'STATUS_CHANGE' && 'Status Updated'}
-                                  {history.action === 'CANCELLATION' && 'Appointment Cancelled'}
-                                  {/* New message actions */}
-                                  {history.action === 'EMAIL_SENT' && 'Email Sent'}
-                                  {history.action === 'EMAIL_RECEIVED' && 'Email Received'}
-                                  {history.action === 'SMS_SENT' && 'Text Sent'}
-                                  {history.action === 'SMS_RECEIVED' && 'Text Received'}
-                                </h4>
-                                <p className="text-sm text-gray-500">
-                                  {history.performedByName ? `by ${history.performedByName}` : ''}
-                                  {' • '}
-                                  {(() => {
-                                    try {
-                                      if (!history.timestamp) return 'Unknown time';
-                                      
-                                      let date;
-                                      if (typeof history.timestamp === 'string') {
-                                        date = new Date(history.timestamp);
-                                      } else if (typeof history.timestamp === 'number') {
-                                        date = new Date(history.timestamp > 1000000000000 ? history.timestamp : history.timestamp * 1000);
-                                      } else {
-                                        date = new Date(history.timestamp);
-                                      }
-                                      
-                                      if (isNaN(date.getTime())) {
-                                        return 'Invalid date';
-                                      }
-                                      
-                                      return date.toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                      });
-                                    } catch (error) {
-                                      console.error('Error formatting timestamp:', error, 'Timestamp:', history.timestamp);
-                                      return 'Unknown time';
-                                    }
-                                  })()}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          {/* History item content */}
-                          {(history.action === 'EMAIL_SENT' || history.action === 'EMAIL_RECEIVED') && (
-                            <div className="mt-2 text-sm">
-                              <div><span className="font-medium">Subject:</span> {history.details?.subject || '(No subject)'}</div>
-                                                              <div className="mt-1"><span className="font-medium">Message:</span> {(history.details?.body || history.details?.message || '')?.slice(0, 120) || ''}{(history.details?.body || history.details?.message || '')?.length > 120 ? '...' : ''}</div>
-                              <div className="mt-1 text-xs text-gray-400">{history.details?.direction === 'sent' ? 'To' : 'From'}: {history.performedByName}</div>
-                            </div>
-                          )}
-                          {(history.action === 'SMS_SENT' || history.action === 'SMS_RECEIVED') && (
-                            <div className="mt-2 text-sm">
-                              <div><span className="font-medium">Text:</span> {(history.details?.body || history.details?.message || '')?.slice(0, 120) || ''}{(history.details?.body || history.details?.message || '')?.length > 120 ? '...' : ''}</div>
-                              <div className="mt-1 text-xs text-gray-400">{history.details?.direction === 'sent' ? 'To' : 'From'}: {history.performedByName}</div>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <FiCalendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p>No booking history available</p>
-                      <p className="text-sm mt-1">Book an appointment to see history here</p>
-                    </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">📋 Booking History</h3>
+                  {historyLoading && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                   )}
                 </div>
+
+                {bookingHistory.length > 0 ? (
+                  <div className="space-y-4">
+                    {bookingHistory
+                      // Filter out empty entries with no action, name, or timestamp
+                      .filter(entry =>
+                        entry.action &&
+                        entry.action.trim() !== '' &&
+                        (entry.performedByName || entry.timestamp)
+                      )
+                      .map((entry, index) => (
+                      <div key={index} className="border-l-4 border-blue-500 pl-4 py-3 bg-gray-50 rounded-r-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="font-semibold text-gray-900">
+                                {entry.action}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                by {entry.performedByName}
+                              </span>
+                            </div>
+
+                            {entry.details && Object.keys(entry.details).length > 0 && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                {entry.action === 'NOTES_UPDATED' ? (
+                                  <div className="space-y-2">
+                                    <div className="bg-blue-50 p-3 rounded-lg">
+                                      <div className="font-medium text-blue-800 mb-1">
+                                        Notes {entry.details.changeType === 'added' ? 'Added' : 'Modified'}
+                                      </div>
+                                      {entry.details.oldNotes && (
+                                        <div className="text-xs text-gray-600 mb-1">
+                                          <span className="font-medium">Previous:</span> {entry.details.oldNotes}
+                                        </div>
+                                      )}
+                                      <div className="text-sm text-gray-800">
+                                        <span className="font-medium">New:</span> {entry.details.newNotes}
+                                      </div>
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {entry.details.characterCount} characters
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  Object.entries(entry.details).map(([key, value]) => (
+                                    <div key={key} className="mb-1">
+                                      <span className="font-medium">{key}:</span> {value}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+
+                            {entry.leadSnapshot && Object.keys(entry.leadSnapshot).length > 0 && (
+                              <div className="text-xs text-gray-500 bg-white p-2 rounded border">
+                                <div className="font-medium mb-1">Lead State:</div>
+                                {Object.entries(entry.leadSnapshot).map(([key, value]) => (
+                                  <div key={key}>
+                                    <span className="font-medium">{key}:</span> {value || 'N/A'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-gray-400 ml-4">
+                            {(() => {
+                              try {
+                                if (!entry.timestamp) return 'Unknown time';
+
+                                let date;
+                                if (typeof entry.timestamp === 'string') {
+                                  date = new Date(entry.timestamp);
+                                } else if (typeof entry.timestamp === 'number') {
+                                  date = new Date(entry.timestamp > 1000000000000 ? entry.timestamp : entry.timestamp * 1000);
+                                } else {
+                                  date = new Date(entry.timestamp);
+                                }
+
+                                if (isNaN(date.getTime())) {
+                                  return 'Invalid date';
+                                }
+
+                                const now = new Date();
+                                const diffMs = now - date;
+                                const diffHours = diffMs / (1000 * 60 * 60);
+                                const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+                                if (diffHours < 1) {
+                                  const minutes = Math.floor(diffMs / (1000 * 60));
+                                  return minutes <= 0 ? 'Just now' : `${minutes} min ago`;
+                                } else if (diffHours < 24) {
+                                  return date.toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  });
+                                } else if (diffDays < 7) {
+                                  const days = Math.floor(diffDays);
+                                  return `${days} day${days === 1 ? '' : 's'} ago`;
+                                } else {
+                                  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  });
+                                }
+                              } catch (error) {
+                                console.error('Error formatting timestamp:', error, 'Timestamp:', entry.timestamp);
+                                return 'Unknown time';
+                              }
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="text-4xl mb-2">📋</div>
+                    <p>No booking history available</p>
+                    <p className="text-sm">History will appear here when actions are taken on this lead</p>
+                  </div>
+                )}
               </div>
             </div>
 

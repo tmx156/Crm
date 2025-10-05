@@ -50,6 +50,7 @@ const smsRoutes = require('./routes/sms');
 const legacyRoutes = require('./routes/legacy');
 const bookerAnalyticsRoutes = require('./routes/booker-analytics');
 const emailTestRoutes = require('./routes/email-test');
+const usersPublicRoutes = require('./routes/usersPublic');
 // TEMPORARILY DISABLED: const scheduler = require('./utils/scheduler');
 const { startEmailPoller } = require('./utils/emailPoller');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
@@ -405,6 +406,7 @@ app.use('/api/*', (req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/users-public', usersPublicRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/sales', salesRoutes);

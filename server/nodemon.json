@@ -15,7 +15,7 @@
     ".git/",
     "README.md"
   ],
-  "ext": "js,json",
+  "ext": "js",
   "delay": 2500,
   "verbose": false,
   "restartable": "rs",

@@ -13,12 +13,69 @@ const supabase = createClient(config.supabase.url, config.supabase.anonKey);
 
 // Import SMS service for sending
 const { sendSMS } = require('../utils/smsService');
+const crypto = require('crypto');
+
+// Import addBookingHistoryEntry function
+const addBookingHistoryEntry = async (leadId, action, userId, userName, details, leadData) => {
+  try {
+    const historyEntry = {
+      action,
+      performed_by: userId,
+      performed_by_name: userName,
+      details: details || {},
+      lead_snapshot: leadData,
+      timestamp: new Date().toISOString()
+    };
+
+    // Get current booking history
+    const { data: currentLead, error: fetchError } = await supabase
+      .from('leads')
+      .select('booking_history')
+      .eq('id', leadId)
+      .single();
+
+    if (fetchError) {
+      console.error('❌ Error fetching current booking history:', fetchError);
+      return null;
+    }
+
+    const currentHistory = currentLead.booking_history || [];
+    const updatedHistory = [...currentHistory, historyEntry];
+
+    // Update the lead with new booking history
+    const { error: updateError } = await supabase
+      .from('leads')
+      .update({ booking_history: updatedHistory })
+      .eq('id', leadId);
+
+    if (updateError) {
+      console.error('❌ Error updating booking history:', updateError);
+      throw updateError;
+    }
+
+    console.log(`✅ Booking history entry added to lead ${leadId}`);
+    return updatedHistory.length - 1;
+  } catch (error) {
+    console.error('❌ Error adding booking history entry:', error);
+    return null;
+  }
+};
 // @route   GET /api/messages-list
 // @desc    Get all SMS and email messages for leads (based on user role)
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
     const { user } = req;
+    // Query controls to cap egress
+    const rawSince = req.query.since;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const MAX_LIMIT = 100; // Reduced from 200 to optimize egress usage
+    const validatedLimit = Math.min(Number.isFinite(rawLimit) ? rawLimit : MAX_LIMIT, MAX_LIMIT);
+    const sinceIso = (() => {
+      try { return rawSince ? new Date(rawSince).toISOString() : null; } catch { return null; }
+    })();
+    const defaultSinceIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(); // last 3 days by default (reduced from 7 for egress)
+    const createdAfter = sinceIso || defaultSinceIso;
 
     const messagesData = [];
     const seenKeys = new Set();
@@ -34,11 +91,13 @@ router.get('/', auth, async (req, res) => {
     try {
       const isAdmin = user.role === 'admin';
       
-      // First get messages
+      // First get messages (bounded by time window and limit, trimmed columns)
       const { data: messageRows, error: messageError } = await supabase
         .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('id, lead_id, type, content, sms_body, subject, sent_by, sent_by_name, status, email_status, read_status, delivery_status, provider_message_id, delivery_provider, delivery_attempts, sent_at, created_at')
+        .gte('created_at', createdAfter)
+        .order('created_at', { ascending: false })
+        .limit(validatedLimit);
 
       if (messageError) {
         console.error('Error fetching messages:', messageError);
@@ -174,7 +233,18 @@ router.get('/', auth, async (req, res) => {
 
     // Sort by timestamp (most recent first)
     deduped.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Compute cursors for incremental polling
+    const latestCreatedAt = (() => {
+      try {
+        return (messagesData[0]?.timestamp) ? new Date(messagesData[0].timestamp).toISOString() : new Date().toISOString();
+      } catch { return new Date().toISOString(); }
+    })();
     
+    // Filter for unread messages if requested
+    const unreadOnly = req.query.unread === 'true' || req.query.unread === true;
+    const filteredMessages = unreadOnly ? deduped.filter(m => !m.isRead && m.direction === 'received') : deduped;
+
     // Get summary stats
     const stats = {
       totalMessages: deduped.length,
@@ -185,13 +255,20 @@ router.get('/', auth, async (req, res) => {
       receivedCount: deduped.filter(m => m.direction === 'received').length
     };
 
+    console.log(`📨 Messages API: Returning ${filteredMessages.length} messages (unreadOnly: ${unreadOnly}, total: ${deduped.length})`);
+
     // No need to close connection with Supabase
 
     res.json({
-      messages: deduped,
+      messages: filteredMessages,
       stats: stats,
       userRole: user.role,
-      userName: user.name
+      userName: user.name,
+      meta: {
+        since: createdAfter,
+        limit: validatedLimit,
+        latestCreatedAt
+      }
     });
     
   } catch (error) {
@@ -1080,6 +1157,222 @@ router.post('/cleanup-orphaned', auth, async (req, res) => {
   } catch (error) {
     console.error('❌ Unexpected error during cleanup:', error);
     return res.status(500).json({ message: 'Server error during cleanup', error: error.message });
+  }
+});
+
+// @route   POST /api/messages-list/reply
+// @desc    Send a reply to a message (SMS or Email)
+// @access  Private
+router.post('/reply', auth, async (req, res) => {
+  try {
+    const { messageId, reply, replyType } = req.body;
+    const { user } = req;
+
+    if (!messageId || !reply || !replyType) {
+      return res.status(400).json({
+        message: 'messageId, reply, and replyType are required'
+      });
+    }
+
+    if (!['sms', 'email'].includes(replyType)) {
+      return res.status(400).json({
+        message: 'replyType must be either "sms" or "email"'
+      });
+    }
+
+    console.log(`📤 ${user.name} sending ${replyType} reply to message ${messageId}`);
+
+    // First, get the original message to find the lead
+    let leadId = null;
+    let leadData = null;
+    let originalMessage = null;
+
+    // Try to find the message in the messages table first
+    const { data: messageData, error: messageError } = await supabase
+      .from('messages')
+      .select('lead_id, type, sms_body, content, subject')
+      .eq('id', messageId)
+      .single();
+
+    if (messageData) {
+      leadId = messageData.lead_id;
+      originalMessage = messageData;
+      console.log(`✅ Found message in messages table: lead ${leadId}`);
+    } else {
+      // Parse composite messageId format for legacy messages
+      const parts = messageId.split('_');
+      if (parts.length >= 2) {
+        leadId = parts[0];
+        console.log(`✅ Parsed legacy message ID: lead ${leadId}`);
+      } else {
+        return res.status(400).json({
+          message: 'Invalid message ID format'
+        });
+      }
+    }
+
+    // Get lead data
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+
+    if (!lead) {
+      return res.status(404).json({
+        message: 'Lead not found'
+      });
+    }
+
+    leadData = lead;
+    console.log(`📋 Replying to lead: ${leadData.name} (${leadData.phone})`);
+
+    // Send the reply
+    let result = null;
+    let messageRecord = null;
+
+    if (replyType === 'sms') {
+      if (!leadData.phone) {
+        return res.status(400).json({
+          message: 'Lead has no phone number for SMS reply'
+        });
+      }
+
+      // Send SMS using the SMS service
+      result = await sendSMS(leadData.phone, reply);
+
+      if (!result.success) {
+        return res.status(500).json({
+          message: 'Failed to send SMS',
+          error: result.error
+        });
+      }
+
+      // Create message record for SMS
+      messageRecord = {
+        id: result.messageId || crypto.randomUUID(),
+        lead_id: leadId,
+        type: 'sms',
+        direction: 'sent',
+        sms_body: reply,
+        content: reply,
+        sent_by: user.id,
+        sent_by_name: user.name,
+        status: 'sent',
+        delivery_status: result.status || 'sent',
+        provider_message_id: result.messageId,
+        delivery_provider: result.provider || 'bulksms',
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        read_status: true // Sent messages are marked as read
+      };
+
+    } else if (replyType === 'email') {
+      if (!leadData.email) {
+        return res.status(400).json({
+          message: 'Lead has no email address for email reply'
+        });
+      }
+
+      // Import email service
+      const { sendEmail } = require('../utils/emailService');
+
+      // Send email
+      result = await sendEmail(
+        leadData.email,
+        `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
+        reply,
+        reply
+      );
+
+      if (!result.success) {
+        return res.status(500).json({
+          message: 'Failed to send email',
+          error: result.error
+        });
+      }
+
+      // Create message record for Email
+      messageRecord = {
+        id: crypto.randomUUID(),
+        lead_id: leadId,
+        type: 'email',
+        direction: 'sent',
+        email_body: reply,
+        content: reply,
+        subject: `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
+        sent_by: user.id,
+        sent_by_name: user.name,
+        status: 'sent',
+        email_status: 'sent',
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        read_status: true // Sent messages are marked as read
+      };
+    }
+
+    // Save the sent message to the messages table
+    const { error: insertError } = await supabase
+      .from('messages')
+      .insert(messageRecord);
+
+    if (insertError) {
+      console.error('❌ Error saving sent message:', insertError);
+      // Don't fail the request if we can't save to messages table
+      console.warn('⚠️ Reply sent successfully but failed to save to messages table');
+    } else {
+      console.log(`✅ Sent message saved to messages table: ${messageRecord.id}`);
+    }
+
+    // Add to booking history for tracking
+    const historyDetails = {
+      channel: replyType,
+      body: reply,
+      to: replyType === 'sms' ? leadData.phone : leadData.email,
+      sent_by: user.name,
+      message_id: messageRecord.id,
+      reply_to: messageId
+    };
+
+    await addBookingHistoryEntry(
+      leadId,
+      `${replyType.toUpperCase()}_SENT`,
+      user.id,
+      user.name,
+      historyDetails,
+      leadData
+    );
+
+    // Emit socket event for real-time updates
+    if (req.app.get('io')) {
+      req.app.get('io').emit('message_sent', {
+        messageId: messageRecord.id,
+        leadId: leadId,
+        leadName: leadData.name,
+        type: replyType,
+        content: reply,
+        sentBy: user.name,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`📡 Emitted message_sent event`);
+    }
+
+    res.json({
+      success: true,
+      message: `${replyType.toUpperCase()} reply sent successfully`,
+      messageId: messageRecord.id,
+      leadId: leadId,
+      leadName: leadData.name,
+      type: replyType,
+      deliveryStatus: result.status || 'sent'
+    });
+
+  } catch (error) {
+    console.error('❌ Error sending reply:', error);
+    res.status(500).json({
+      message: 'Server error while sending reply',
+      error: error.message
+    });
   }
 });
 

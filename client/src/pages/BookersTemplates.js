@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSave, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSave, FiX, FiExternalLink } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const BookersTemplates = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -31,13 +33,14 @@ const BookersTemplates = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('/api/templates', {
+      const response = await fetch('/api/templates?bookersOnly=true', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       if (response.ok) {
         const data = await response.json();
+        // Filter for bookers template types
         setTemplates(data.filter(t => [
           'booking_confirmation',
           'appointment_reminder',
@@ -201,19 +204,28 @@ const BookersTemplates = () => {
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Bookers Templates</h1>
-              <p className="text-gray-600 mt-2">Manage SMS and Email templates for Bookers (Lead Details)</p>
+              <h1 className="text-3xl font-bold text-gray-900">Your Templates</h1>
+              <p className="text-gray-600 mt-2">Create and manage your personal SMS and Email templates for Lead Details</p>
             </div>
-            <button
-              onClick={() => {
-                setEditingTemplate(null);
-                resetForm();
-                setShowModal(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 shadow"
-            >
-              <FiPlus /> New Template
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/templates')}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 shadow"
+                title="View all other templates (Diary, Retargeting, Sale)"
+              >
+                <FiExternalLink /> All Templates
+              </button>
+              <button
+                onClick={() => {
+                  setEditingTemplate(null);
+                  resetForm();
+                  setShowModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 shadow"
+              >
+                <FiPlus /> New Template
+              </button>
+            </div>
           </div>
         </div>
 
@@ -222,7 +234,11 @@ const BookersTemplates = () => {
           {loading ? (
             <div>Loading...</div>
           ) : templates.length === 0 ? (
-            <div className="col-span-full text-center text-gray-500">No bookers templates found.</div>
+            <div className="col-span-full text-center py-12">
+              <div className="text-gray-400 text-5xl mb-4">📝</div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">No templates yet</h3>
+              <p className="text-gray-500">Create your first template to get started!</p>
+            </div>
           ) : (
             templates.map((template) => (
               <div key={template.id} className="bg-white rounded-lg shadow p-6 flex flex-col gap-4">
@@ -249,7 +265,7 @@ const BookersTemplates = () => {
               <div className="p-6 border-b">
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold">
-                    {editingTemplate ? 'Edit Bookers Template' : 'New Bookers Template'}
+                    {editingTemplate ? 'Edit Your Template' : 'Create New Template'}
                   </h2>
                   <button
                     onClick={() => setShowModal(false)}

@@ -211,11 +211,18 @@ router.get('/', auth, async (req, res) => {
       const now = new Date();
       let startDate, endDate;
 
+      // Use UK timezone for 'today'
+      const ukNow = new Date(now.toLocaleString('en-GB', { timeZone: 'Europe/London' }));
       switch (dateRange) {
-        case 'today':
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          endDate = new Date(now.setHours(23, 59, 59, 999));
+        case 'today': {
+          // Get start and end of today in UK time
+          const ukYear = ukNow.getFullYear();
+          const ukMonth = ukNow.getMonth();
+          const ukDate = ukNow.getDate();
+          startDate = new Date(Date.UTC(ukYear, ukMonth, ukDate, 0, 0, 0));
+          endDate = new Date(Date.UTC(ukYear, ukMonth, ukDate, 23, 59, 59, 999));
           break;
+        }
         case 'this_week':
           const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
           startDate = new Date(startOfWeek.setHours(0, 0, 0, 0));

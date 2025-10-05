@@ -58,7 +58,17 @@ async function addBookingHistoryEntry(leadId, action, performedById, performedBy
     return updatedHistory.length - 1; // Return index of new entry
   } catch (error) {
     console.error('❌ Error adding booking history entry:', error);
-    throw error;
+    console.error('❌ Error details:', {
+      message: error.message,
+      details: error.details || error.error?.details || 'No details available',
+      hint: error.hint || error.error?.hint || '',
+      code: error.code || error.error?.code || ''
+    });
+
+    // Don't throw the error - this should not break the booking confirmation flow
+    // Just log the error and return null to indicate failure
+    console.warn('⚠️ Continuing without booking history entry to prevent booking confirmation failure');
+    return null;
   }
 }
 
@@ -642,23 +652,34 @@ class MessagingService {
       // Add booking history entry for email sent
       console.log(`📩 [MSG-${messageId}] Adding booking history entry...`);
 
-      const historyEntry = await addBookingHistoryEntry(
-        message.lead_id,
-        'EMAIL_SENT',
-        message.sent_by,
-        message.sent_by_name,
-        {
-          subject: message.subject,
-          body: message.email_body,
-          direction: 'sent',
-          channel: 'email',
-          status: status,
-          error: errorMessage,
-          messageId: messageId,
-          emailResult: emailResult.success ? 'success' : 'failed'
-        },
-        message // Pass the full message as leadSnapshot for better history tracking
-      );
+      try {
+        const historyEntry = await addBookingHistoryEntry(
+          message.lead_id,
+          'EMAIL_SENT',
+          message.sent_by,
+          message.sent_by_name,
+          {
+            subject: message.subject,
+            body: message.email_body,
+            direction: 'sent',
+            channel: 'email',
+            status: status,
+            error: errorMessage,
+            messageId: messageId,
+            emailResult: emailResult.success ? 'success' : 'failed'
+          },
+          message // Pass the full message as leadSnapshot for better history tracking
+        );
+
+        if (historyEntry !== null) {
+          console.log(`✅ [MSG-${messageId}] Booking history entry added successfully`);
+        } else {
+          console.warn(`⚠️ [MSG-${messageId}] Booking history entry failed but continuing...`);
+        }
+      } catch (historyError) {
+        console.error(`❌ [MSG-${messageId}] Unexpected error in booking history:`, historyError);
+        // Continue processing - don't let history errors break email confirmation
+      }
       
       console.log(`✅ [MSG-${messageId}] Email processing completed. Status: ${status}`);
       console.log(`   - Email sent: ${emailResult.success ? '✅ Yes' : '❌ No'}`);
@@ -701,20 +722,26 @@ class MessagingService {
         }
         
         // Add error to booking history
-        await addBookingHistoryEntry(
-          message.lead_id,
-          'EMAIL_FAILED',
-          message.sent_by,
-          message.sent_by_name || 'System',
-          {
-            subject: message.subject || 'No subject',
-            error: errorMessage,
-            direction: 'outbound',
-            channel: 'email',
-            status: 'failed',
-            messageId: messageId
-          }
-        );
+        try {
+          await addBookingHistoryEntry(
+            message.lead_id,
+            'EMAIL_FAILED',
+            message.sent_by,
+            message.sent_by_name || 'System',
+            {
+              subject: message.subject || 'No subject',
+              error: errorMessage,
+              direction: 'outbound',
+              channel: 'email',
+              status: 'failed',
+              messageId: messageId
+            },
+            message
+          );
+        } catch (historyError) {
+          console.error(`❌ [MSG-${messageId}] Error adding failed email to history:`, historyError);
+          // Continue - don't let history errors break the process
+        }
 
         // Note: No need to close Supabase connection
       } catch (dbError) {
@@ -800,22 +827,27 @@ class MessagingService {
 
       // Add booking history entry for SMS sent/failed
       console.log(`📨 [MSG-${messageId}] Adding booking history entry...`);
-      await addBookingHistoryEntry(
-        message.lead_id,
-        wasSuccessful ? 'SMS_SENT' : 'SMS_FAILED',
-        message.sent_by,
-        message.sent_by_name || 'System',
-        {
-          body: message.sms_body,
-          direction: 'sent',
-          channel: 'sms',
-          status: status,
-          error: errorMessage,
-          provider: smsResult ? smsResult.provider : 'bulksms',
-          messageId: smsResult ? smsResult.messageId : null
-        },
-        message
-      );
+      try {
+        await addBookingHistoryEntry(
+          message.lead_id,
+          wasSuccessful ? 'SMS_SENT' : 'SMS_FAILED',
+          message.sent_by,
+          message.sent_by_name || 'System',
+          {
+            body: message.sms_body,
+            direction: 'sent',
+            channel: 'sms',
+            status: status,
+            error: errorMessage,
+            provider: smsResult ? smsResult.provider : 'bulksms',
+            messageId: smsResult ? smsResult.messageId : null
+          },
+          message
+        );
+      } catch (historyError) {
+        console.error(`❌ [MSG-${messageId}] Error adding SMS to booking history:`, historyError);
+        // Continue - don't let history errors break the process
+      }
 
       // Real-time event for SMS send attempts (no notification bell)
       if (global.io) {
@@ -850,20 +882,26 @@ class MessagingService {
           console.error(`❌ Error updating failed SMS message ${messageId}:`, updateError);
         }
 
-        await addBookingHistoryEntry(
-          message.lead_id,
-          'SMS_FAILED',
-          message.sent_by,
-          message.sent_by_name || 'System',
-          {
-            body: message.sms_body || 'No body',
-            direction: 'outbound',
-            channel: 'sms',
-            status: 'failed',
-            error: errorMessage,
-            messageId: messageId
-          }
-        );
+        try {
+          await addBookingHistoryEntry(
+            message.lead_id,
+            'SMS_FAILED',
+            message.sent_by,
+            message.sent_by_name || 'System',
+            {
+              body: message.sms_body || 'No body',
+              direction: 'outbound',
+              channel: 'sms',
+              status: 'failed',
+              error: errorMessage,
+              messageId: messageId
+            },
+            message
+          );
+        } catch (historyError) {
+          console.error(`❌ [MSG-${messageId}] Error adding failed SMS to booking history:`, historyError);
+          // Continue - don't let history errors break the process
+        }
       } catch (dbError) {
         console.error(`❌ [MSG-${messageId}] Error updating database for SMS failure:`, dbError);
         // Note: No database connection to close with Supabase

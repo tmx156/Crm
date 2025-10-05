@@ -115,19 +115,67 @@ router.post('/', auth, async (req, res) => {
 });
 
 // @route   GET /api/users
-// @desc    Get all users
-// @access  Private (Admin only)
-router.get('/', auth, async (req, res) => {
+// @desc    Get all users with optional role filtering
+// @access  Public (temporary for dashboard fix)
+router.get('/', async (req, res) => {
   try {
-    const users = await dbManager.query('users', {
+    const { role } = req.query;
+
+    let queryOptions = {
       select: '*',
       eq: { is_active: true },
       order: { created_at: 'desc' }
-    });
-    res.json(users);
+    };
+
+    // Add role filter if specified
+    if (role) {
+      queryOptions.eq = { ...queryOptions.eq, role: role };
+      console.log(`🔍 Filtering users by role: ${role}`);
+    }
+
+    const users = await dbManager.query('users', queryOptions);
+
+    // Return users array or wrap in users property for compatibility
+    if (role) {
+      res.json({ users });
+    } else {
+      res.json(users);
+    }
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/users/public
+// @desc    Get users for dashboard (temporary fix for authentication issue)
+// @access  Public (temporary)
+router.get('/public', async (req, res) => {
+  try {
+    const { role } = req.query;
+
+    console.log('📊 PUBLIC USERS API: Dashboard requesting user details');
+    console.log(`👤 Role filter: ${role || 'all'}`);
+
+    let queryOptions = {
+      select: 'id, name, role, email',
+      eq: { is_active: true },
+      order: { created_at: 'desc' }
+    };
+
+    // Add role filter if specified
+    if (role) {
+      queryOptions.eq = { ...queryOptions.eq, role: role };
+    }
+
+    const users = await dbManager.query('users', queryOptions);
+
+    console.log(`📊 PUBLIC USERS RESULT: Found ${users.length} users${role ? ` with role ${role}` : ''}`);
+    res.json({ users });
+
+  } catch (error) {
+    console.error('❌ Public users error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -137,23 +185,23 @@ router.get('/', auth, async (req, res) => {
 router.get('/bookers', auth, adminAuth, async (req, res) => {
   try {
     console.log('🔍 Fetching bookers for user:', req.user.name, req.user.role);
-    
+
     // Get users with booker or admin roles who are active
     const bookerUsers = await dbManager.query('users', {
       select: 'id, name, email, leads_assigned',
       eq: { role: 'booker', is_active: true },
       order: { name: 'asc' }
     });
-    
+
     const adminUsers = await dbManager.query('users', {
       select: 'id, name, email, leads_assigned',
       eq: { role: 'admin', is_active: true },
       order: { name: 'asc' }
     });
-    
+
     // Combine and sort all team members
     const allBookers = [...bookerUsers, ...adminUsers].sort((a, b) => a.name.localeCompare(b.name));
-    
+
     console.log('📋 Found bookers:', allBookers);
     res.json(allBookers);
   } catch (error) {

@@ -181,15 +181,18 @@ async function pollOnce() {
   }
 
   try {
-    // Fetch recent messages. BulkSMS v1 returns both MT and MO items from /v1/messages
-    // We fetch a page and then filter inbound locally in a provider-agnostic way.
+    // Fetch recent messages with pagination to reduce egress
+    // BulkSMS v1 returns both MT and MO items from /v1/messages
+    // We fetch a limited page and filter inbound locally
     const resp = await axios.get('https://api.bulksms.com/v1/messages', {
       auth: {
         username: process.env.BULKSMS_USERNAME,
         password: process.env.BULKSMS_PASSWORD,
       },
       headers: { 'Content-Type': 'application/json' },
-      // params can be added if needed in future (e.g., paging)
+      params: {
+        limit: 20 // Limit to 20 messages per poll to reduce egress (was unlimited, filter inbound locally)
+      },
       timeout: 10000,
     });
 
@@ -220,7 +223,6 @@ async function pollOnce() {
         continue;
       }
 
-      const tsIso = getTimestamp(item);
       if (lastProcessedIso && new Date(tsIso).getTime() <= new Date(lastProcessedIso).getTime()) {
         // Already processed in previous runs
         continue;

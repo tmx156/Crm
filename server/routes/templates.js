@@ -92,15 +92,25 @@ router.post('/:id/attachments', auth, upload.single('file'), async (req, res) =>
 });
 
 // @route   GET /api/templates
-// @desc    Get all templates
-// @access  Private (Admin only)
+// @desc    Get all templates (admin sees all, bookers see only their own)
+// @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const { type, category, isActive } = req.query;
+    const { type, category, isActive, bookersOnly } = req.query;
 
     let query = supabase
       .from('templates')
       .select('*');
+
+    // If bookersOnly flag is set, everyone (including admin) sees only their own templates
+    if (bookersOnly === 'true') {
+      // All users see only their own templates
+      query = query.eq('user_id', req.user.id);
+    } else if (req.user.role !== 'admin') {
+      // Non-admin users always see only their own templates
+      query = query.eq('user_id', req.user.id);
+    }
+    // Admin without bookersOnly flag sees all templates (for /templates admin page)
 
     // Apply filters
     if (type) {
@@ -233,6 +243,7 @@ router.post('/', auth, async (req, res) => {
       category: category || null,
       is_active: isActive !== undefined ? isActive : true,
       is_default: false,
+      user_id: req.user.id, // All users (including admin) have individual templates
       created_by: req.user.id,
       send_email: sendEmail !== undefined ? sendEmail : true,
       send_sms: sendSMS !== undefined ? sendSMS : false,
@@ -307,7 +318,7 @@ router.put('/:id', auth, async (req, res) => {
     // Check if template exists
     const { data: existingTemplate, error: checkError } = await supabase
       .from('templates')
-      .select('id, name')
+      .select('id, name, user_id')
       .eq('id', req.params.id)
       .single();
 
@@ -317,6 +328,11 @@ router.put('/:id', auth, async (req, res) => {
         return res.status(404).json({ message: 'Template not found' });
       }
       return res.status(500).json({ message: 'Server error' });
+    }
+
+    // Check ownership: non-admin users can only edit their own templates
+    if (req.user.role !== 'admin' && existingTemplate.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only edit your own templates' });
     }
 
     // Check if template name already exists (excluding current template)
@@ -410,9 +426,29 @@ router.put('/:id', auth, async (req, res) => {
 
 // @route   DELETE /api/templates/:id
 // @desc    Delete template
-// @access  Private (Admin only)
+// @access  Private
 router.delete('/:id', auth, async (req, res) => {
   try {
+    // Check if template exists and get ownership info
+    const { data: existingTemplate, error: checkError } = await supabase
+      .from('templates')
+      .select('id, user_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (checkError) {
+      console.error('Error checking existing template:', checkError);
+      if (checkError.code === 'PGRST116') {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    // Check ownership: non-admin users can only delete their own templates
+    if (req.user.role !== 'admin' && existingTemplate.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only delete your own templates' });
+    }
+
     // Delete template from Supabase
     const { error: deleteError } = await supabase
       .from('templates')
