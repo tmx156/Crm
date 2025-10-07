@@ -70,11 +70,11 @@ const Dashboard = () => {
       const usersRes = await axios.get('/api/users');
       const users = usersRes.data || [];
 
-      // Get today's leads - filter by updated_at to show bookings MADE today
+      // Get today's leads - filter by created_at to show bookings MADE today
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          updated_at_start: today + 'T00:00:00.000Z',
-          updated_at_end: today + 'T23:59:59.999Z'
+          created_at_start: today + 'T00:00:00.000Z',
+          created_at_end: today + 'T23:59:59.999Z'
         }
       });
       const leads = leadsRes.data?.leads || [];

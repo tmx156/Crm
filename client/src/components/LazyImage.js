@@ -104,6 +104,7 @@ const LazyImage = ({
           onLoad={handleLoad}
           onError={handleError}
           loading={lazy ? "lazy" : "eager"}
+          referrerPolicy="no-referrer"
           {...props}
         />
       )}
