@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+// Fixed: Added referrerPolicy to bypass hotlink protection from external image hosts
 const LazyImage = ({ 
   src, 
   alt, 
