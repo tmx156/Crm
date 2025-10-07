@@ -2906,9 +2906,12 @@ router.post('/upload-process', auth, adminAuth, async (req, res) => {
 
         // Create clean lead object - always as 'New' status to prevent diary updates
         // Map both imageUrl and image_url to image_url
-        let finalImageUrl = '';
-        if (mappedData.image_url) finalImageUrl = mappedData.image_url.toString().trim();
-        else if (mappedData.imageUrl) finalImageUrl = mappedData.imageUrl.toString().trim();
+        let finalImageUrl = null;  // Default to null instead of empty string
+        if (mappedData.image_url && mappedData.image_url.toString().trim() !== '') {
+          finalImageUrl = mappedData.image_url.toString().trim();
+        } else if (mappedData.imageUrl && mappedData.imageUrl.toString().trim() !== '') {
+          finalImageUrl = mappedData.imageUrl.toString().trim();
+        }
 
         const cleanLead = {
           name: mappedData.name ? mappedData.name.toString().trim() : `Lead ${rowNumber}`,
