@@ -1720,7 +1720,7 @@ const Calendar = () => {
             meridiem: 'short'
           }}
           slotMinTime="10:00:00"
-          slotMaxTime="17:45:00"
+          slotMaxTime="18:15:00"
           slotDuration="00:15:00"
           slotLabelInterval="00:15:00"
           slotLabelFormat={{
@@ -1732,7 +1732,7 @@ const Calendar = () => {
           snapDuration="00:15:00"
           selectConstraint={{
             start: '10:00',
-            end: '17:45'
+            end: '18:15'
           }}
           timeZone='local'
           eventMaxStack={5}

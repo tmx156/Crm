@@ -64,17 +64,38 @@ const Dashboard = () => {
   // Fetch booker activity
   const fetchBookerActivity = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Get UK date for filtering bookings made TODAY in UK time
+      const ukTz = 'Europe/London';
+
+      // Get current UK time and extract just the date
+      const now = new Date();
+      const ukNow = toZonedTime(now, ukTz);
+      const todayUK = format(ukNow, 'yyyy-MM-dd', { timeZone: ukTz });
+
+      // Create start and end of day in UK local time (not UTC)
+      // Then let the timezone library convert to UTC properly
+      const startOfDayUK = new Date(todayUK + 'T00:00:00');
+      const endOfDayUK = new Date(todayUK + 'T23:59:59.999');
+
+      // Get timezone offset for UK (handles BST/GMT automatically)
+      const offsetMinutes = -startOfDayUK.getTimezoneOffset();
+
+      // Adjust to UTC by subtracting the offset
+      const startUTC = new Date(startOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
+      const endUTC = new Date(endOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
+
+      console.log('📅 Dashboard querying bookings for UK date:', todayUK);
+      console.log('📅 UTC range:', startUTC, 'to', endUTC);
 
       // Get all users
       const usersRes = await axios.get('/api/users');
       const users = usersRes.data || [];
 
-      // Get today's leads - filter by created_at to show bookings MADE today
+      // Get today's leads - filter by created_at to show bookings MADE today (UK TIME)
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          created_at_start: today + 'T00:00:00.000Z',
-          created_at_end: today + 'T23:59:59.999Z'
+          created_at_start: startUTC,
+          created_at_end: endUTC
         }
       });
       const leads = leadsRes.data?.leads || [];
@@ -104,7 +125,7 @@ const Dashboard = () => {
       // Group by booker with sales
       const bookerStats = {};
 
-      // Process bookings
+      // Process bookings - show ONLY "Booked" status bookings created today
       leads.forEach(lead => {
         const bookerId = lead.booker_id;
         const status = (lead.status || '').toLowerCase();
@@ -312,11 +333,23 @@ const Dashboard = () => {
   // Fetch recent activity
   const fetchRecentActivity = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Use UK timezone for "today"
+      const ukTz = 'Europe/London';
+      const now = new Date();
+      const ukNow = toZonedTime(now, ukTz);
+      const todayUK = format(ukNow, 'yyyy-MM-dd', { timeZone: ukTz });
+
+      // Create UK time range and convert to UTC
+      const startOfDayUK = new Date(todayUK + 'T00:00:00');
+      const endOfDayUK = new Date(todayUK + 'T23:59:59.999');
+      const offsetMinutes = -startOfDayUK.getTimezoneOffset();
+      const startUTC = new Date(startOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
+      const endUTC = new Date(endOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
+
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          updated_at_start: today + 'T00:00:00.000Z',
-          updated_at_end: today + 'T23:59:59.999Z'
+          updated_at_start: startUTC,
+          updated_at_end: endUTC
         }
       });
       const leads = leadsRes.data?.leads || [];
@@ -340,9 +373,9 @@ const Dashboard = () => {
         }
       }
 
-      // Create activity items from bookings
+      // Create activity items from bookings - show ONLY "Booked" status
       const bookingActivities = leads
-        .filter(lead => lead.status === 'booked')
+        .filter(lead => lead.booker_id && lead.status?.toLowerCase() === 'booked')
         .map(lead => ({
           id: lead.id,
           type: 'booking',
@@ -648,7 +681,7 @@ const Dashboard = () => {
                                   {booking.status}
                                 </span>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  {new Date(booking.dateBooked).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit', year: 'numeric' })}
+                                  {new Date(booking.dateBooked).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                 </p>
                               </div>
                             </div>
@@ -1084,7 +1117,7 @@ const Dashboard = () => {
                               {booking.status}
                             </span>
                             <p className="text-xs text-gray-500 mt-1">
-                              {new Date(booking.dateBooked).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit', year: 'numeric' })}
+                              {new Date(booking.dateBooked).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                             </p>
                           </div>
                         </div>
