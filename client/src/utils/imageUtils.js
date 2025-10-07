@@ -32,7 +32,8 @@ const cleanupCache = () => {
  * @returns {string} - Optimized URL
  */
 export const getOptimizedImageUrl = (originalUrl, size = 'optimized') => {
-  if (!originalUrl) return null;
+  // Handle null, undefined, empty string, or whitespace-only strings
+  if (!originalUrl || originalUrl.trim() === '') return null;
 
   // If it's already an optimized URL, return as is
   if (originalUrl.includes('/opt_') || originalUrl.includes('/thumb_')) {
