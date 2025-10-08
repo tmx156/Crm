@@ -25,32 +25,16 @@ const sendSaleReceipt = async (sale, lead, customEmail, customPhone, sendEmail =
 
     // Create processed template with sale variables
     const processedTemplate = {
-      subject: template.subject
-        .replace(/{leadName}/g, lead.name || 'Customer')
-        .replace(/{companyName}/g, 'Focus Models')
-        .replace(/{receiptId}/g, receiptId)
-        .replace(/{saleDate}/g, new Date(sale.created_at).toLocaleDateString())
-        .replace(/{saleTime}/g, new Date(sale.created_at).toLocaleTimeString())
-        .replace(/{saleAmount}/g, sale.amount.toString())
-        .replace(/{saleAmountFormatted}/g, `£${sale.amount.toFixed(2)}`)
-        .replace(/{paymentMethod}/g, sale.payment_method || 'Unknown')
-        .replace(/{paymentType}/g, sale.payment_type || 'full_payment'),
-
-      content: template.content
+      subject: 'Your Avensis Models Receipt',
+      content: `Dear {leadName},\n\nThank you for your purchase with Avensis Models!\n\nRECEIPT DETAILS\n===============\nReceipt ID: {receiptId}\nDate: {saleDate}\n\nPURCHASE INFORMATION\n===================\nAmount: {saleAmountFormatted}\nPayment Method: {paymentMethod}\nPayment Type: {paymentType}\nStatus: Completed\n\nCUSTOMER INFORMATION\n===================\nName: {leadName}\nEmail: {leadEmail}\n\n{saleNotes}\n\nThank you for choosing Avensis Models. We appreciate your business!\n\nIf you have any questions about this purchase, please don't hesitate to contact us.\n\nBest regards,\nThe Avensis Models Team\n\n---\nThis is an automated receipt. Please keep this for your records.`
         .replace(/{leadName}/g, lead.name || 'Customer')
         .replace(/{leadEmail}/g, lead.email || '')
-        .replace(/{leadPhone}/g, lead.phone || '')
-        .replace(/{companyName}/g, 'Focus Models')
         .replace(/{receiptId}/g, receiptId)
         .replace(/{saleDate}/g, new Date(sale.created_at).toLocaleDateString())
-        .replace(/{saleTime}/g, new Date(sale.created_at).toLocaleTimeString())
-        .replace(/{saleAmount}/g, sale.amount.toString())
         .replace(/{saleAmountFormatted}/g, `£${sale.amount.toFixed(2)}`)
         .replace(/{paymentMethod}/g, sale.payment_method || 'Unknown')
         .replace(/{paymentType}/g, sale.payment_type || 'full_payment')
-        .replace(/{saleNotes}/g, sale.notes ? `\n\nNotes: ${sale.notes}` : '')
-        .replace(/{currentDate}/g, new Date().toLocaleDateString())
-        .replace(/{currentTime}/g, new Date().toLocaleTimeString())
+        .replace(/{saleNotes}/g, sale.notes ? `\n\nNotes: ${sale.notes}` : ''),
     };
 
     // Send email receipt if enabled

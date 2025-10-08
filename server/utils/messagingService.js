@@ -136,7 +136,7 @@ class MessagingService {
         second: '2-digit',
         timeZone: 'UTC' // Keep UTC time to match calendar
       }) : '',
-      '{companyName}': 'Modelling Studio CRM',
+      '{companyName}': 'Avensis Models',
       '{currentDate}': new Date().toLocaleDateString(),
       '{currentTime}': new Date().toLocaleTimeString()
     };
