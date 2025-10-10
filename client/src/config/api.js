@@ -45,14 +45,22 @@ export const API_ENDPOINTS = {
   UPLOAD: `${API_BASE_URL}/api/upload`
 };
 
+// Cache-busting helper
+export const addCacheBuster = (url) => {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}_t=${Date.now()}`;
+};
+
 // Helper function to get full API URL
-export const getApiUrl = (endpoint) => {
-  return `${API_BASE_URL}${endpoint}`;
+export const getApiUrl = (endpoint, bustCache = false) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  return bustCache ? addCacheBuster(url) : url;
 };
 
 // Default export
 export default {
   API_BASE_URL,
   API_ENDPOINTS,
-  getApiUrl
+  getApiUrl,
+  addCacheBuster
 };

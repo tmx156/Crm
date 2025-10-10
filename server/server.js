@@ -376,6 +376,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// No-cache headers for all API routes to prevent stale data
+app.use('/api/*', (req, res, next) => {
+  // Disable caching for API responses
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Database health check middleware (before routes)
 app.use('/api/*', (req, res, next) => {
   // Allow health checks and some GET requests even when DB is down

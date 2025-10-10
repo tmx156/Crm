@@ -5,6 +5,20 @@ const MAX_RETRIES = 2; // Reduced from 3 to prevent retry storms
 const BASE_DELAY = 2000; // Increased to 2 seconds
 const MAX_DELAY = 8000; // Reduced max delay
 
+// Cache-busting for GET requests
+axios.interceptors.request.use((config) => {
+  // Add cache-busting timestamp to GET requests
+  if (config.method === 'get') {
+    config.params = {
+      ...config.params,
+      _t: Date.now()
+    };
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 // Check if error is retryable
 const isRetryableError = (error) => {
   if (!error.response) {
