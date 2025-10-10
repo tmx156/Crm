@@ -55,15 +55,6 @@ const Login = () => {
     });
   };
 
-  // Demo credentials for quick testing
-  const fillDemoCredentials = (role) => {
-    if (role === 'admin') {
-      setFormData({ email: 'admin@crm.com', password: 'admin123' });
-    } else {
-      setFormData({ email: 'john@demo.com', password: 'password123' });
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -137,38 +128,6 @@ const Login = () => {
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 {loading ? 'Signing in...' : 'Sign in'}
-              </button>
-            </div>
-
-            <div className="flex flex-col space-y-2">
-              <p className="text-center text-sm text-gray-600">
-                Demo credentials:
-              </p>
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials('admin')}
-                  className="flex-1 py-1 px-2 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
-                >
-                  Admin Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials('sales')}
-                  className="flex-1 py-1 px-2 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
-                >
-                  Sales Demo
-                </button>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => setIsRegister(true)}
-                className="text-blue-600 hover:text-blue-500 text-sm"
-              >
-                Don't have an account? Sign up
               </button>
             </div>
           </form>

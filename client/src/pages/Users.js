@@ -45,7 +45,7 @@ const Users = () => {
       // Fallback to dummy data
       setUsers([
         {
-          _id: '1',
+          id: '1',
           name: 'Alice Smith',
           email: 'alice.smith@studio.com',
           role: 'booker',
@@ -56,7 +56,7 @@ const Users = () => {
           createdAt: '2024-01-15T00:00:00.000Z'
         },
         {
-          _id: '2',
+          id: '2',
           name: 'John Doe',
           email: 'john.doe@studio.com',
           role: 'admin',
@@ -67,7 +67,7 @@ const Users = () => {
           createdAt: '2024-02-01T00:00:00.000Z'
         },
         {
-          _id: '3',
+          id: '3',
           name: 'Mike Jones',
           email: 'mike.jones@studio.com',
           role: 'booker',
@@ -78,7 +78,7 @@ const Users = () => {
           createdAt: '2024-01-20T00:00:00.000Z'
         },
         {
-          _id: '4',
+          id: '4',
           name: 'Ethan Brown',
           email: 'ethan.brown@studio.com',
           role: 'booker',

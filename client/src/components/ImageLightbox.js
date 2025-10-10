@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { FiX } from 'react-icons/fi';
 
 const ImageLightbox = ({ src, alt = 'Photo', onClose }) => {
   useEffect(() => {
@@ -23,10 +24,11 @@ const ImageLightbox = ({ src, alt = 'Photo', onClose }) => {
       >
         <button
           onClick={onClose}
-          className="absolute -top-10 right-0 text-white/80 hover:text-white text-sm"
+          className="absolute top-2 right-2 z-10 bg-red-600 hover:bg-red-700 text-white rounded-full p-2 transition-all duration-200 shadow-lg"
           aria-label="Close image"
+          title="Close (ESC)"
         >
-          Close ✕
+          <FiX className="h-6 w-6" />
         </button>
         <img
           src={src}

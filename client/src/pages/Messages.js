@@ -730,9 +730,25 @@ const Messages = () => {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0) {
+      console.warn('⚠️ handleBulkDelete called with no selected IDs');
+      return;
+    }
+    
+    console.log('🗑️ Starting bulk delete for', selectedIds.length, 'messages');
+    console.log('📝 Selected message IDs:', selectedIds);
+    
+    // Confirm deletion with user
+    const confirmMsg = `Are you sure you want to delete ${selectedIds.length} message${selectedIds.length > 1 ? 's' : ''}? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) {
+      console.log('❌ User cancelled bulk delete');
+      return;
+    }
+    
     try {
       const token = localStorage.getItem('token');
+      console.log('📤 Sending delete request to server...');
+      
       const res = await fetch('/api/messages-list/bulk-delete', {
         method: 'POST',
         headers: {
@@ -741,19 +757,53 @@ const Messages = () => {
         },
         body: JSON.stringify({ messageIds: selectedIds })
       });
+      
+      console.log('📥 Response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ Server returned error:', res.status, errorText);
+        throw new Error(`Server error: ${res.status} - ${errorText}`);
+      }
+      
       const data = await res.json();
+      console.log('📦 Response data:', data);
+      
       if (data.success) {
         const removed = new Set((data.results || []).filter(r => r.success).map(r => r.messageId));
+        console.log('✅ Successfully deleted', removed.size, 'messages');
+        
         setMessages(prev => prev.filter(m => !removed.has(m.id)));
         setFilteredMessages(prev => prev.filter(m => !removed.has(m.id)));
         setSelectedIds([]);
         setSelectAll(false);
+        
+        // Show success message
+        const successMsg = data.failed > 0 
+          ? `Deleted ${data.deleted} message(s). ${data.failed} failed.`
+          : `Successfully deleted ${data.deleted} message(s).`;
+        alert(successMsg);
+        
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          totalMessages: Math.max((prev.totalMessages || 0) - removed.size, 0),
+          smsCount: Math.max((prev.smsCount || 0) - [...removed].filter(id => {
+            const msg = messages.find(m => m.id === id);
+            return msg?.type === 'sms';
+          }).length, 0),
+          emailCount: Math.max((prev.emailCount || 0) - [...removed].filter(id => {
+            const msg = messages.find(m => m.id === id);
+            return msg?.type === 'email';
+          }).length, 0)
+        }));
       } else {
-        alert(data.message || 'Delete failed');
+        console.error('❌ Delete operation failed:', data.message);
+        alert(data.message || 'Delete failed. Please check the console for details.');
       }
     } catch (err) {
-      console.error('Bulk delete error:', err);
-      alert('Delete failed');
+      console.error('❌ Bulk delete error:', err);
+      alert(`Delete failed: ${err.message}\n\nPlease check the browser console and server logs for details.`);
     }
   };
 

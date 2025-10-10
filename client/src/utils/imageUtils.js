@@ -33,46 +33,13 @@ const cleanupCache = () => {
  */
 export const getOptimizedImageUrl = (originalUrl, size = 'optimized') => {
   // Handle null, undefined, empty string, or whitespace-only strings
-  if (!originalUrl || originalUrl.trim() === '') return null;
-
-  // If it's already an optimized URL, return as is
-  if (originalUrl.includes('/opt_') || originalUrl.includes('/thumb_')) {
-    return originalUrl;
+  if (!originalUrl || originalUrl.trim() === '' || originalUrl === 'null') {
+    return null;
   }
 
-  // Check if it's an external URL (like Supabase)
+  // For ALL external URLs (http/https), return them directly
+  // This includes: matchmodels.co.uk, modelhunt.co.uk, supabase.co, etc.
   if (originalUrl.startsWith('http://') || originalUrl.startsWith('https://')) {
-    // For Supabase URLs, we can use query parameters to resize images
-    if (originalUrl.includes('supabase.co')) {
-      const baseUrl = originalUrl.split('?')[0];
-      const params = new URLSearchParams();
-      
-      switch (size) {
-        case 'thumbnail':
-          params.set('width', '24'); // Even smaller for maximum speed
-          params.set('height', '24');
-          params.set('resize', 'cover');
-          params.set('quality', '20'); // Ultra-low quality for maximum speed
-          params.set('format', 'webp'); // Use WebP format for better compression
-          params.set('blur', '2'); // More blur to reduce file size further
-          break;
-        case 'optimized':
-          params.set('width', '200');
-          params.set('height', '200');
-          params.set('resize', 'cover');
-          params.set('quality', '70'); // Reduced from 85 to 70 for faster loading
-          break;
-        case 'original':
-          // Return original without modifications
-          return originalUrl;
-        default:
-          return originalUrl;
-      }
-      
-      return `${baseUrl}?${params.toString()}`;
-    }
-    
-    // For other external URLs, return as is
     return originalUrl;
   }
 

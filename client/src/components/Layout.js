@@ -710,10 +710,10 @@ const Layout = ({ children }) => {
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
       <div className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}>
-        <div className={`fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`} 
+        <div className={`fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity duration-300 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}
              onClick={() => setSidebarOpen(false)} />
-        
-        <div className={`relative flex-1 flex flex-col max-w-xs w-full bg-white transform transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+
+        <div className={`relative flex-1 flex flex-col max-w-xs w-full bg-white transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="absolute top-0 right-0 -mr-12 pt-2">
             <button
               type="button"
@@ -1161,54 +1161,43 @@ const Layout = ({ children }) => {
 
       {/* Main content */}
       <div className="md:pl-64 flex flex-col flex-1">
-        {/* Top bar */}
-        <div className="sticky top-0 z-10 md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-gray-50">
-          <button
-            type="button"
-            className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <FiMenu className="h-6 w-6" />
-          </button>
-        </div>
-
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
+        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+          <div className="max-w-full mx-auto px-3 sm:px-4 lg:px-8">
+            <div className="flex justify-between items-center h-14 sm:h-16">
               <div className="flex items-center">
                 <div className="flex-shrink-0 md:hidden">
                   <button
                     type="button"
-                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 touch-target"
                     onClick={() => setSidebarOpen(true)}
                   >
                     <FiMenu className="h-6 w-6" />
                   </button>
                 </div>
-                
+                <h1 className="md:hidden ml-2 text-lg font-bold text-gray-900">CRM</h1>
               </div>
-              
-              <div className="flex items-center space-x-4">
+
+              <div className="flex items-center space-x-2 sm:space-x-4">
                 <ConnectionStatus />
 
 
                 <div className="relative" ref={notificationsDropdownRef}>
-                  <button 
+                  <button
                     onClick={() => setNotificationsOpen(!notificationsOpen)}
-                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 relative"
+                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 relative touch-target"
                   >
-                    <FiBell className="h-6 w-6" />
+                    <FiBell className="h-5 w-5 sm:h-6 sm:w-6" />
                     {unreadCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </button>
-                  
+
                   {/* Notifications Dropdown */}
                   {notificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                    <div className="absolute right-0 mt-2 w-[90vw] sm:w-80 max-w-md bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                       <div className="py-2">
                         <div className="px-4 py-2 border-b border-gray-200">
                           <h3 className="text-sm font-medium text-gray-900">Message Notifications</h3>
@@ -1284,8 +1273,8 @@ const Layout = ({ children }) => {
                     </div>
                   )}
                 </div>
-                <div className="hidden md:flex md:items-center">
-                  <span className="text-sm text-gray-700 mr-2">Welcome, {user?.name}</span>
+                <div className="hidden sm:flex sm:items-center">
+                  <span className="hidden lg:block text-sm text-gray-700 mr-2">Welcome, {user?.name}</span>
                   <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
                     <span className="text-sm font-medium text-white">
                       {user?.name?.charAt(0).toUpperCase()}
@@ -1299,8 +1288,8 @@ const Layout = ({ children }) => {
 
         {/* Page content */}
         <main className="flex-1">
-          <div className="py-6">
-            <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-3 sm:py-4 md:py-6">
+            <div className="max-w-full mx-auto px-3 sm:px-4 lg:px-8">
               {children}
             </div>
           </div>

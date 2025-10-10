@@ -181,8 +181,8 @@ router.get('/public', async (req, res) => {
 
 // @route   GET /api/users/bookers
 // @desc    Get team members for assignment (sales and admins)
-// @access  Private (Admin only)
-router.get('/bookers', auth, adminAuth, async (req, res) => {
+// @access  Private (All authenticated users can see booker list)
+router.get('/bookers', auth, async (req, res) => {
   try {
     console.log('🔍 Fetching bookers for user:', req.user.name, req.user.role);
 
@@ -408,16 +408,21 @@ router.delete('/:id', auth, async (req, res) => {
     // Log the deletion attempt
     console.log(`🗑️ Admin ${req.user.name} attempting to delete user ${existingUser.name} (${existingUser.role})`);
 
-    // Delete user using Supabase
+    // Soft delete user using Supabase (mark as inactive instead of hard delete)
+    // This preserves data integrity and maintains foreign key relationships with leads
     const { error: deleteError } = await supabase
       .from('users')
-      .delete()
+      .update({
+        is_active: false
+      })
       .eq('id', userId);
 
     if (deleteError) {
       console.error('Error deleting user:', deleteError);
       return res.status(500).json({ message: 'Failed to delete user', error: deleteError.message });
     }
+
+    console.log(`✅ User ${existingUser.name} soft deleted successfully (marked as inactive)`);
 
     res.json({
       success: true,

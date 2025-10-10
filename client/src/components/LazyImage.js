@@ -1,122 +1,52 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 
-// Fixed: Added referrerPolicy to bypass hotlink protection from external image hosts
 const LazyImage = ({ 
   src, 
   alt, 
-  className = "w-10 h-10 rounded-full object-cover border-2 border-gray-200",
-  fallbackClassName = "w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-200",
-  placeholder = null,
-  onError = null,
-  onLoad = null,
-  lazy = true, // New prop to control lazy loading
-  preload = false, // New prop for preloading
-  ...props 
+  className, 
+  onClick, 
+  onLoad,
+  onError,
+  style,
+  title,
+  // Filter out custom props that shouldn't be passed to DOM
+  fallbackClassName, 
+  lazy,
+  preload,
+  ...rest 
 }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-  const [isInView, setIsInView] = useState(!lazy || preload); // Start loading immediately if not lazy or preloading
-  const imgRef = useRef(null);
-  const observerRef = useRef(null);
+  const [imgSrc, setImgSrc] = useState(src);
+  const fallbackSrc = '/images/fallback.jpeg'; // Replace with your actual fallback image path
 
-  // Reset state when src changes (important for navigation)
-  useEffect(() => {
-    setIsLoaded(false);
-    setHasError(false);
-    setIsInView(!lazy || preload);
-  }, [src, lazy, preload]);
-
-  useEffect(() => {
-    if (!lazy || preload) {
-      setIsInView(true);
-      return;
+  const handleError = (e) => {
+    console.warn(`🖼️ Image failed to load: ${imgSrc}`);
+    setImgSrc(fallbackSrc);
+    // Call the parent's onError if provided
+    if (onError) {
+      onError(e);
     }
-
-    // Create intersection observer for lazy loading with better performance
-    observerRef.current = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observerRef.current?.disconnect();
-        }
-      },
-      {
-        rootMargin: '10px', // Even more aggressive - load only when very close
-        threshold: 0.1 // Higher threshold for better performance
-      }
-    );
-
-    if (imgRef.current) {
-      observerRef.current.observe(imgRef.current);
-    }
-
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, [lazy, preload]);
-
-  const handleLoad = () => {
-    setIsLoaded(true);
-    onLoad?.();
   };
 
-  const handleError = () => {
-    setHasError(true);
-    onError?.();
+  const handleLoad = (e) => {
+    // Call the parent's onLoad if provided
+    if (onLoad) {
+      onLoad(e);
+    }
   };
-
-  // If no image URL, show fallback immediately
-  if (!src || src === '' || src === null || src === undefined) {
-    return (
-      <div ref={imgRef} className={fallbackClassName}>
-        <span className="text-sm font-medium text-gray-600">
-          {alt ? alt.charAt(0).toUpperCase() : '?'}
-        </span>
-      </div>
-    );
-  }
-
-  // If image failed to load, show fallback
-  if (hasError) {
-    return (
-      <div className={fallbackClassName}>
-        <span className="text-sm font-medium text-gray-600">
-          {alt ? alt.charAt(0).toUpperCase() : '?'}
-        </span>
-      </div>
-    );
-  }
 
   return (
-    <div ref={imgRef} className="relative">
-      {/* Placeholder while loading */}
-      {!isLoaded && isInView && (
-        <div className={`${fallbackClassName} absolute inset-0`}>
-          <div className="animate-pulse bg-gray-300 w-full h-full rounded-full"></div>
-        </div>
-      )}
-      
-      {/* Actual image */}
-      {isInView && (
-        <img
-          src={src}
-          alt={alt}
-          className={`${className} ${isLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
-          onLoad={handleLoad}
-          onError={handleError}
-          loading={lazy ? "lazy" : "eager"}
-          referrerPolicy="no-referrer"
-          {...props}
-        />
-      )}
-      
-      {/* Loading placeholder */}
-      {isInView && !isLoaded && !hasError && (
-        <div className={`${fallbackClassName} absolute inset-0`}>
-          <div className="animate-pulse bg-gray-300 w-full h-full rounded-full"></div>
-        </div>
-      )}
-    </div>
+    <img
+      src={imgSrc}
+      alt={alt || 'Lead Image'}
+      className={className}
+      loading="lazy"
+      onError={handleError}
+      onLoad={handleLoad}
+      onClick={onClick}
+      style={style}
+      title={title}
+      {...rest}
+    />
   );
 };
 

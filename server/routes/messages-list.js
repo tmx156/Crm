@@ -903,15 +903,18 @@ router.put('/bulk-read', auth, async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // @route   POST /api/messages-list/bulk-delete
 // @desc    Delete multiple messages across booking history (JSON/table) and messages table
 // @access  Private
 router.post('/bulk-delete', auth, async (req, res) => {
+  console.log('🗑️ Bulk delete endpoint hit by user:', req.user?.name || req.user?.id);
   try {
     const { messageIds } = req.body;
+    console.log('📋 Received request to delete', messageIds?.length || 0, 'messages');
+    console.log('📝 Message IDs:', messageIds);
+    
     if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      console.warn('⚠️ Invalid messageIds array received');
       return res.status(400).json({ message: 'Invalid messageIds array' });
     }
 
@@ -919,101 +922,129 @@ router.post('/bulk-delete', auth, async (req, res) => {
 
     for (const messageId of messageIds) {
       try {
-        // Parse id format: `${leadId}_${timestamp}` (timestamp may contain underscores)
-        const parts = String(messageId).split('_');
-        if (parts.length < 2) {
-          results.push({ messageId, success: false, error: 'Invalid message ID format' });
-          continue;
-        }
-        const leadId = parts[0];
-        const timestampRaw = parts.slice(1).join('_');
-
-        // Normalize timestamp to ISO string where possible
-        const normalizedTs = (() => {
-          try {
-            const d = new Date(timestampRaw);
-            return isNaN(d.getTime()) ? timestampRaw : d.toISOString();
-          } catch { return timestampRaw; }
-        })();
-
-        // 1) Remove from leads.booking_history JSON
-        const { data: lead, error: leadError } = await supabase
-          .from('leads')
-          .select('id, booking_history')
-          .eq('id', leadId)
+        console.log(`🔍 Processing deletion for message: ${messageId}`);
+        
+        // New approach: Message IDs are UUIDs from messages table
+        // First, get the message details from the messages table
+        const { data: message, error: messageError } = await supabase
+          .from('messages')
+          .select('id, lead_id, type, content, sms_body, subject, sent_at, created_at')
+          .eq('id', messageId)
           .single();
-        let removedContent = null;
-        let removedType = null; // 'sms' | 'email'
-        if (lead && lead.booking_history) {
+        
+        if (messageError || !message) {
+          console.warn(`⚠️ Message not found in messages table: ${messageId}`);
+          // Try to continue anyway - maybe it only exists in booking_history
+        }
+        
+        const leadId = message?.lead_id;
+        const messageTimestamp = message?.sent_at || message?.created_at;
+        const messageContent = message?.content || message?.sms_body || message?.subject;
+        const messageType = message?.type;
+        
+        console.log(`  📌 Message details - leadId: ${leadId}, type: ${messageType}, timestamp: ${messageTimestamp}`);
+
+        // 1) Delete from messages table first (primary source)
+        if (message) {
           try {
-            // Safely parse booking_history
-            let history = [];
-            try {
-              history = JSON.parse(lead.booking_history);
-              if (!Array.isArray(history)) {
+            const { error: deleteError } = await supabase
+              .from('messages')
+              .delete()
+              .eq('id', messageId);
+            
+            if (deleteError) {
+              console.error('  ❌ Error deleting from messages table:', deleteError);
+              throw deleteError;
+            } else {
+              console.log(`  ✅ Successfully deleted from messages table`);
+            }
+          } catch (err) {
+            console.error('  ❌ Error during messages table deletion:', err);
+            throw err;
+          }
+        }
+
+        // 2) Also remove from leads.booking_history JSON if it exists there
+        if (leadId) {
+          try {
+            const { data: lead, error: leadError } = await supabase
+              .from('leads')
+              .select('id, booking_history')
+              .eq('id', leadId)
+              .single();
+            
+            if (lead && lead.booking_history) {
+              let history = [];
+              try {
+                history = JSON.parse(lead.booking_history);
+                if (!Array.isArray(history)) {
+                  history = [];
+                }
+              } catch (jsonError) {
+                console.warn(`⚠️ Invalid JSON in booking_history for lead ${leadId}`);
                 history = [];
               }
-            } catch (jsonError) {
-              console.warn(`⚠️ Invalid JSON in booking_history for lead ${leadId}:`, lead.booking_history?.substring(0, 100));
-              history = [];
-            }
-            const filtered = [];
-            for (const entry of history) {
-              const entryTs = entry.timestamp;
-              const matches = entryTs === timestampRaw || entryTs === normalizedTs || (() => {
-                try { return new Date(entryTs).getTime() === new Date(timestampRaw).getTime(); } catch { return false; }
-              })();
-              if (matches) {
-                removedContent = entry?.details?.body || entry?.details?.message || entry?.details?.subject || null;
-                removedType = entry?.action?.includes('SMS') ? 'sms' : entry?.action?.includes('EMAIL') ? 'email' : null;
-                continue; // drop this entry
-              }
-              filtered.push(entry);
-            }
-            if (filtered.length !== history.length) {
-              const { error: updateError } = await supabase
-                .from('leads')
-                .update({ 
-                  booking_history: JSON.stringify(filtered), 
-                  updated_at: new Date().toISOString() 
-                })
-                .eq('id', leadId);
               
-              if (updateError) {
-                console.error('Error updating lead:', updateError);
+              const originalLength = history.length;
+              
+              // Filter out entries that match this message
+              const filtered = history.filter(entry => {
+                // Match by timestamp and content
+                if (!messageTimestamp) return true; // Keep if we don't know the timestamp
+                
+                const entryTs = entry.timestamp;
+                const timestampMatch = (() => {
+                  try {
+                    return Math.abs(new Date(entryTs).getTime() - new Date(messageTimestamp).getTime()) < 5000; // 5 second window
+                  } catch {
+                    return entryTs === messageTimestamp;
+                  }
+                })();
+                
+                const contentMatch = messageContent && (
+                  entry?.details?.body === messageContent ||
+                  entry?.details?.message === messageContent ||
+                  entry?.details?.subject === messageContent
+                );
+                
+                const typeMatch = messageType && (
+                  (messageType === 'sms' && entry?.action?.includes('SMS')) ||
+                  (messageType === 'email' && entry?.action?.includes('EMAIL'))
+                );
+                
+                // Remove if timestamp and (content or type) match
+                const shouldRemove = timestampMatch && (contentMatch || typeMatch);
+                return !shouldRemove;
+              });
+              
+              if (filtered.length !== originalLength) {
+                console.log(`  🗑️ Removed ${originalLength - filtered.length} entry from booking_history for lead ${leadId}`);
+                const { error: updateError } = await supabase
+                  .from('leads')
+                  .update({ 
+                    booking_history: JSON.stringify(filtered), 
+                    updated_at: new Date().toISOString() 
+                  })
+                  .eq('id', leadId);
+                
+                if (updateError) {
+                  console.error('  ⚠️ Error updating booking_history (non-critical):', updateError);
+                } else {
+                  console.log(`  ✅ Successfully updated booking_history for lead ${leadId}`);
+                }
+              } else {
+                console.log(`  ℹ️ No matching entry found in booking_history for lead ${leadId}`);
               }
             }
-          } catch {}
+          } catch (err) {
+            console.warn('  ⚠️ Error processing booking_history (non-critical):', err);
+          }
         }
 
-        // 2) Note: booking_history is a JSONB column in leads table, not a separate table
-        // The deletion is already handled above in the leads table update
-
-        // 3) Remove from messages table (best-effort, narrow by content/type and time window)
-        try {
-          // Build query for messages table
-          let query = supabase
-            .from('messages')
-            .delete()
-            .eq('lead_id', leadId);
-            
-          if (removedType) {
-            query = query.eq('type', removedType);
-          }
-          
-          if (removedContent && String(removedContent).trim().length > 0) {
-            query = query.or(`sms_body.eq.${removedContent},email_body.eq.${removedContent},subject.eq.${removedContent},content.eq.${removedContent}`);
-          }
-          
-          const { error: deleteError } = await query;
-          
-          if (deleteError && deleteError.code !== '42P01') { // 42P01 = table does not exist
-            console.error('Error deleting from messages:', deleteError);
-          }
-        } catch {}
-
+        console.log(`  ✅ Message ${messageId} successfully deleted`);
         results.push({ messageId, success: true });
       } catch (err) {
+        console.error(`  ❌ Failed to delete message ${messageId}:`, err);
         results.push({ messageId, success: false, error: err?.message || String(err) });
       }
     }
@@ -1022,13 +1053,31 @@ router.post('/bulk-delete', auth, async (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) {
-        io.emit('messages_deleted', { messageIds: results.filter(r => r.success).map(r => r.messageId) });
+        const deletedIds = results.filter(r => r.success).map(r => r.messageId);
+        io.emit('messages_deleted', { messageIds: deletedIds });
+        console.log('📡 Emitted messages_deleted event for', deletedIds.length, 'messages');
       }
-    } catch {}
+    } catch (emitError) {
+      console.warn('⚠️ Error emitting socket event:', emitError);
+    }
 
     const successCount = results.filter(r => r.success).length;
-    return res.json({ success: true, deleted: successCount, results });
+    const failureCount = results.filter(r => !r.success).length;
+    
+    console.log(`✅ Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`);
+    
+    if (failureCount > 0) {
+      console.warn('⚠️ Failed deletions:', results.filter(r => !r.success));
+    }
+    
+    return res.json({ 
+      success: true, 
+      deleted: successCount, 
+      failed: failureCount,
+      results 
+    });
   } catch (error) {
+    console.error('❌ Bulk delete error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

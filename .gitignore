@@ -103,6 +103,15 @@ nul
 test-*
 debug-*
 check-*
+audit-*
+server/test_*.js
+server/check_*.js
+server/audit_*.js
+server/fix_*.js
+server/update_*.js
+server/comprehensive_*.js
+server/deep_*.js
+server/revert_*.js
 
 # Email debug logs
 server/email_debug_logs/
