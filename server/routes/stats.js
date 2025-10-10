@@ -62,8 +62,8 @@ router.get('/leads-public', async (req, res) => {
 // @access  Private
 router.get('/leads', auth, async (req, res) => {
   try {
-    // Parse filters from query
-    const { startDate, endDate, userId } = req.query;
+    // Parse filters from query - support both old and new parameter names
+    const { startDate, endDate, userId, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
     // ROLE-BASED ACCESS CONTROL
     if (req.user.role !== 'admin') {
@@ -74,7 +74,7 @@ router.get('/leads', auth, async (req, res) => {
 
     // Build query options for role-based filtering (same as leads endpoint)
     let queryOptions = {
-      select: 'id, status, created_at, booker_id'
+      select: 'id, status, created_at, booker_id, assigned_at'
     };
 
     // Apply role-based filtering
@@ -82,12 +82,24 @@ router.get('/leads', auth, async (req, res) => {
       queryOptions.eq = { booker_id: req.user.id };
     }
 
-    // Apply date filters - use created_at for daily booking activity
-    if (startDate && endDate) {
-      // For daily admin activity, we want to filter by when bookings were MADE, not appointment date
+    // Apply date filters - support both created_at and assigned_at
+    // Prioritize new parameter names over old ones
+    const useCreatedAt = created_at_start && created_at_end;
+    const useAssignedAt = assigned_at_start && assigned_at_end;
+    const useLegacy = !useCreatedAt && !useAssignedAt && startDate && endDate;
+
+    if (useCreatedAt) {
+      queryOptions.gte = { created_at: created_at_start };
+      queryOptions.lte = { created_at: created_at_end };
+      console.log(`📅 Stats filtering by creation date: ${created_at_start} to ${created_at_end}`);
+    } else if (useAssignedAt) {
+      queryOptions.gte = { assigned_at: assigned_at_start };
+      queryOptions.lte = { assigned_at: assigned_at_end };
+      console.log(`📅 Stats filtering by assignment date: ${assigned_at_start} to ${assigned_at_end}`);
+    } else if (useLegacy) {
       queryOptions.gte = { created_at: startDate };
       queryOptions.lte = { created_at: endDate };
-      console.log(`📅 Stats filtering by booking creation date: ${startDate} to ${endDate}`);
+      console.log(`📅 Stats filtering by creation date (legacy): ${startDate} to ${endDate}`);
     }
 
     // Apply user filter (booker) - only for admins
@@ -304,10 +316,11 @@ router.get('/daily-analytics', auth, async (req, res) => {
     console.log(`📊 Fetching daily analytics for ${date}: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
     // Build query options for role-based filtering
+    // ✅ DAILY ACTIVITY FIX: Use booked_at to track when leads were booked, not when appointments are scheduled
     let queryOptions = {
-      select: 'id, status, date_booked, booker_id, created_at, booking_history, has_sale',
-      gte: { date_booked: startOfDay.toISOString() },
-      lte: { date_booked: endOfDay.toISOString() }
+      select: 'id, status, date_booked, booker_id, created_at, booking_history, has_sale, booked_at',
+      gte: { booked_at: startOfDay.toISOString() },
+      lte: { booked_at: endOfDay.toISOString() }
     };
 
     // ROLE-BASED ACCESS CONTROL
@@ -318,8 +331,9 @@ router.get('/daily-analytics', auth, async (req, res) => {
       console.log(`👑 Admin daily analytics access: User ${req.user.name} can see all leads`);
     }
 
-    // Get leads for the day
+    // Get leads booked on this day (status changed to Booked)
     const leads = await dbManager.query('leads', queryOptions);
+    console.log(`📊 Found ${leads.length} leads booked on ${date} (using booked_at timestamp)`);
 
     // Get leads assigned on this day (for conversion calculation)
     const assignedQueryOptions = {
@@ -494,12 +508,12 @@ router.get('/team-performance', auth, async (req, res) => {
     const teamPerformance = [];
 
     for (const user of users) {
-      // Get today's appointments for this booker (using date_booked)
+      // ✅ DAILY ACTIVITY FIX: Get bookings made today (using booked_at), not appointments scheduled for today
       const bookingsQuery = {
-        select: 'id, name, phone, date_booked, status, has_sale, created_at',
+        select: 'id, name, phone, date_booked, status, has_sale, created_at, booked_at',
         eq: { booker_id: user.id },
-        gte: { date_booked: startOfDay.toISOString() },
-        lte: { date_booked: endOfDay.toISOString() }
+        gte: { booked_at: startOfDay.toISOString() },
+        lte: { booked_at: endOfDay.toISOString() }
       };
       const userBookings = await dbManager.query('leads', bookingsQuery);
 

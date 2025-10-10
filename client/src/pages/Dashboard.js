@@ -91,14 +91,15 @@ const Dashboard = () => {
       const usersRes = await axios.get('/api/users');
       const users = usersRes.data || [];
 
-      // Get today's leads - filter by created_at to show bookings MADE today (UK TIME)
+      // ✅ DAILY ACTIVITY FIX: Get today's leads - filter by booked_at to show leads BOOKED today (UK TIME)
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          created_at_start: startUTC,
-          created_at_end: endUTC
+          booked_at_start: startUTC,
+          booked_at_end: endUTC
         }
       });
       const leads = leadsRes.data?.leads || [];
+      console.log(`📊 Dashboard: Found ${leads.length} leads booked today using booked_at filter`);
 
       // Fetch sales data for admin/viewer - only sales made TODAY
       let salesData = [];
@@ -520,16 +521,16 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6">
 
         {/* SECTION 1: Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-l-4 border-red-500">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6 mb-4 sm:mb-6 lg:mb-8 border-l-4 border-red-500">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex items-center space-x-2">
-              <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
-              <h1 className="text-2xl font-bold text-gray-900">LIVE OPERATIONS COMMAND CENTER</h1>
+              <div className="h-2 w-2 sm:h-3 sm:w-3 bg-red-500 rounded-full animate-pulse"></div>
+              <h1 className="text-base sm:text-xl lg:text-2xl font-bold text-gray-900">LIVE OPERATIONS</h1>
             </div>
-            <div className="flex items-center space-x-6 text-sm">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 lg:gap-6 text-xs sm:text-sm w-full sm:w-auto">
               <div className="flex items-center space-x-2">
                 <FiClock className="h-4 w-4 text-gray-500" />
                 <span className="font-mono text-gray-700">{currentTime.toLocaleTimeString()}</span>
@@ -546,66 +547,66 @@ const Dashboard = () => {
         </div>
 
         {/* SECTION 2: Today's Live Progress */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <FiActivity className="h-6 w-6 text-red-500" />
-              <h2 className="text-xl font-bold text-gray-900">TODAY'S LIVE PROGRESS</h2>
-              <div className="flex items-center space-x-2">
-                <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6 mb-4 sm:mb-6 lg:mb-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-2">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <FiActivity className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-red-500" />
+              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">TODAY'S PROGRESS</h2>
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <div className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
                 <span className={`text-xs font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                  {isConnected ? 'LIVE UPDATES ACTIVE' : 'OFFLINE'}
+                  {isConnected ? 'LIVE' : 'OFFLINE'}
                 </span>
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
             {/* Total Bookings Today */}
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-100 text-sm font-medium">Total Bookings Today</p>
-                  <p className="text-3xl font-bold">{liveStats.todayBookings}</p>
-                  <p className="text-blue-100 text-xs mt-1">Since midnight</p>
+                  <p className="text-blue-100 text-xs sm:text-sm font-medium">Bookings</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{liveStats.todayBookings}</p>
+                  <p className="text-blue-100 text-xs mt-0.5 sm:mt-1">Today</p>
                 </div>
-                <FiCalendar className="h-8 w-8 text-blue-200" />
+                <FiCalendar className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-200" />
               </div>
             </div>
 
             {/* This Hour */}
-            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-green-100 text-sm font-medium">This Hour</p>
-                  <p className="text-3xl font-bold">{liveStats.thisHourBookings}</p>
-                  <p className="text-green-100 text-xs mt-1">Bookings this hour</p>
+                  <p className="text-green-100 text-xs sm:text-sm font-medium">This Hour</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{liveStats.thisHourBookings}</p>
+                  <p className="text-green-100 text-xs mt-0.5 sm:mt-1">Bookings</p>
                 </div>
-                <FiZap className="h-8 w-8 text-green-200" />
+                <FiZap className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-green-200" />
               </div>
             </div>
 
             {/* Active Users */}
-            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-purple-100 text-sm font-medium">Active Users</p>
-                  <p className="text-3xl font-bold">1</p>
-                  <p className="text-purple-100 text-xs mt-1">Currently working</p>
+                  <p className="text-purple-100 text-xs sm:text-sm font-medium">Active</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold">1</p>
+                  <p className="text-purple-100 text-xs mt-0.5 sm:mt-1">Users</p>
                 </div>
-                <FiUsers className="h-8 w-8 text-purple-200" />
+                <FiUsers className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-purple-200" />
               </div>
             </div>
 
             {/* Sales Today (admin/viewer only) */}
             {(user?.role === 'admin' || user?.role === 'viewer') && (
-              <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 text-white col-span-2 lg:col-span-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-emerald-100 text-sm font-medium">Sales Today</p>
-                    <p className="text-3xl font-bold">£{liveStats.todayRevenue.toFixed(0)}</p>
-                    <p className="text-emerald-100 text-xs mt-1">{liveStats.todaySales} sales</p>
+                    <p className="text-emerald-100 text-xs sm:text-sm font-medium">Sales Today</p>
+                    <p className="text-xl sm:text-2xl lg:text-3xl font-bold">£{liveStats.todayRevenue.toFixed(0)}</p>
+                    <p className="text-emerald-100 text-xs mt-0.5 sm:mt-1">{liveStats.todaySales} sales</p>
                   </div>
-                  <FiDollarSign className="h-8 w-8 text-emerald-200" />
+                  <FiDollarSign className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-emerald-200" />
                 </div>
               </div>
             )}
@@ -613,20 +614,20 @@ const Dashboard = () => {
         </div>
 
         {/* SECTIONS 3 & 4: Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 mb-4 sm:mb-6 lg:mb-8">
 
           {/* SECTION 3: Daily Admin Activity Dashboard */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <FiTarget className="h-6 w-6 text-blue-500" />
-                <h2 className="text-xl font-bold text-gray-900">DAILY ADMIN ACTIVITY DASHBOARD</h2>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 lg:mb-6 gap-2">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <FiTarget className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-blue-500" />
+                <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">DAILY ACTIVITY</h2>
               </div>
-              <div className="text-sm text-gray-500">
-                Total: {bookerActivity.reduce((sum, user) => sum + (user.bookings || 0), 0)} bookings • {bookerActivity.reduce((sum, user) => sum + (user.sales || 0), 0)} sales
+              <div className="text-xs sm:text-sm text-gray-500">
+                {bookerActivity.reduce((sum, user) => sum + (user.bookings || 0), 0)} bookings • {bookerActivity.reduce((sum, user) => sum + (user.sales || 0), 0)} sales
               </div>
             </div>
-            <div className="text-xs text-gray-500 font-medium mb-4">Resets at midnight • Shows today's booking & sales activity</div>
+            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4">Resets at midnight</div>
             <div className="space-y-3">
               {bookerActivity.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -745,10 +746,10 @@ const Dashboard = () => {
           </div>
 
           {/* SECTION 4: Calendar Status */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center space-x-3 mb-6">
-              <FiCalendar className="h-6 w-6 text-green-500" />
-              <h2 className="text-xl font-bold text-gray-900">CALENDAR STATUS</h2>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 lg:mb-6">
+              <FiCalendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-green-500" />
+              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">CALENDAR</h2>
             </div>
 
             {nextBookingDay ? (
@@ -876,13 +877,13 @@ const Dashboard = () => {
         </div>
 
         {/* SECTIONS 5 & 6: Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
 
           {/* SECTION 5: Live Activity Feed */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center space-x-3 mb-6">
-              <FiActivity className="h-6 w-6 text-purple-500" />
-              <h2 className="text-xl font-bold text-gray-900">LIVE ACTIVITY FEED</h2>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 lg:mb-6">
+              <FiActivity className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-purple-500" />
+              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">ACTIVITY</h2>
             </div>
             <div className="space-y-3">
               {recentActivity.length === 0 ? (
@@ -908,11 +909,11 @@ const Dashboard = () => {
           </div>
 
           {/* SECTION 6: Live Messages */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <FiMessageSquare className="h-6 w-6 text-indigo-500" />
-                <h2 className="text-xl font-bold text-gray-900">LIVE MESSAGES</h2>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 lg:mb-6">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <FiMessageSquare className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-indigo-500" />
+                <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">MESSAGES</h2>
               </div>
               {unreadMessages.length > 0 && (
                 <div className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
@@ -979,9 +980,9 @@ const Dashboard = () => {
 
       {/* Message Reply Modal */}
       {selectedMessage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-gray-900">Reply to Message</h3>
                 <button
@@ -1056,9 +1057,9 @@ const Dashboard = () => {
 
       {/* Booker Activity Modal - Full Details */}
       {isBookerModalOpen && selectedBooker && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900">{selectedBooker.name}</h3>
                 <p className="text-sm text-gray-600">Full Activity Details</p>

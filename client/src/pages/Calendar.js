@@ -7,13 +7,16 @@ import {
   FiCalendar, FiClock, FiMapPin, FiUser, FiX, FiPhone, FiMail, 
   FiFileText, FiWifi, FiActivity, FiCheckCircle, 
   FiExternalLink, FiCheck, FiSettings, FiEdit, FiMessageSquare,
-  FiChevronDown, FiChevronUp, FiSearch
+  FiChevronDown, FiChevronUp, FiChevronLeft, FiChevronRight, FiSearch
 } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import SaleModal from '../components/SaleModal';
+import ImageLightbox from '../components/ImageLightbox';
+import LazyImage from '../components/LazyImage';
+import { getOptimizedImageUrl } from '../utils/imageUtils';
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -59,6 +62,9 @@ const Calendar = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('Duplicate');
   const [rejecting, setRejecting] = useState(false);
+  
+  // Image lightbox state
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   // Memoize fetchEvents to prevent unnecessary re-renders
   const [isFetching, setIsFetching] = useState(false);
@@ -203,6 +209,17 @@ const Calendar = () => {
       });
       
       // Convert leads to calendar events - include both dated and undated booked leads
+      // Debug: Check image_url presence in leads
+      const leadsWithImages = validLeads.filter(l => l.image_url && l.image_url !== '');
+      console.log(`📸 Calendar: ${leadsWithImages.length} out of ${validLeads.length} leads have image_url`);
+      if (leadsWithImages.length > 0) {
+        console.log('📸 Sample leads with images:', leadsWithImages.slice(0, 3).map(l => ({ name: l.name, image_url: l.image_url, hasImageUrl: !!l.image_url, imageUrlLength: l.image_url?.length })));
+      }
+      
+      // Check if ALL leads have the image_url property (even if empty)
+      const leadsWithImageUrlProperty = validLeads.filter(l => 'image_url' in l);
+      console.log(`📸 Leads with image_url property: ${leadsWithImageUrlProperty.length}/${validLeads.length}`);
+      
       const serverEvents = validLeads
         .filter(lead => {
           const hasBookingDate = lead.date_booked && lead.date_booked !== null && lead.date_booked !== 'null';
@@ -671,6 +688,11 @@ const Calendar = () => {
   };
 
   const handleEventClick = async (clickInfo) => {
+    // Debug logging
+    console.log('📅 Event clicked:', clickInfo.event.title);
+    console.log('📸 Event image_url:', clickInfo.event.extendedProps?.lead?.image_url);
+    console.log('📋 Full event extendedProps:', clickInfo.event.extendedProps);
+    
     // Store a stable plain-object snapshot so live updates don't close the modal
     setSelectedEvent(createEventSnapshot(clickInfo.event));
     setShowEventModal(true);
@@ -1075,13 +1097,14 @@ const Calendar = () => {
       return;
     }
 
-    // For bookers: can change Confirmed/Unconfirmed on any booking, but other statuses only on their assigned leads
+    // For bookers: can change Confirmed/Unconfirmed/Cancelled on any booking, but other statuses only on their assigned leads
     if (user?.role === 'booker') {
       const isConfirmationChange = newStatus === 'Confirmed' || newStatus === 'Unconfirmed';
+      const isCancellationChange = newStatus === 'Cancelled';
       const isAssignedLead = selectedEvent.extendedProps?.lead?.booker === user.id;
       
-      if (!isConfirmationChange && !isAssignedLead) {
-        alert('Access denied. You can only change Confirmed/Unconfirmed status on any booking, or other statuses on leads assigned to you.');
+      if (!isConfirmationChange && !isCancellationChange && !isAssignedLead) {
+        alert('Access denied. You can only change Confirmed/Unconfirmed/Cancelled status on any booking, or other statuses on leads assigned to you.');
         return;
       }
     }
@@ -1390,6 +1413,55 @@ const Calendar = () => {
     }
   };
 
+  // Navigation functions for day-specific booking browsing
+  const getEventsForSelectedDay = () => {
+    if (!selectedEvent?.start) return [];
+    
+    const selectedDate = new Date(selectedEvent.start);
+    const dayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    
+    return events.filter(event => {
+      const eventDate = new Date(event.start);
+      return eventDate >= dayStart && eventDate < dayEnd;
+    }).sort((a, b) => new Date(a.start) - new Date(b.start));
+  };
+
+  const navigateToPreviousBooking = () => {
+    const dayEvents = getEventsForSelectedDay();
+    const currentIndex = dayEvents.findIndex(event => event.id === selectedEvent.id);
+    
+    if (currentIndex > 0) {
+      const prevEvent = dayEvents[currentIndex - 1];
+      console.log('📸 Navigating to previous event:', prevEvent.title, 'Image URL:', prevEvent.extendedProps?.lead?.image_url);
+      setSelectedEvent(createEventSnapshot(prevEvent));
+    }
+  };
+
+  const navigateToNextBooking = () => {
+    const dayEvents = getEventsForSelectedDay();
+    const currentIndex = dayEvents.findIndex(event => event.id === selectedEvent.id);
+    
+    if (currentIndex < dayEvents.length - 1) {
+      const nextEvent = dayEvents[currentIndex + 1];
+      console.log('📸 Navigating to next event:', nextEvent.title, 'Image URL:', nextEvent.extendedProps?.lead?.image_url);
+      setSelectedEvent(createEventSnapshot(nextEvent));
+    }
+  };
+
+  const getNavigationState = () => {
+    const dayEvents = getEventsForSelectedDay();
+    const currentIndex = dayEvents.findIndex(event => event.id === selectedEvent.id);
+    
+    return {
+      canGoPrevious: currentIndex > 0,
+      canGoNext: currentIndex < dayEvents.length - 1,
+      currentIndex: currentIndex + 1,
+      totalEvents: dayEvents.length
+    };
+  };
+
   const handleEditNotes = () => {
     const currentNotes = selectedEvent.extendedProps?.lead?.notes || '';
     setNotesText(currentNotes);
@@ -1579,91 +1651,86 @@ const Calendar = () => {
   // };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-4 lg:space-y-6">
       {/* Page Header */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <div>
-            <div className="flex items-center space-x-3">
-              <h1 className="text-xl font-semibold text-gray-900">Calendar</h1>
-              
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+          <div className="w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Calendar</h1>
+
               {/* Real-time Connection Status */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                   isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                 }`}></div>
                 <span className={`text-xs ${
                   isConnected ? 'text-green-600' : 'text-red-600'
                 }`}>
-                  {isConnected ? 'Real-time updates active' : 'Connection offline'}
-                </span>
-              </div>
-              
-              {/* Event Count & Last Updated */}
-              <div className="flex items-center space-x-3 text-xs text-gray-500">
-                <span>📅 {events.length} events</span>
-                <span>🕐 Updated: {lastUpdated.toLocaleTimeString()}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <FiWifi className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
-                <span className={`text-xs px-2 py-1 rounded-full ${isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {isConnected ? 'Live' : 'Offline'}
                 </span>
               </div>
+
+              {/* Event Count - hide on very small screens */}
+              <div className="hidden sm:flex items-center space-x-2 sm:space-x-3 text-xs text-gray-500">
+                <span>📅 {events.length}</span>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mt-1">
-              Manage bookings and schedule appointments • Last updated: {lastUpdated.toLocaleTimeString()}
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              {events.length} events • Updated {lastUpdated.toLocaleTimeString()}
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
+
+        {/* Legend - wrap on mobile */}
+        <div className="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto overflow-x-auto">
+          <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-600 whitespace-nowrap">
             <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span>New</span>
+              <div className="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded"></div>
+              <span className="hidden sm:inline">New</span>
             </div>
             <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span>Booked</span>
+              <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded"></div>
+              <span className="hidden sm:inline">Booked</span>
             </div>
             <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-purple-500 rounded"></div>
-              <span>Attended</span>
+              <div className="w-2 h-2 sm:w-3 sm:h-3 bg-purple-500 rounded"></div>
+              <span className="hidden sm:inline">Attended</span>
             </div>
             <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <span>Cancelled</span>
+              <div className="w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded"></div>
+              <span className="hidden sm:inline">Cancelled</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="mb-4">
-        <div className="relative max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FiSearch className="h-5 w-5 text-gray-400" />
+      <div className="mb-3 sm:mb-4">
+        <div className="relative w-full sm:max-w-md">
+          <div className="absolute inset-y-0 left-0 pl-2 sm:pl-3 flex items-center pointer-events-none">
+            <FiSearch className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
           </div>
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search leads by name, phone, or email..."
-            className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Search leads..."
+            className="block w-full pl-8 sm:pl-10 pr-8 sm:pr-10 py-2 border border-gray-300 rounded-md text-sm bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           />
           {searchTerm && (
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+            <div className="absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center">
               <button
                 onClick={() => setSearchTerm('')}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                className="text-gray-400 hover:text-gray-600 focus:outline-none touch-target"
               >
-                <FiX className="h-5 w-5" />
+                <FiX className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           )}
         </div>
         {searchTerm && (
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-xs sm:text-sm text-gray-600">
             Found {events.filter(event => {
               const search = searchTerm.toLowerCase();
               const leadName = event.extendedProps?.lead?.name || event.title || '';
@@ -1674,13 +1741,13 @@ const Calendar = () => {
                 leadPhone.includes(search) ||
                 leadEmail.toLowerCase().includes(search)
               );
-            }).length} matching appointments
+            }).length} results
           </p>
         )}
       </div>
 
       {/* Calendar */}
-      <div className="card">
+      <div className="card mobile-card overflow-x-auto">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -1689,7 +1756,13 @@ const Calendar = () => {
           headerToolbar={{
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay'
+          }}
+          buttonText={{
+            today: window.innerWidth < 640 ? 'Today' : 'Today',
+            month: window.innerWidth < 640 ? 'M' : 'Month',
+            week: window.innerWidth < 640 ? 'W' : 'Week',
+            day: window.innerWidth < 640 ? 'D' : 'Day'
           }}
           weekends={true}
           firstDay={1}
@@ -1821,8 +1894,8 @@ const Calendar = () => {
 
       {/* Lead Form Modal */}
       {showLeadFormModal && selectedDate && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-5 mx-auto p-6 border w-full max-w-4xl shadow-lg rounded-lg bg-white">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 h-full w-full z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="relative mx-auto p-6 border w-full max-w-5xl shadow-lg rounded-lg bg-white calendar-modal-scroll max-h-[95vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">
@@ -2132,19 +2205,32 @@ const Calendar = () => {
       )}
 
       {/* Event Detail Modal - Wide Layout with Full Details */}
-      {showEventModal && selectedEvent && selectedEvent.start && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-2">
-          <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-2xl max-h-[95vh] flex flex-col">
+      {showEventModal && selectedEvent && selectedEvent.start && (() => {
+        // Debug logging for image URL
+        console.log('🖼️ Modal opened - Full selectedEvent:', {
+          id: selectedEvent.id,
+          title: selectedEvent.title,
+          hasExtendedProps: !!selectedEvent.extendedProps,
+          hasLead: !!selectedEvent.extendedProps?.lead,
+          leadKeys: selectedEvent.extendedProps?.lead ? Object.keys(selectedEvent.extendedProps.lead) : [],
+          image_url: selectedEvent.extendedProps?.lead?.image_url,
+          image_url_type: typeof selectedEvent.extendedProps?.lead?.image_url,
+          image_url_length: selectedEvent.extendedProps?.lead?.image_url?.length
+        });
+        return true;
+      })() && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="relative w-full max-w-5xl bg-white rounded-lg shadow-2xl max-h-[95vh] overflow-y-auto calendar-modal-scroll flex flex-col">
             {/* Header: Photo and Main Details Top Right */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-3 sm:p-4">
               {/* Main Details */}
-              <div className="flex-1 mb-2 md:mb-0">
-                <h3 className="text-xl font-bold text-white mb-1">
+              <div className="flex-1 mb-2 sm:mb-0 mt-10 sm:mt-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-1">
                   {selectedEvent.extendedProps?.lead?.name || selectedEvent.title}
+                  {selectedEvent.extendedProps?.lead?.age && (
+                    <span className="text-white/90 font-normal ml-2">({selectedEvent.extendedProps.lead.age})</span>
+                  )}
                 </h3>
-                {selectedEvent.extendedProps?.lead?.age && (
-                  <p className="text-white/80 text-sm mb-2">Age: {selectedEvent.extendedProps.lead.age} years old</p>
-                )}
                 <div className="flex items-center space-x-3">
                   <span className={`${getStatusBadgeClass(selectedEvent.extendedProps?.status)} px-3 py-1 rounded-lg text-sm font-medium`}>
                     {selectedEvent.extendedProps?.status || 'Scheduled'}
@@ -2158,35 +2244,83 @@ const Calendar = () => {
                 </div>
               </div>
               {/* Photo Top Right */}
-              <div className="relative ml-0 md:ml-4">
-                {selectedEvent.extendedProps?.lead?.image_url ? (
-                  <img 
-                    src={selectedEvent.extendedProps.lead.image_url} 
+              <div className="relative ml-0 sm:ml-4 absolute top-3 right-3 sm:static">
+                <div
+                  className="cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    if (selectedEvent.extendedProps?.lead?.image_url) {
+                      console.log('🖼️ Opening image:', selectedEvent.extendedProps.lead.image_url);
+                      setLightboxImage(selectedEvent.extendedProps.lead.image_url);
+                    }
+                  }}
+                >
+                  <LazyImage
+                    key={`${selectedEvent.id}-${selectedEvent.extendedProps?.lead?.image_url || 'no-image'}`}
+                    src={getOptimizedImageUrl(selectedEvent.extendedProps?.lead?.image_url, 'optimized')}
                     alt={selectedEvent.extendedProps?.lead?.name || selectedEvent.title}
-                    className="w-20 h-20 rounded-xl border-2 border-white shadow-lg object-cover"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl border-2 border-white shadow-lg object-cover"
+                    fallbackClassName="w-16 h-16 sm:w-20 sm:h-20 rounded-xl border-2 border-white shadow-lg bg-white flex items-center justify-center"
+                    lazy={false}
+                    preload={true}
+                    onError={() => {
+                      console.error('❌ Image failed to load:', selectedEvent.extendedProps?.lead?.image_url);
+                    }}
+                    onLoad={() => {
+                      console.log('✅ Image loaded successfully:', selectedEvent.extendedProps?.lead?.image_url);
+                    }}
                   />
-                ) : (
-                  <div className="w-20 h-20 rounded-xl border-2 border-white shadow-lg bg-white flex items-center justify-center">
-                    <FiUser className="h-10 w-10 text-gray-400" />
-                  </div>
-                )}
+                </div>
                 {/* Status indicator */}
-                <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white shadow-lg ${
+                <div className={`absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-white shadow-lg ${
                   selectedEvent.extendedProps?.status === 'Attended' ? 'bg-green-500' :
                   selectedEvent.extendedProps?.status === 'Booked' ? 'bg-blue-500' :
                   selectedEvent.extendedProps?.status === 'Cancelled' ? 'bg-red-500' :
                   'bg-gray-400'
                 }`}></div>
               </div>
-              <button
-                onClick={() => setShowEventModal(false)}
-                className="absolute top-3 right-3 text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-red-600/20 bg-red-600/10"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
+
+              {/* Navigation arrows with close button centered at top */}
+              {(() => {
+                const navState = getNavigationState();
+                return (
+                  <div className="absolute top-3 left-1/2 transform -translate-x-1/2 flex space-x-1 sm:space-x-2 z-10">
+                    <button
+                      onClick={navigateToPreviousBooking}
+                      disabled={!navState.canGoPrevious}
+                      className={`p-1.5 sm:p-2 rounded-full bg-white/20 backdrop-blur-sm transition-all duration-200 ${
+                        navState.canGoPrevious
+                          ? 'text-white hover:text-gray-900 hover:bg-white/40 shadow-lg'
+                          : 'text-white/30 cursor-not-allowed bg-white/10'
+                      }`}
+                      title="Previous booking"
+                    >
+                      <FiChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                    <button
+                      onClick={() => setShowEventModal(false)}
+                      className="p-1.5 sm:p-2 rounded-full bg-white/20 backdrop-blur-sm text-white hover:text-gray-900 hover:bg-white/40 transition-all duration-200 shadow-lg"
+                      title="Close"
+                    >
+                      <FiX className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                    <button
+                      onClick={navigateToNextBooking}
+                      disabled={!navState.canGoNext}
+                      className={`p-1.5 sm:p-2 rounded-full bg-white/20 backdrop-blur-sm transition-all duration-200 ${
+                        navState.canGoNext
+                          ? 'text-white hover:text-gray-900 hover:bg-white/40 shadow-lg'
+                          : 'text-white/30 cursor-not-allowed bg-white/10'
+                      }`}
+                      title="Next booking"
+                    >
+                      <FiChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
             {/* Main Info Center */}
-            <div className="p-4 overflow-y-auto flex-1">
+            <div className="p-4 flex-1">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Left Column - Contact Information */}
                 <div>
@@ -2368,7 +2502,8 @@ const Calendar = () => {
                         // const canChangeStatus = user?.role === 'admin' || user?.role === 'viewer' || user?.role === 'booker';
                         const isAssignedLead = selectedEvent.extendedProps?.lead?.booker === user?.id;
                         const canChangeConfirmation = user?.role === 'admin' || user?.role === 'viewer' || user?.role === 'booker';
-                        const canChangeOtherStatuses = user?.role === 'admin' || user?.role === 'viewer' || (user?.role === 'booker' && isAssignedLead);
+                        const canChangeOtherStatuses = user?.role === 'admin' || user?.role === 'viewer';
+                        const canCancelBooking = user?.role === 'admin' || user?.role === 'viewer' || user?.role === 'booker';
                         
                         return (
                         <>
@@ -2401,6 +2536,22 @@ const Calendar = () => {
                                   <span>{isCurrentlyUnconfirmed ? '✓ Unconfirmed' : 'Unconfirm'}</span>
                                 </button>
                               </>
+                            )}
+                            
+                            {/* Cancel button - visible to bookers, admins, and viewers */}
+                            {canCancelBooking && (
+                              <button
+                                onClick={() => handleEventStatusChange('Cancelled')}
+                                disabled={isCurrentlyCancelled}
+                                className={`relative overflow-hidden group flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 col-span-2 ${
+                                  isCurrentlyCancelled
+                                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg transform scale-105'
+                                    : 'bg-gradient-to-r from-rose-400 to-rose-500 text-white hover:from-rose-500 hover:to-pink-500 hover:shadow-lg hover:scale-105'
+                                }`}
+                              >
+                                <FiX className="h-4 w-4" />
+                                <span>{isCurrentlyCancelled ? '✓ Cancelled' : 'Cancel'}</span>
+                              </button>
                             )}
                             
                             {/* Other status buttons - only visible to users with appropriate permissions */}
@@ -2467,18 +2618,6 @@ const Calendar = () => {
                               >
                                 <FiX className="h-4 w-4" />
                                 <span>{isCurrentlyNoShow ? '✓ No Show' : 'No Show'}</span>
-                              </button>
-                              <button
-                                onClick={() => handleEventStatusChange('Cancelled')}
-                                disabled={isCurrentlyCancelled}
-                                className={`relative overflow-hidden group flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-300 ${
-                                  isCurrentlyCancelled
-                                    ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg transform scale-105'
-                                    : 'bg-gradient-to-r from-rose-400 to-rose-500 text-white hover:from-rose-500 hover:to-pink-500 hover:shadow-lg hover:scale-105'
-                                }`}
-                              >
-                                <FiX className="h-4 w-4" />
-                                <span>{isCurrentlyCancelled ? '✓ Cancelled' : 'Cancel'}</span>
                               </button>
                               {/* Complete Sale button - Only for admin and viewer */}
                               <button
@@ -2551,43 +2690,37 @@ const Calendar = () => {
                             <FiMessageSquare className="h-4 w-4 text-white" />
                           </div>
                           <div className="flex-1">
-                            {/* Always Show Expanded Mode - Full Conversation */}
+                            {/* Collapsible Messages Section */}
                             <>
-                                <div className="flex items-center justify-between mb-2">
+                                <div 
+                                  className="flex items-center space-x-2 mb-2 cursor-pointer hover:bg-blue-200/50 -mx-2 px-2 py-1 rounded transition-colors"
+                                  onClick={() => setShowAllMessages(!showAllMessages)}
+                                >
                                   <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Messages</p>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate('/messages', { 
-                                        state: { 
-                                          leadId: selectedEvent.id,
-                                          leadName: selectedEvent.extendedProps?.lead?.name,
-                                          leadPhone: selectedEvent.extendedProps?.phone
-                                        } 
-                                      });
-                                    }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center"
-                                  >
-                                    Open in Messages
-                                    <FiExternalLink className="h-3 w-3 ml-1" />
-                                  </button>
+                                  <span className="text-xs text-gray-500">({messages.length})</span>
+                                  {showAllMessages ? (
+                                    <FiChevronUp className="h-4 w-4 text-gray-600" />
+                                  ) : (
+                                    <FiChevronDown className="h-4 w-4 text-gray-600" />
+                                  )}
                                 </div>
                             
-                            <div 
-                              className="max-h-64 overflow-y-auto space-y-2" 
-                              id="calendar-messages-container"
-                              ref={(el) => {
-                                if (el && messages.length > 0) {
-                                  setTimeout(() => {
-                                    el.scrollTop = el.scrollHeight;
-                                  }, 50);
-                                }
-                              }}
-                            >
-                              {messages
-                                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-                                .slice(-8)
-                                .map((message, idx) => (
+                            {showAllMessages && (
+                              <div 
+                                className="max-h-64 overflow-y-auto space-y-2" 
+                                id="calendar-messages-container"
+                                ref={(el) => {
+                                  if (el && messages.length > 0) {
+                                    setTimeout(() => {
+                                      el.scrollTop = el.scrollHeight;
+                                    }, 50);
+                                  }
+                                }}
+                              >
+                                {messages
+                                  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                                  .slice(-8)
+                                  .map((message, idx) => (
                                   <div 
                                     key={idx} 
                                     className={`flex ${message.action === 'SMS_SENT' ? 'justify-end' : 'justify-start'}`}
@@ -2680,10 +2813,11 @@ const Calendar = () => {
                                     </div>
                                   </div>
                                 ))}
-                            </div>
+                              </div>
+                            )}
                             
                             {/* Quick Reply Section */}
-                            {user?.role !== 'viewer' && selectedEvent.extendedProps?.lead?.phone && (
+                            {user?.role !== 'viewer' && selectedEvent.extendedProps?.lead?.phone && showAllMessages && (
                               <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200">
                                 <div className="flex space-x-2">
                                   <input
@@ -3069,8 +3203,8 @@ const Calendar = () => {
               {/* Bottom Action Buttons */}
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="flex space-x-2">
-                  {/* Reschedule Button - Hidden for viewers */}
-                  {user?.role !== 'viewer' && selectedEvent.extendedProps?.status !== 'Cancelled' && (
+                  {/* Reschedule Button - Available for all roles */}
+                  {selectedEvent.extendedProps?.status !== 'Cancelled' && (
                     <button
                       onClick={() => handleRescheduleAppointment()}
                       className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-gradient-to-r from-orange-400 to-amber-400 text-white rounded-lg hover:from-orange-500 hover:to-amber-500 transition-all duration-300 shadow text-xs font-medium"
@@ -3158,26 +3292,13 @@ const Calendar = () => {
         </div>
       )}
 
-      {/* Event Modal - Show Sale Details if exists */}
-      {showEventModal && selectedEvent && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            {/* ...existing event details... */}
-            {selectedSale && (
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="font-bold text-blue-700 mb-2">Sale Details</h4>
-                <div className="text-sm text-blue-900">
-                  <div><b>Amount:</b> £{selectedSale.saleAmount}</div>
-                  <div><b>Payment Method:</b> {selectedSale.paymentMethod}</div>
-                  <div><b>Notes:</b> {selectedSale.notes || 'None'}</div>
-                  <div><b>Recorded By:</b> {selectedSale.user?.name}</div>
-                  <div><b>Date:</b> {new Date(selectedSale.bookingDate).toLocaleDateString()}</div>
-                </div>
-              </div>
-            )}
-            {/* ...rest of modal... */}
-          </div>
-        </div>
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage}
+          alt={selectedEvent?.extendedProps?.lead?.name || 'Lead Photo'}
+          onClose={() => setLightboxImage(null)}
+        />
       )}
     </div>
   );

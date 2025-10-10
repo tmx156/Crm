@@ -29,6 +29,9 @@ const Leads = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all'); // New: Date filter
+  const [customDateStart, setCustomDateStart] = useState(''); // New: Custom date range start
+  const [customDateEnd, setCustomDateEnd] = useState(''); // New: Custom date range end
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalLeads, setTotalLeads] = useState(0);
@@ -74,7 +77,7 @@ const Leads = () => {
     email: '',
     postcode: '',
     status: 'New',
-    notes: ''
+    image_url: ''
   });
 
 
@@ -129,21 +132,99 @@ const Leads = () => {
     }
   }, [leads]);
 
+  // Helper function to calculate date range in GMT/London timezone
+  const getDateRange = useCallback(() => {
+    // Get current time in London timezone
+    const nowLondon = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
+    const now = new Date(nowLondon);
+
+    // Get today at midnight in London timezone
+    const todayLondonStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' }); // YYYY-MM-DD format
+    const todayMidnightLondon = new Date(todayLondonStr + 'T00:00:00.000Z');
+
+    console.log('🕐 Current London time:', nowLondon);
+    console.log('📅 Today (London midnight):', todayLondonStr);
+
+    switch (dateFilter) {
+      case 'today':
+        // Today: from midnight to midnight+24h in London time
+        const startOfToday = todayLondonStr + 'T00:00:00.000Z';
+        const startOfTomorrow = new Date(todayMidnightLondon.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfToday,
+          end: startOfTomorrow
+        };
+      case 'yesterday':
+        // Yesterday: from yesterday midnight to today midnight in London time
+        const yesterdayDate = new Date(todayMidnightLondon.getTime() - 24 * 60 * 60 * 1000);
+        const startOfYesterday = yesterdayDate.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfYesterday,
+          end: todayLondonStr + 'T00:00:00.000Z'
+        };
+      case 'week':
+        // Last 7 days: from 7 days ago midnight to now
+        const weekAgo = new Date(todayMidnightLondon.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const startOfWeek = weekAgo.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfWeek,
+          end: new Date().toISOString() // Current moment
+        };
+      case 'month':
+        // Last 30 days: from 30 days ago midnight to now
+        const monthAgo = new Date(todayMidnightLondon.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const startOfMonth = monthAgo.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfMonth,
+          end: new Date().toISOString() // Current moment
+        };
+      case 'custom':
+        if (customDateStart && customDateEnd) {
+          // Custom range: use the dates as-is at midnight
+          return {
+            start: customDateStart + 'T00:00:00.000Z',
+            end: customDateEnd + 'T23:59:59.999Z'
+          };
+        }
+        return null;
+      default:
+        return null;
+    }
+  }, [dateFilter, customDateStart, customDateEnd]);
+
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       console.log('🔑 Using token for /api/leads:', token);
       console.log('🔍 Fetching leads with statusFilter:', statusFilter);
-      
+
+      // Build params object
+      const params = {
+        page: currentPage,
+        limit: leadsPerPage,
+        status: statusFilter,
+        search: debouncedSearchTerm
+      };
+
+      // Add date filter if applicable
+      const dateRange = getDateRange();
+      if (dateRange) {
+        // Use assigned_at for Assigned status, created_at for all others
+        if (statusFilter === 'Assigned') {
+          params.assigned_at_start = dateRange.start;
+          params.assigned_at_end = dateRange.end;
+          console.log('📅 Assigned date filter applied:', dateFilter, dateRange);
+        } else {
+          params.created_at_start = dateRange.start;
+          params.created_at_end = dateRange.end;
+          console.log('📅 Created date filter applied:', dateFilter, dateRange);
+        }
+      }
+
       const startTime = performance.now();
       const response = await axios.get('/api/leads', {
-        params: {
-          page: currentPage,
-          limit: leadsPerPage,
-          status: statusFilter,
-          search: debouncedSearchTerm
-        },
+        params,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         timeout: 10000 // 10 second timeout
       });
@@ -193,29 +274,50 @@ const Leads = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, searchTerm, user]);
+  }, [currentPage, statusFilter, debouncedSearchTerm, dateFilter, customDateStart, customDateEnd, getDateRange, user, leadsPerPage]);
 
   const fetchLeadCounts = useCallback(async () => {
     try {
-      const response = await axios.get('/api/stats/leads');
-      console.log('📊 Fetched lead counts:', response.data);
+      // Build params for stats API with date filter if applicable
+      const params = {};
+      const dateRange = getDateRange();
+      
+      if (dateRange) {
+        // Always use created_at for stats counters
+        // (assigned_at is only used for the actual leads list when viewing Assigned status)
+        params.created_at_start = dateRange.start;
+        params.created_at_end = dateRange.end;
+        console.log('📊 Fetching counts with date filter:', dateRange);
+      }
+
+      const response = await axios.get('/api/stats/leads', { params });
+      console.log('📊 Fetched lead counts with date filter:', response.data);
       setLeadCounts(response.data);
     } catch (error) {
       console.error('Error fetching lead counts:', error);
     }
-  }, []);
+  }, [dateFilter, customDateStart, customDateEnd, getDateRange]);
 
   // Fetch leads when filters or pagination change
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
 
-  // Fetch lead counts on mount and when user changes
+  // Fetch lead counts on mount
   useEffect(() => {
     if (user) {
       fetchLeadCounts();
     }
   }, [user, fetchLeadCounts]);
+
+  // Refetch lead counts when date filter changes
+  useEffect(() => {
+    if (user) {
+      console.log('📅 Date filter changed, refetching counts...');
+      fetchLeadCounts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFilter, customDateStart, customDateEnd]);
 
   // Clear selected leads when leads change (due to filtering/pagination)
   useEffect(() => {
@@ -443,14 +545,17 @@ const Leads = () => {
     try {
       console.log('🔍 DELETE DEBUG - Sending request with:', { leadIds: leadIdsToDelete });
       
+      const token = localStorage.getItem('token');
       const response = await axios.delete('/api/leads/bulk', {
-        data: { leadIds: leadIdsToDelete }
+        data: { leadIds: leadIdsToDelete },
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
       console.log('✅ Delete response:', response.data);
       alert(`Successfully deleted ${response.data.deletedCount || leadIdsToDelete.length} leads`);
       setSelectedLeads([]);
       fetchLeads(); // Refresh the leads list
+      fetchLeadCounts(); // Also refresh counts
     } catch (error) {
       console.error('❌ Error deleting leads:', error);
       console.error('❌ Error details:', {
@@ -506,7 +611,7 @@ const Leads = () => {
         email: '',
         postcode: '',
         status: 'New',
-        notes: ''
+        image_url: ''
       });
       fetchLeads();
       fetchLeadCounts();
@@ -1109,32 +1214,135 @@ const Leads = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-          <input
-            type="text"
-            placeholder="Search leads..."
-            className="pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="flex flex-col gap-4">
+        {/* Search and Status Filter Row */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <input
+              type="text"
+              placeholder="Search leads..."
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <FiFilter className="h-5 w-5 text-gray-400" />
+            <select
+              className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[140px]"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="New">🆕 New</option>
+              <option value="Booked">📅 Booked</option>
+              <option value="Attended">✅ Attended</option>
+              <option value="Cancelled">❌ Cancelled</option>
+              <option value="Assigned">👤 Assigned</option>
+              <option value="sales">💰 Sales</option>
+            </select>
+          </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <FiFilter className="h-5 w-5 text-gray-400" />
-          <select
-            className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[140px]"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Status</option>
-            <option value="New">🆕 New</option>
-            <option value="Booked">📅 Booked</option>
-            <option value="Attended">✅ Attended</option>
-            <option value="Cancelled">❌ Cancelled</option>
-            <option value="Assigned">👤 Assigned</option>
-            <option value="sales">💰 Sales</option>
-          </select>
+
+        {/* Date Filter Row */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex items-center space-x-2">
+            <FiCalendar className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium text-gray-700">
+              {statusFilter === 'Assigned' ? 'Date Assigned:' : 'Date Added:'}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setDateFilter('today')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                dateFilter === 'today'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setDateFilter('yesterday')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                dateFilter === 'yesterday'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => setDateFilter('week')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                dateFilter === 'week'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Last 7 Days
+            </button>
+            <button
+              onClick={() => setDateFilter('month')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                dateFilter === 'month'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Last 30 Days
+            </button>
+            <button
+              onClick={() => setDateFilter('all')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                dateFilter === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              All Time
+            </button>
+          </div>
+
+          {/* Custom Date Range */}
+          <div className="flex items-center space-x-2 ml-auto">
+            <input
+              type="date"
+              value={customDateStart}
+              onChange={(e) => {
+                setCustomDateStart(e.target.value);
+                if (e.target.value) setDateFilter('custom');
+              }}
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Start date"
+            />
+            <span className="text-gray-500">to</span>
+            <input
+              type="date"
+              value={customDateEnd}
+              onChange={(e) => {
+                setCustomDateEnd(e.target.value);
+                if (e.target.value) setDateFilter('custom');
+              }}
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="End date"
+            />
+            {(customDateStart || customDateEnd) && (
+              <button
+                onClick={() => {
+                  setCustomDateStart('');
+                  setCustomDateEnd('');
+                  setDateFilter('all');
+                }}
+                className="text-gray-500 hover:text-gray-700 p-1"
+                title="Clear custom dates"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1323,6 +1531,9 @@ const Leads = () => {
                   Booker
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {statusFilter === 'Assigned' ? 'Date Assigned' : 'Date Added'}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date Booked
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1402,6 +1613,14 @@ const Leads = () => {
                   )}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{lead.booker?.name || 'N/A'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">
+                      {statusFilter === 'Assigned' 
+                        ? (lead.assigned_at ? formatDate(lead.assigned_at) : 'N/A')
+                        : (lead.created_at ? formatDate(lead.created_at) : 'N/A')
+                      }
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{lead.date_booked ? formatDate(lead.date_booked) : 'N/A'}</div>
@@ -1636,14 +1855,15 @@ const Leads = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
+                    Image URL
                   </label>
-                  <textarea
-                    rows="3"
+                  <input
+                    type="text"
+                    placeholder="https://example.com/image.jpg"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={newLead.notes}
-                    onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })}
-                  ></textarea>
+                    value={newLead.image_url}
+                    onChange={(e) => setNewLead({ ...newLead, image_url: e.target.value })}
+                  />
                 </div>
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
@@ -2223,3 +2443,4 @@ const Leads = () => {
 };
 
 export default Leads; 
+

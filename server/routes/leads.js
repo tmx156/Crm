@@ -333,7 +333,7 @@ const looksLikeNames = (values) => {
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end } = req.query;
+    const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
     // Validate and cap limit to prevent performance issues
     const validatedLimit = Math.min(parseInt(limit) || 50, 100);
@@ -344,7 +344,7 @@ router.get('/', auth, async (req, res) => {
     // Build Supabase queries (data + count) with consistent filters
     let dataQuery = supabase
       .from('leads')
-      .select('id, name, phone, email, postcode, image_url, booker_id, created_by_user_id, updated_by_user_id, status, date_booked, is_confirmed, has_sale, created_at', { count: 'exact' })
+      .select('id, name, phone, email, postcode, age, image_url, booker_id, created_by_user_id, updated_by_user_id, status, date_booked, is_confirmed, has_sale, created_at, assigned_at, booked_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -403,6 +403,17 @@ router.get('/', auth, async (req, res) => {
         .gte('created_at', created_at_start)
         .lte('created_at', created_at_end);
       console.log(`📅 Created date filter applied: ${created_at_start} to ${created_at_end}`);
+    }
+
+    // Apply assigned_at date range filter for assigned leads
+    if (assigned_at_start && assigned_at_end) {
+      dataQuery = dataQuery
+        .gte('assigned_at', assigned_at_start)
+        .lte('assigned_at', assigned_at_end);
+      countQuery = countQuery
+        .gte('assigned_at', assigned_at_start)
+        .lte('assigned_at', assigned_at_end);
+      console.log(`📅 Assigned date filter applied: ${assigned_at_start} to ${assigned_at_end}`);
     }
 
     // Execute queries
@@ -530,7 +541,7 @@ router.get('/calendar', auth, async (req, res) => {
     let query = supabase
       .from('leads')
       .select(`
-        id, name, phone, email, status, date_booked, booker_id,
+        id, name, phone, email, age, status, date_booked, booker_id,
         is_confirmed, booking_status, booking_history, has_sale,
         created_at, updated_at, postcode, notes, image_url
       `)
@@ -753,7 +764,7 @@ router.get('/calendar', auth, async (req, res) => {
         const fallbackPromise = supabase
           .from('leads')
           .select(`
-            id, name, phone, email, status, date_booked, booker_id,
+            id, name, phone, email, age, status, date_booked, booker_id,
             is_confirmed, booking_status, booking_history, has_sale,
             created_at, updated_at, postcode, notes, image_url
           `)
@@ -1334,6 +1345,8 @@ router.post('/', auth, async (req, res) => {
       // Convert boolean to integer for database compatibility
       is_confirmed: leadData.is_confirmed ? 1 : 0,
       booking_status: leadData.booking_status || null,
+      // ✅ DAILY ACTIVITY FIX: Set booked_at timestamp if creating with Booked status
+      booked_at: leadData.status === 'Booked' ? new Date().toISOString() : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1557,6 +1570,13 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
     const isNewBooking = (oldStatus === 'New' || !oldDateBooked) && req.body.date_booked && req.body.status === 'Booked';
     // Handle cancellation - set to Cancelled and clear booking date
     const isCancellation = req.body.status === 'Cancelled' || (req.body.status === 'New' && oldStatus === 'Booked' && !req.body.date_booked);
+    
+    // ✅ DAILY ACTIVITY FIX: Set booked_at timestamp when status changes to Booked
+    if (oldStatus !== 'Booked' && req.body.status === 'Booked') {
+      req.body.booked_at = new Date().toISOString();
+      console.log(`📊 Setting booked_at timestamp for ${lead.name}: ${req.body.booked_at}`);
+    }
+    
     // If cancelling, clear dateBooked and keep status as Cancelled
     if (req.body.status === 'Cancelled') {
       req.body.date_booked = null;
@@ -3591,7 +3611,7 @@ router.get('/:id/tags', auth, async (req, res) => {
     }
 
     // ROLE-BASED ACCESS CONTROL
-    if (req.user.role !== 'admin' && lead.booker !== req.user.id) {
+    if (req.user.role !== 'admin' && leadData.booker_id !== req.user.id) {
       return res.status(403).json({ message: 'Access denied. You can only view leads assigned to you.' });
     }
 
@@ -4455,25 +4475,27 @@ router.get('/public', async (req, res) => {
       select: '*'
     };
 
-    // Apply date filters - support both date_booked and created_at
+    // Apply date filters - support multiple date fields
     if (date_booked_start && date_booked_end) {
       queryOptions.gte = { date_booked: date_booked_start };
       queryOptions.lte = { date_booked: date_booked_end };
     }
 
-    // Support created_at filtering for daily activity dashboard
-    const { created_at_start, created_at_end, updated_at_start, updated_at_end } = req.query;
-    if (created_at_start && created_at_end) {
+    // ✅ DAILY ACTIVITY FIX: Support booked_at filtering (when leads were booked)
+    const { created_at_start, created_at_end, updated_at_start, updated_at_end, booked_at_start, booked_at_end } = req.query;
+    
+    if (booked_at_start && booked_at_end) {
+      queryOptions.gte = { booked_at: booked_at_start };
+      queryOptions.lte = { booked_at: booked_at_end };
+      console.log(`📅 Public leads filtering by booked date (NEW METHOD): ${booked_at_start} to ${booked_at_end}`);
+    } else if (created_at_start && created_at_end) {
       queryOptions.gte = { created_at: created_at_start };
       queryOptions.lte = { created_at: created_at_end };
       console.log(`📅 Public leads filtering by creation date: ${created_at_start} to ${created_at_end}`);
-    }
-
-    // Support updated_at filtering for booking activity (when bookings were MADE)
-    if (updated_at_start && updated_at_end) {
+    } else if (updated_at_start && updated_at_end) {
       queryOptions.gte = { updated_at: updated_at_start };
       queryOptions.lte = { updated_at: updated_at_end };
-      console.log(`📅 Public leads filtering by updated date (bookings made): ${updated_at_start} to ${updated_at_end}`);
+      console.log(`📅 Public leads filtering by updated date: ${updated_at_start} to ${updated_at_end}`);
     }
 
     // Apply limit

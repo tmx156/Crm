@@ -36,6 +36,9 @@ const LeadsNew = () => {
     // Check if navigation state has statusFilter
     return location.state?.statusFilter || 'all';
   });
+  const [dateFilter, setDateFilter] = useState('all'); // New: Date filter
+  const [customDateStart, setCustomDateStart] = useState(''); // New: Custom date range start
+  const [customDateEnd, setCustomDateEnd] = useState(''); // New: Custom date range end
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalLeads, setTotalLeads] = useState(0);
@@ -72,7 +75,7 @@ const LeadsNew = () => {
     email: '',
     postcode: '',
     status: 'New',
-    notes: ''
+    image_url: ''
   });
 
   // Debounced search - removed fetchLeads dependency to avoid infinite loop
@@ -81,19 +84,102 @@ const LeadsNew = () => {
       setCurrentPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchTerm, statusFilter]);
+  }, [searchTerm, statusFilter, dateFilter, customDateStart, customDateEnd]);
+
+  // Helper function to calculate date range in GMT/London timezone
+  const getDateRange = () => {
+    // Get current time in London timezone
+    const nowLondon = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
+    const now = new Date(nowLondon);
+
+    // Get today at midnight in London timezone
+    const todayLondonStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' }); // YYYY-MM-DD format
+    const todayMidnightLondon = new Date(todayLondonStr + 'T00:00:00.000Z');
+
+    console.log('🕐 Current London time:', nowLondon);
+    console.log('📅 Today (London midnight):', todayLondonStr);
+
+    switch (dateFilter) {
+      case 'today':
+        // Today: from midnight to midnight+24h in London time
+        const startOfToday = todayLondonStr + 'T00:00:00.000Z';
+        const startOfTomorrow = new Date(todayMidnightLondon.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfToday,
+          end: startOfTomorrow
+        };
+      case 'yesterday':
+        // Yesterday: from yesterday midnight to today midnight in London time
+        const yesterdayDate = new Date(todayMidnightLondon.getTime() - 24 * 60 * 60 * 1000);
+        const startOfYesterday = yesterdayDate.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfYesterday,
+          end: todayLondonStr + 'T00:00:00.000Z'
+        };
+      case 'week':
+        // Last 7 days: from 7 days ago midnight to now
+        const weekAgo = new Date(todayMidnightLondon.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const startOfWeek = weekAgo.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfWeek,
+          end: new Date().toISOString() // Current moment
+        };
+      case 'month':
+        // Last 30 days: from 30 days ago midnight to now
+        const monthAgo = new Date(todayMidnightLondon.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const startOfMonth = monthAgo.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        return {
+          start: startOfMonth,
+          end: new Date().toISOString() // Current moment
+        };
+      case 'custom':
+        if (customDateStart && customDateEnd) {
+          // Custom range: use the dates as-is at midnight
+          return {
+            start: customDateStart + 'T00:00:00.000Z',
+            end: customDateEnd + 'T23:59:59.999Z'
+          };
+        }
+        return null;
+      default:
+        return null;
+    }
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
+
+      // Build params object
+      const params = {
+        page: currentPage,
+        limit: leadsPerPage,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        search: searchTerm
+      };
+
+      // Add date filter if applicable
+      const dateRange = getDateRange();
+      if (dateRange) {
+        // Use assigned_at for Assigned status, created_at for all others
+        if (statusFilter === 'Assigned') {
+          params.assigned_at_start = dateRange.start;
+          params.assigned_at_end = dateRange.end;
+          console.log('📅 Assigned date filter active:', dateFilter, 'Range:', dateRange);
+        } else {
+          params.created_at_start = dateRange.start;
+          params.created_at_end = dateRange.end;
+          console.log('📅 Created date filter active:', dateFilter, 'Range:', dateRange);
+        }
+      } else {
+        console.log('📅 Date filter: All time (no filter applied)');
+      }
+
+      console.log('🔍 Fetching leads with params:', params);
+
       const response = await axios.get('/api/leads', {
-        params: {
-          page: currentPage,
-          limit: leadsPerPage,
-          status: statusFilter === 'all' ? undefined : statusFilter,
-          search: searchTerm
-        },
+        params,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         timeout: 10000
       });
@@ -111,7 +197,20 @@ const LeadsNew = () => {
 
   const fetchLeadCounts = async () => {
     try {
-      const response = await axios.get('/api/stats/leads');
+      // Build params for stats API with date filter if applicable
+      const params = {};
+      const dateRange = getDateRange();
+      
+      if (dateRange) {
+        // Always use created_at for stats counters
+        // (assigned_at is only used for the actual leads list when viewing Assigned status)
+        params.created_at_start = dateRange.start;
+        params.created_at_end = dateRange.end;
+        console.log('📊 Fetching counts with date filter:', dateRange);
+      }
+
+      const response = await axios.get('/api/stats/leads', { params });
+      console.log('📊 Fetched lead counts with date filter:', response.data);
       setLeadCounts(response.data);
     } catch (error) {
       console.error('Error fetching lead counts:', error);
@@ -120,7 +219,7 @@ const LeadsNew = () => {
 
   useEffect(() => {
     fetchLeads();
-  }, [currentPage, statusFilter, searchTerm]);
+  }, [currentPage, statusFilter, searchTerm, dateFilter, customDateStart, customDateEnd]);
 
   useEffect(() => {
     if (user) {
@@ -128,6 +227,15 @@ const LeadsNew = () => {
       fetchSalesTeam();
     }
   }, [user]);
+
+  // Refetch lead counts when date filter changes
+  useEffect(() => {
+    if (user) {
+      console.log('📅 Date filter changed, refetching counts...');
+      fetchLeadCounts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFilter, customDateStart, customDateEnd]);
 
   // Handle navigation state changes from sidebar
   useEffect(() => {
@@ -138,7 +246,17 @@ const LeadsNew = () => {
   }, [location.state?.statusFilter]);
 
   const handleRowClick = (lead) => {
-    navigate(`/leads/${lead.id}`);
+    // Pass filter context and current leads to LeadDetail for navigation
+    navigate(`/leads/${lead.id}`, {
+      state: {
+        statusFilter,
+        searchTerm,
+        dateFilter,
+        customDateStart,
+        customDateEnd,
+        filteredLeads: leads // Pass the current filtered leads
+      }
+    });
   };
 
   const handleBookLead = (lead, e) => {
@@ -209,7 +327,7 @@ const LeadsNew = () => {
         email: '',
         postcode: '',
         status: 'New',
-        notes: ''
+        image_url: ''
       });
       fetchLeads();
       fetchLeadCounts();
@@ -488,9 +606,14 @@ const LeadsNew = () => {
       return;
     }
 
+    if (user?.role !== 'admin') {
+      alert('Only administrators can delete leads');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
-      await axios.delete('/api/leads/bulk', {
+      const response = await axios.delete('/api/leads/bulk', {
         data: { leadIds: selectedLeads },
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -499,10 +622,14 @@ const LeadsNew = () => {
       setSelectedLeads([]);
       fetchLeads();
       fetchLeadCounts();
-      alert(`Successfully deleted ${selectedLeads.length} leads`);
+      alert(`Successfully deleted ${response.data.deletedCount || selectedLeads.length} leads`);
     } catch (error) {
       console.error('Error deleting leads:', error);
-      alert('Failed to delete leads');
+      if (error.response?.data?.message) {
+        alert(`Delete failed: ${error.response.data.message}`);
+      } else {
+        alert('Failed to delete leads. Please try again.');
+      }
     }
   };
 
@@ -586,29 +713,47 @@ const LeadsNew = () => {
                     <span className="font-medium">{selectedLeads.length} Selected</span>
                   </div>
                   
-                  <button
-                    onClick={() => setShowBulkAssignModal(true)}
-                    className="group px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                    style={{
-                      pointerEvents: 'auto',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <FiUserPlus className="h-5 w-5 group-hover:animate-pulse" />
-                    <span className="font-medium">Assign Leads</span>
-                  </button>
+                  {user?.role === 'admin' && (
+                    <>
+                      <button
+                        onClick={() => setShowBulkAssignModal(true)}
+                        className="group px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
+                        style={{
+                          pointerEvents: 'auto',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <FiUserPlus className="h-5 w-5 group-hover:animate-pulse" />
+                        <span className="font-medium">Assign Leads</span>
+                      </button>
 
-                  <button
-                    onClick={() => setShowBulkDeleteModal(true)}
-                    className="group px-4 py-2 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:from-red-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                    style={{
-                      pointerEvents: 'auto',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <FiTrash2 className="h-5 w-5 group-hover:animate-bounce" />
-                    <span className="font-medium">Delete Leads</span>
-                  </button>
+                      <button
+                        onClick={() => setShowBulkDeleteModal(true)}
+                        className="group px-4 py-2 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:from-red-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
+                        style={{
+                          pointerEvents: 'auto',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <FiTrash2 className="h-5 w-5 group-hover:animate-bounce" />
+                        <span className="font-medium">Delete Leads</span>
+                      </button>
+                    </>
+                  )}
+                  
+                  {user?.role !== 'admin' && (
+                    <button
+                      onClick={() => setSelectedLeads([])}
+                      className="group px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
+                      style={{
+                        pointerEvents: 'auto',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <FiX className="h-5 w-5" />
+                      <span className="font-medium">Clear Selection</span>
+                    </button>
+                  )}
                 </>
               )}
               
@@ -723,6 +868,108 @@ const LeadsNew = () => {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Date Filter */}
+        <div className="px-6 pb-4">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl border border-blue-200">
+            <div className="flex items-center space-x-2">
+              <FiCalendar className="h-5 w-5 text-blue-600" />
+              <span className="text-sm font-semibold text-gray-800">
+                {statusFilter === 'Assigned' ? 'Date Assigned:' : 'Date Added:'}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setDateFilter('today')}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  dateFilter === 'today'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setDateFilter('yesterday')}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  dateFilter === 'yesterday'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => setDateFilter('week')}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  dateFilter === 'week'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                onClick={() => setDateFilter('month')}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  dateFilter === 'month'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Last 30 Days
+              </button>
+              <button
+                onClick={() => setDateFilter('all')}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  dateFilter === 'all'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                All Time
+              </button>
+            </div>
+
+            {/* Custom Date Range */}
+            <div className="flex items-center space-x-2 ml-auto">
+              <input
+                type="date"
+                value={customDateStart}
+                onChange={(e) => {
+                  setCustomDateStart(e.target.value);
+                  if (e.target.value) setDateFilter('custom');
+                }}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Start date"
+              />
+              <span className="text-gray-500 text-sm">to</span>
+              <input
+                type="date"
+                value={customDateEnd}
+                onChange={(e) => {
+                  setCustomDateEnd(e.target.value);
+                  if (e.target.value) setDateFilter('custom');
+                }}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="End date"
+              />
+              {(customDateStart || customDateEnd) && (
+                <button
+                  onClick={() => {
+                    setCustomDateStart('');
+                    setCustomDateEnd('');
+                    setDateFilter('all');
+                  }}
+                  className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Clear custom dates"
+                >
+                  <FiX className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1071,14 +1318,15 @@ const LeadsNew = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
+                    Image URL
                   </label>
-                  <textarea
-                    rows="3"
+                  <input
+                    type="text"
+                    placeholder="https://example.com/image.jpg"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={newLead.notes}
-                    onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })}
-                  ></textarea>
+                    value={newLead.image_url}
+                    onChange={(e) => setNewLead({ ...newLead, image_url: e.target.value })}
+                  />
                 </div>
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
