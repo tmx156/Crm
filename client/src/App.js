@@ -26,6 +26,7 @@ import Sales from './pages/Sales';
 import Messages from './pages/Messages';
 import Legacy from './pages/Legacy';
 import BookerAnalytics from './pages/BookerAnalytics';
+import AIAssistant from './pages/AIAssistant';
 
 // Create browser history
 const history = createBrowserHistory();
@@ -93,6 +94,7 @@ function App() {
                           <Route path="/messages" element={<Messages />} />
                           <Route path="/legacy" element={<Legacy />} />
                           <Route path="/booker-analytics" element={<BookerAnalytics />} />
+                          <Route path="/ai-assistant" element={<AIAssistant />} />
                           <Route path="/" element={<Navigate to="/dashboard" />} />
                         </Routes>
                       </Layout>

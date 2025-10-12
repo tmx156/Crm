@@ -483,6 +483,7 @@ const Sales = () => {
                 >
                   <option value="today">Today</option>
                   <option value="this_week">This Week</option>
+                  <option value="last_week">Last Week</option>
                   <option value="this_month">This Month</option>
                   <option value="last_month">Last Month</option>
                   <option value="this_quarter">This Quarter</option>

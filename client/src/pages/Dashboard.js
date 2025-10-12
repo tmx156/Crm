@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye } from 'react-icons/fi';
+import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +34,7 @@ const Dashboard = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [selectedBooker, setSelectedBooker] = useState(null);
   const [isBookerModalOpen, setIsBookerModalOpen] = useState(false);
+  const [selectedActivityDate, setSelectedActivityDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Fetch all dashboard data
   const fetchStats = useCallback(async () => {
@@ -64,13 +65,9 @@ const Dashboard = () => {
   // Fetch booker activity
   const fetchBookerActivity = useCallback(async () => {
     try {
-      // Get UK date for filtering bookings made TODAY in UK time
+      // Use selectedActivityDate instead of today
       const ukTz = 'Europe/London';
-
-      // Get current UK time and extract just the date
-      const now = new Date();
-      const ukNow = toZonedTime(now, ukTz);
-      const todayUK = format(ukNow, 'yyyy-MM-dd', { timeZone: ukTz });
+      const todayUK = selectedActivityDate;
 
       // Create start and end of day in UK local time (not UTC)
       // Then let the timezone library convert to UTC properly
@@ -101,17 +98,16 @@ const Dashboard = () => {
       const leads = leadsRes.data?.leads || [];
       console.log(`📊 Dashboard: Found ${leads.length} leads booked today using booked_at filter`);
 
-      // Fetch sales data for admin/viewer - only sales made TODAY
+      // Fetch sales data for admin/viewer - only sales made on selectedActivityDate
       let salesData = [];
       if (user?.role === 'admin' || user?.role === 'viewer') {
         try {
           const salesRes = await axios.get('/api/sales', {
             params: {
-              dateRange: 'today'
+              dateRange: 'today' // This will be ignored, we filter client-side
             }
           });
-          // Filter sales client-side to only include those created today in UK time
-          const todayUK = getTodayUK();
+          // Filter sales client-side to only include those created on selectedActivityDate in UK time
           salesData = (salesRes.data || []).filter(sale => {
             if (!sale.created_at) return false;
             const ukTz = 'Europe/London';
@@ -191,7 +187,7 @@ const Dashboard = () => {
             amount: sale.amount || sale.total_amount || 0,
             createdAt: sale.created_at,
             by: saleUser?.name || 'Unknown User',
-            saleNumber: sale.id,
+            saleNumber: sale.booker_name || sale.id, // Show booker name instead of sale ID
             completedAgo: timeAgo(new Date(sale.created_at))
           });
 
@@ -222,7 +218,7 @@ const Dashboard = () => {
     } catch (e) {
       console.error('Error fetching booker activity:', e);
     }
-  }, [user]);
+  }, [user, selectedActivityDate]);
 
   // Fetch calendar events
   const fetchCalendarEvents = useCallback(async () => {
@@ -511,6 +507,16 @@ const Dashboard = () => {
     return `${days}d ago`;
   };
 
+  // Navigate activity date (previous/next day)
+  const navigateActivityDate = (direction) => {
+    const current = new Date(selectedActivityDate);
+    current.setDate(current.getDate() + direction);
+    setSelectedActivityDate(current.toISOString().split('T')[0]);
+  };
+
+  // Check if selected date is today
+  const isActivityToday = selectedActivityDate === new Date().toISOString().split('T')[0];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
@@ -627,7 +633,49 @@ const Dashboard = () => {
                 {bookerActivity.reduce((sum, user) => sum + (user.bookings || 0), 0)} bookings • {bookerActivity.reduce((sum, user) => sum + (user.sales || 0), 0)} sales
               </div>
             </div>
-            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4">Resets at midnight</div>
+
+            {/* Date Navigation */}
+            <div className="flex items-center justify-between mb-3 sm:mb-4 bg-gray-50 rounded-lg p-3">
+              <button
+                onClick={() => navigateActivityDate(-1)}
+                className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Previous Day"
+              >
+                <FiArrowLeft className="h-4 w-4" />
+                <span className="text-sm font-medium">Previous</span>
+              </button>
+
+              <div className="flex flex-col items-center">
+                <input
+                  type="date"
+                  value={selectedActivityDate}
+                  onChange={(e) => setSelectedActivityDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {!isActivityToday && (
+                  <button
+                    onClick={() => setSelectedActivityDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs text-blue-600 hover:text-blue-700 mt-1"
+                  >
+                    Back to Today
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={() => navigateActivityDate(1)}
+                disabled={isActivityToday}
+                className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Next Day"
+              >
+                <span className="text-sm font-medium">Next</span>
+                <FiArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4">
+              {isActivityToday ? 'Viewing Today - Resets at midnight' : `Viewing ${new Date(selectedActivityDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+            </div>
             <div className="space-y-3">
               {bookerActivity.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -715,7 +763,7 @@ const Dashboard = () => {
                                   Completed
                                 </span>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Sale #{sale.saleNumber.substring(0, 20)}...
+                                  Booker: {sale.saleNumber}
                                 </p>
                               </div>
                             </div>
