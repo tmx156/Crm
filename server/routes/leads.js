@@ -335,6 +335,12 @@ router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
+  console.log('🔍 Leads API request params:', {
+    page, limit, status, booker, search,
+    created_at_start, created_at_end,
+    assigned_at_start, assigned_at_end
+  });
+
     // Validate and cap limit to prevent performance issues
     const validatedLimit = Math.min(parseInt(limit) || 50, 100);
     const pageInt = Math.max(parseInt(page) || 1, 1);
@@ -407,6 +413,7 @@ router.get('/', auth, async (req, res) => {
 
     // Apply assigned_at date range filter for assigned leads
     if (assigned_at_start && assigned_at_end) {
+      console.log(`📅 Applying assigned_at filter: ${assigned_at_start} to ${assigned_at_end}`);
       dataQuery = dataQuery
         .gte('assigned_at', assigned_at_start)
         .lte('assigned_at', assigned_at_end);
