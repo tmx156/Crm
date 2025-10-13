@@ -407,7 +407,15 @@ const Dashboard = () => {
       const messagesRes = await axios.get('/api/messages-list', {
         params: { unread: true, limit: 10 }
       });
-      const messages = messagesRes.data?.messages || messagesRes.data || [];
+      let messages = messagesRes.data?.messages || messagesRes.data || [];
+      console.log(`📨 Fetched unread messages:`, messagesRes.data);
+
+      // Ensure messages is always an array
+      if (!Array.isArray(messages)) {
+        console.warn('📨 Messages response is not an array:', messages);
+        messages = [];
+      }
+
       console.log(`📨 Fetched ${messages.length} unread messages`);
       if (messages.length > 0) {
         console.log('📧 Sample message:', {
@@ -963,20 +971,20 @@ const Dashboard = () => {
                 <FiMessageSquare className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-indigo-500" />
                 <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">MESSAGES</h2>
               </div>
-              {unreadMessages.length > 0 && (
+              {(unreadMessages || []).length > 0 && (
                 <div className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                  {unreadMessages.length}
+                  {(unreadMessages || []).length}
                 </div>
               )}
             </div>
             <div className="space-y-3">
-              {unreadMessages.length === 0 ? (
+              {(unreadMessages || []).length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <FiMessageSquare className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <p>No unread messages</p>
                 </div>
               ) : (
-                unreadMessages.map((message) => (
+                (unreadMessages || []).map((message) => (
                   <div key={message.id} className="bg-white border-l-4 border-orange-400 rounded-lg p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
