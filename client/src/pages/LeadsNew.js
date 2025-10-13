@@ -88,16 +88,17 @@ const LeadsNew = () => {
 
   // Helper function to calculate date range in GMT/London timezone
   const getDateRange = () => {
-    // Get current time in London timezone
-    const nowLondon = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
-    const now = new Date(nowLondon);
-
-    // Get today at midnight in London timezone
+    // Get current time in London timezone - use proper Date object
+    const now = new Date();
+    
+    // Get today's date string in London timezone (YYYY-MM-DD format)
     const todayLondonStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' }); // YYYY-MM-DD format
+    
+    // Create Date objects for calculations
     const todayMidnightLondon = new Date(todayLondonStr + 'T00:00:00.000Z');
 
-    console.log('🕐 Current London time:', nowLondon);
-    console.log('📅 Today (London midnight):', todayLondonStr);
+    console.log('🕐 Current time:', now.toLocaleString('en-GB', { timeZone: 'Europe/London' }));
+    console.log('📅 Today (London midnight):', todayLondonStr, todayMidnightLondon.toISOString());
 
     switch (dateFilter) {
       case 'today':
