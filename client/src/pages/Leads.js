@@ -150,7 +150,6 @@ const Leads = () => {
         // Today: from midnight to midnight+24h in London time
         const startOfToday = todayLondonStr + 'T00:00:00.000Z';
         const startOfTomorrow = new Date(todayMidnightLondon.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T00:00:00.000Z';
-        console.log('📅 Today range:', { start: startOfToday, end: startOfTomorrow });
         return {
           start: startOfToday,
           end: startOfTomorrow
@@ -159,7 +158,6 @@ const Leads = () => {
         // Yesterday: from yesterday midnight to today midnight in London time
         const yesterdayDate = new Date(todayMidnightLondon.getTime() - 24 * 60 * 60 * 1000);
         const startOfYesterday = yesterdayDate.toISOString().split('T')[0] + 'T00:00:00.000Z';
-        console.log('📅 Yesterday range:', { start: startOfYesterday, end: todayLondonStr + 'T00:00:00.000Z' });
         return {
           start: startOfYesterday,
           end: todayLondonStr + 'T00:00:00.000Z'
@@ -217,12 +215,10 @@ const Leads = () => {
           params.assigned_at_start = dateRange.start;
           params.assigned_at_end = dateRange.end;
           console.log('📅 Assigned date filter applied:', dateFilter, dateRange);
-          console.log('📅 API params:', params);
         } else {
           params.created_at_start = dateRange.start;
           params.created_at_end = dateRange.end;
           console.log('📅 Created date filter applied:', dateFilter, dateRange);
-          console.log('📅 API params:', params);
         }
       }
 
@@ -321,6 +317,12 @@ const Leads = () => {
       fetchLeadCounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFilter, customDateStart, customDateEnd]);
+
+  // Reset to first page when date filter changes
+  useEffect(() => {
+    console.log('📅 Date filter changed, resetting to page 1...');
+    setCurrentPage(1);
   }, [dateFilter, customDateStart, customDateEnd]);
 
   // Clear selected leads when leads change (due to filtering/pagination)
