@@ -157,12 +157,10 @@ const Calendar = () => {
       let dateParams = '';
       if (calendarApi && calendarApi.view) {
         const view = calendarApi.view;
-        // Add buffer days for smooth scrolling
+        // Only fetch visible calendar dates (no buffer needed for month navigation)
         const startDate = new Date(view.activeStart);
         const endDate = new Date(view.activeEnd);
-        startDate.setDate(startDate.getDate() - 7); // 7 days buffer before
-        endDate.setDate(endDate.getDate() + 7); // 7 days buffer after
-        
+
         dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
         console.log(`📅 Fetching events for range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
       }
@@ -692,40 +690,16 @@ const Calendar = () => {
     console.log('📅 Event clicked:', clickInfo.event.title);
     console.log('📸 Event image_url:', clickInfo.event.extendedProps?.lead?.image_url);
     console.log('📋 Full event extendedProps:', clickInfo.event.extendedProps);
-    
+
     // Store a stable plain-object snapshot so live updates don't close the modal
     setSelectedEvent(createEventSnapshot(clickInfo.event));
     setShowEventModal(true);
     setShowAllMessages(false);
     // Don't fetch sale details on modal open - only fetch if needed
     setSelectedSale(null);
-    
-    // PERFORMANCE: Lazy load booking history when event is clicked
-    const eventId = clickInfo.event.id;
-    try {
-      const response = await axios.get(`/api/leads/${eventId}/history`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.data && response.data.bookingHistory) {
-        // Update the selected event with the loaded booking history
-        setSelectedEvent(prev => ({
-          ...prev,
-          extendedProps: {
-            ...prev.extendedProps,
-            lead: {
-              ...prev.extendedProps.lead,
-              bookingHistory: response.data.bookingHistory || [],
-              booking_history: response.data.bookingHistory || []
-            }
-          }
-        }));
-      }
-    } catch (error) {
-      console.warn('Failed to load booking history:', error);
-      // Still show the modal even if history fails to load
-    }
+
+    // REMOVED: Booking history API call - was causing 403 errors and blocking calendar render
+    // Booking history is already included in the calendar events response
   };
 
 
@@ -1747,7 +1721,7 @@ const Calendar = () => {
       </div>
 
       {/* Calendar */}
-      <div className="card mobile-card overflow-x-auto">
+      <div className="mobile-card overflow-x-auto">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -1810,7 +1784,7 @@ const Calendar = () => {
           timeZone='local'
           eventMaxStack={5}
           moreLinkClick="popover"
-          dayMaxEventRows={3}
+          dayMaxEventRows={false}
           forceEventDuration={true}
           defaultTimedEventDuration='00:15:00'
           progressiveEventRendering={true}
@@ -1818,54 +1792,25 @@ const Calendar = () => {
           views={{
             dayGridMonth: {
               dayMaxEventRows: 3,
-              moreLinkClick: 'popover'
+              moreLinkClick: 'popover',
+              showNonCurrentDates: true
             },
             timeGridWeek: {
-              dayMaxEventRows: false,
-              eventMaxStack: 10
+              allDaySlot: false,
+              slotMinTime: '10:00:00',
+              slotMaxTime: '18:00:00',
+              height: 'auto'
             },
             timeGridDay: {
-              dayMaxEventRows: false
+              allDaySlot: false,
+              slotMinTime: '10:00:00',
+              slotMaxTime: '18:00:00',
+              height: 'auto'
             }
           }}
           eventContent={(arg) => {
-            const hasMessages = (() => {
-              const raw = arg.event.extendedProps?.lead?.bookingHistory || 
-                          arg.event.extendedProps?.bookingHistory || 
-                          arg.event.extendedProps?.lead?.booking_history || 
-                          [];
-              let history = [];
-              try {
-                if (Array.isArray(raw)) history = raw;
-                else if (typeof raw === 'string') history = raw.trim() ? JSON.parse(raw) : [];
-              } catch {}
-              
-              // Sort messages by timestamp (most recent first)
-              const smsMessages = (Array.isArray(history) ? history : [])
-                .filter(h => ['SMS_SENT', 'SMS_RECEIVED'].includes(h.action))
-                .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-              
-              // If no SMS messages, no need for reply
-              if (smsMessages.length === 0) {
-                return { 
-                  total: 0, 
-                  needsReply: false 
-                };
-              }
-              
-              // Check the most recent message
-              const mostRecentSms = smsMessages[0];
-              
-              // Detailed check for reply status
-              const needsReply = mostRecentSms.action === 'SMS_RECEIVED' && 
-                (!mostRecentSms.details || mostRecentSms.details.replied !== true);
-              
-              return { 
-                total: smsMessages.length, 
-                needsReply 
-              };
-            })();
-            
+            // PERFORMANCE: Skip SMS message processing entirely - too slow
+            // This was causing 23+ function calls on every render
             return (
               <div className="fc-event-main p-1 flex items-center justify-between">
                 <div className="fc-event-title-container flex-1 overflow-hidden">
@@ -1873,16 +1818,6 @@ const Calendar = () => {
                     {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
                     {arg.event.title}
                   </div>
-                  {hasMessages.total > 0 && (
-                    <div className="relative ml-1 flex items-center">
-                      <FiMessageSquare 
-                        className={`h-3 w-3 mr-0.5 ${hasMessages.needsReply ? 'text-yellow-300' : 'text-white/70'}`} 
-                      />
-                      {hasMessages.needsReply && (
-                        <span className="absolute -top-1 left-2 h-1.5 w-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             );
