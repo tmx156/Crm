@@ -1,56 +1,118 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+
+// ========================================
+// 🚫 TEMPORARY KILL SWITCH - DISABLE SENDING
+// ========================================
+const EMAIL_SENDING_DISABLED = true; // Set to false to re-enable email sending
+// ========================================
+
 console.log('📧 Email Service: Initializing...');
-console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
+console.log('📧 EMAIL_USER (Primary):', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
+console.log('📧 EMAIL_USER_2 (Secondary):', process.env.EMAIL_USER_2 ? '✅ Set' : '❌ NOT SET');
+
+if (EMAIL_SENDING_DISABLED) {
+  console.log('🚫 EMAIL SENDING DISABLED (Temporary kill switch active)');
+  console.log('📧 Email poller will still receive emails normally');
+}
 
 const nodemailer = require('nodemailer');
 
-// Create SMTP transporter optimized for Railway Pro deployment
-const transporter = nodemailer.createTransport({
-  // Try port 465 with SSL first (more reliable on Railway Pro)
-  host: 'smtp.gmail.com',
-  port: 465, // Use port 465 with SSL for Railway Pro compatibility
-  secure: true, // true for port 465, false for port 587
-  auth: {
+// Email account configurations
+const EMAIL_ACCOUNTS = {
+  primary: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS
+    pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS,
+    name: 'Primary Account'
   },
-  logger: false, // Disable verbose logging for better performance
-  debug: false,  // Disable debug mode to speed up email sending
-  connectionTimeout: 30000, // 30 seconds - suitable for serverless
-  greetingTimeout: 15000,   // 15 seconds - suitable for serverless
-  socketTimeout: 30000,    // 30 seconds - suitable for serverless
-  tls: {
-    rejectUnauthorized: false, // Allow self-signed certificates
-    ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA' // Modern cipher suite
-  },
-  // Serverless optimized settings
-  pool: false, // Disable connection pooling for serverless
-  maxConnections: 1, // Single connection for serverless
-  maxMessages: 1, // One message per connection for serverless
-  rateDelta: 1000, // 1 second rate limiting
-  rateLimit: 1 // 1 message per second for serverless
-});
+  secondary: {
+    user: process.env.EMAIL_USER_2 || process.env.GMAIL_USER_2,
+    pass: process.env.EMAIL_PASSWORD_2 || process.env.GMAIL_PASS_2,
+    name: 'Secondary Account'
+  }
+};
+
+/**
+ * Create a transporter for a specific email account
+ * @param {string} accountKey - 'primary' or 'secondary'
+ * @returns {Object} Nodemailer transporter
+ */
+function createTransporter(accountKey = 'primary') {
+  const account = EMAIL_ACCOUNTS[accountKey];
+
+  if (!account || !account.user || !account.pass) {
+    console.warn(`⚠️ Email account '${accountKey}' not configured properly`);
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: account.user,
+      pass: account.pass
+    },
+    logger: false,
+    debug: false,
+    connectionTimeout: 30000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+    tls: {
+      rejectUnauthorized: false,
+      ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
+    },
+    pool: false,
+    maxConnections: 1,
+    maxMessages: 1,
+    rateDelta: 1000,
+    rateLimit: 1
+  });
+}
+
+// Create primary transporter (for backwards compatibility)
+const transporter = createTransporter('primary');
 
 // Log when the transporter is created
-console.log('📧 Email transporter ready');
-
-// Skip automatic verification to prevent startup timeouts
-// Verification will happen during actual email sending
-console.log('✅ Email transporter created (verification skipped for Railway compatibility)');
+console.log('📧 Email transporters ready');
+console.log('✅ Email service initialized (verification skipped for Railway compatibility)');
 
 /**
  * Send an email using Gmail
  * @param {string} to - Recipient email address
  * @param {string} subject - Email subject
  * @param {string} text - Email plain text body
+ * @param {Array} attachments - Email attachments (optional)
+ * @param {string} accountKey - Email account to use: 'primary' or 'secondary' (default: 'primary')
  * @returns {Promise<{success: boolean, response?: string, error?: string}>}
  */
-async function sendEmail(to, subject, text, attachments = []) {
+async function sendEmail(to, subject, text, attachments = [], accountKey = 'primary') {
   const emailId = Math.random().toString(36).substring(2, 8);
-  console.log(`📧 [${emailId}] Sending email: ${subject} → ${to}`);
+  const account = EMAIL_ACCOUNTS[accountKey];
+
+  console.log(`📧 [${emailId}] Sending email via ${account?.name || accountKey}: ${subject} → ${to}`);
+
+  // 🚫 KILL SWITCH: Return success without sending if disabled
+  if (EMAIL_SENDING_DISABLED) {
+    console.log(`🚫 [${emailId}] EMAIL SENDING DISABLED - Email NOT sent (kill switch active)`);
+    console.log(`📧 [${emailId}] Would have sent to: ${to}`);
+    console.log(`📧 [${emailId}] Subject: ${subject}`);
+    return {
+      success: true,
+      disabled: true,
+      messageId: `<disabled-${emailId}@localhost>`,
+      response: 'Email sending temporarily disabled',
+      note: 'Email was not actually sent - kill switch active'
+    };
+  }
 
   if (!to || !subject || !text) {
     const errorMsg = `📧 [${emailId}] Missing required fields: ${!to ? 'to, ' : ''}${!subject ? 'subject, ' : ''}${!text ? 'body' : ''}`.replace(/, $/, '');
+    console.error(errorMsg);
+    return { success: false, error: errorMsg };
+  }
+
+  if (!account || !account.user || !account.pass) {
+    const errorMsg = `📧 [${emailId}] Email account '${accountKey}' not configured`;
     console.error(errorMsg);
     return { success: false, error: errorMsg };
   }
@@ -97,7 +159,7 @@ async function sendEmail(to, subject, text, attachments = []) {
     const mailOptions = {
       from: {
         name: 'Avensismodels',
-        address: process.env.EMAIL_USER
+        address: account.user
       },
       to,
       subject,
@@ -105,7 +167,8 @@ async function sendEmail(to, subject, text, attachments = []) {
       attachments: validAttachments,
       headers: {
         'X-Email-ID': emailId,
-        'X-Application': 'CRM System'
+        'X-Application': 'CRM System',
+        'X-Email-Account': accountKey
       }
     };
 
@@ -122,14 +185,14 @@ async function sendEmail(to, subject, text, attachments = []) {
     for (const config of portConfigs) {
       console.log(`📧 [${emailId}] Trying ${config.name} configuration...`);
       
-      // Create transporter with current port configuration
+      // Create transporter with current port configuration using selected account
       const testTransporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: config.port,
         secure: config.secure,
         auth: {
-          user: process.env.EMAIL_USER || process.env.GMAIL_USER,
-          pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS
+          user: account.user,
+          pass: account.pass
         },
         logger: false,
         debug: false,
@@ -219,5 +282,7 @@ async function sendEmail(to, subject, text, attachments = []) {
 
 module.exports = {
   sendEmail,
-  transporter // Export for testing purposes
+  transporter, // Export for testing purposes (primary account)
+  createTransporter, // Export to allow creating transporters for specific accounts
+  EMAIL_ACCOUNTS // Export account configuration for reference
 };

@@ -437,7 +437,9 @@ class MessagingService {
 
       // Send actual messages according to effective channels
       if (effectiveSendEmail) {
-        await this.sendEmail(message);
+        // Use email account from options or template
+        const emailAccount = options.emailAccount || template.email_account || 'primary';
+        await this.sendEmail(message, emailAccount);
       }
       if (effectiveSendSms) {
         await this.sendSMS(message);
@@ -569,7 +571,7 @@ class MessagingService {
   }
 
   // Send email
-  static async sendEmail(message) {
+  static async sendEmail(message, emailAccount = 'primary') {
     const messageId = message.id || 'unknown';
     console.log('\n' + '='.repeat(80));
     console.log(`📧 [EMAIL SEND ATTEMPT]`);
@@ -578,6 +580,7 @@ class MessagingService {
     console.log(`📧 Lead ID:    ${message.lead_id}`);
     console.log(`📧 To:         ${message.recipient_email}`);
     console.log(`📧 Subject:    ${message.subject}`);
+    console.log(`📧 Email Account: ${emailAccount}`);
     console.log(`📧 Body Length: ${message.email_body ? message.email_body.length : 0} characters`);
 
     // Log attachments information
@@ -607,7 +610,8 @@ class MessagingService {
         message.recipient_email,
         message.subject,
         message.email_body,
-        message.attachments || []
+        message.attachments || [],
+        emailAccount // Pass the email account key
       );
       
       const timeTaken = Date.now() - startTime;

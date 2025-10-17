@@ -7,8 +7,24 @@ const { randomUUID } = require('crypto');
 // Using existing Supabase credentials from config
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc';
-const EMAIL_USER = process.env.EMAIL_USER || process.env.GMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS;
+
+// Email account configurations
+const EMAIL_ACCOUNTS = {
+  primary: {
+    user: process.env.EMAIL_USER || process.env.GMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS,
+    name: 'Primary Account'
+  },
+  secondary: {
+    user: process.env.EMAIL_USER_2 || process.env.GMAIL_USER_2,
+    pass: process.env.EMAIL_PASSWORD_2 || process.env.GMAIL_PASS_2,
+    name: 'Secondary Account'
+  }
+};
+
+// Backwards compatibility
+const EMAIL_USER = EMAIL_ACCOUNTS.primary.user;
+const EMAIL_PASS = EMAIL_ACCOUNTS.primary.pass;
 
 // Constants
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -18,13 +34,22 @@ const BACKUP_SCAN_INTERVAL_MS = 1800000; // 30 minutes (Primary is IDLE, optimiz
 
 // --- EmailPoller Class ---
 class EmailPoller {
-    constructor(ioInstance) {
-        if (EmailPoller.instance) {
-            return EmailPoller.instance;
+    constructor(ioInstance, accountKey = 'primary') {
+        // Create a unique instance key for each account
+        const instanceKey = `EmailPoller_${accountKey}`;
+
+        if (EmailPoller.instances && EmailPoller.instances[instanceKey]) {
+            return EmailPoller.instances[instanceKey];
         }
-        EmailPoller.instance = this;
+
+        if (!EmailPoller.instances) {
+            EmailPoller.instances = {};
+        }
+        EmailPoller.instances[instanceKey] = this;
 
         // Instance State
+        this.accountKey = accountKey;
+        this.accountConfig = EMAIL_ACCOUNTS[accountKey];
         this.supabase = null;
         this.client = null;
         this.isConnected = false;
@@ -33,6 +58,16 @@ class EmailPoller {
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
         this.io = ioInstance; // Socket.IO instance
+
+        // Validate account configuration
+        if (!this.accountConfig || !this.accountConfig.user || !this.accountConfig.pass) {
+            console.log(`📧 Email poller for ${accountKey} disabled: Account not configured`);
+            this.disabled = true;
+            return;
+        }
+
+        this.disabled = false;
+        console.log(`📧 Email poller initialized for ${this.accountConfig.name} (${this.accountConfig.user})`);
 
         // Initialize Supabase client
         this.supabase = this.getSupabase();
@@ -46,18 +81,23 @@ class EmailPoller {
     }
 
     async connect() {
-        if (!EMAIL_USER || !EMAIL_PASS) {
-            console.log('📧 Email poller disabled: EMAIL_USER or EMAIL_PASSWORD not set');
+        if (this.disabled) {
+            console.log(`📧 Email poller for ${this.accountKey} is disabled`);
+            return false;
+        }
+
+        if (!this.accountConfig.user || !this.accountConfig.pass) {
+            console.log(`📧 Email poller for ${this.accountKey} disabled: Account not configured`);
             return false;
         }
 
         if (this.isReconnecting) {
-            console.log('📧 Connection already in progress, skipping...');
+            console.log(`📧 [${this.accountConfig.name}] Connection already in progress, skipping...`);
             return false;
         }
 
         if (this.client && this.client.usable && this.isConnected) {
-            console.log('📧 Already connected to IMAP');
+            console.log(`📧 [${this.accountConfig.name}] Already connected to IMAP`);
             return true;
         }
 
@@ -67,13 +107,13 @@ class EmailPoller {
             // Clean up any existing connection properly
             await this.cleanup();
 
-            console.log(`📧 Connecting to IMAP (attempt ${this.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`);
+            console.log(`📧 [${this.accountConfig.name}] Connecting to IMAP (attempt ${this.reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`);
 
             this.client = new ImapFlow({
                 host: 'imap.gmail.com',
                 port: 993,
                 secure: true,
-                auth: { user: EMAIL_USER, pass: EMAIL_PASS },
+                auth: { user: this.accountConfig.user, pass: this.accountConfig.pass },
                 logger: false,
                 socketTimeout: 120000,
                 idleTimeout: 240000,
@@ -90,10 +130,10 @@ class EmailPoller {
             this.client.on('exists', this.handleNewEmail.bind(this));
 
             await this.client.connect();
-            console.log('✅ Connected to IMAP successfully');
+            console.log(`✅ [${this.accountConfig.name}] Connected to IMAP successfully`);
 
             await this.client.mailboxOpen('INBOX');
-            console.log('✅ INBOX opened successfully');
+            console.log(`✅ [${this.accountConfig.name}] INBOX opened successfully`);
 
             this.isConnected = true;
             this.reconnectAttempts = 0;
@@ -106,7 +146,7 @@ class EmailPoller {
 
             return true;
         } catch (error) {
-            console.error('❌ IMAP connection failed:', error.message);
+            console.error(`❌ [${this.accountConfig.name}] IMAP connection failed:`, error.message);
             this.isReconnecting = false;
             this.handleError(error);
             return false;
@@ -114,7 +154,7 @@ class EmailPoller {
     }
 
     async cleanup() {
-        console.log('📧 Cleaning up existing connection...');
+        console.log(`📧 [${this.accountConfig.name}] Cleaning up existing connection...`);
         if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
         this.heartbeatTimer = null;
 
@@ -124,7 +164,7 @@ class EmailPoller {
                     await this.client.close();
                 }
             } catch (e) {
-                console.log('⚠️ Error during connection cleanup:', e.message);
+                console.log(`⚠️ [${this.accountConfig.name}] Error during connection cleanup:`, e.message);
             }
             this.client = null;
         }
@@ -139,10 +179,10 @@ class EmailPoller {
                 try {
                     // Simple heartbeat
                     await this.client.status('INBOX', { messages: true });
-                    console.log('💓 Email poller heartbeat OK');
+                    console.log(`💓 [${this.accountConfig.name}] Email poller heartbeat OK`);
                     this.startHeartbeat(); // Schedule next heartbeat
                 } catch (error) {
-                    console.error('💔 Email poller heartbeat failed:', error.message);
+                    console.error(`💔 [${this.accountConfig.name}] Email poller heartbeat failed:`, error.message);
                     this.handleError(error);
                 }
             }
@@ -150,7 +190,7 @@ class EmailPoller {
     }
 
     handleClose() {
-        console.log('📧 IMAP connection closed');
+        console.log(`📧 [${this.accountConfig.name}] IMAP connection closed`);
         this.isConnected = false;
         this.isReconnecting = false;
 
@@ -161,13 +201,13 @@ class EmailPoller {
     }
 
     handleError(error) {
-        console.error('❌ IMAP Error:', error.message);
+        console.error(`❌ [${this.accountConfig.name}] IMAP Error:`, error.message);
         this.isConnected = false;
         this.isReconnecting = false;
         this.reconnectAttempts++;
 
         if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            console.error(`❌ Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Email polling disabled.`);
+            console.error(`❌ [${this.accountConfig.name}] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Email polling disabled.`);
             return;
         }
 
@@ -342,34 +382,108 @@ class EmailPoller {
     }
 
     async extractEmailBody(raw) {
-        // ... (body extraction logic remains mostly the same)
         try {
-            const parsed = await simpleParser(raw);
+            // First, try to clean up Apple Mail MIME boundaries and headers manually
+            let cleanedRaw = raw;
+            
+            // Remove Apple Mail MIME boundaries and headers (but preserve actual content)
+            cleanedRaw = cleanedRaw
+                .replace(/^--Apple-Mail-[A-F0-9-]+$/gm, '') // Remove boundary lines
+                .replace(/^Content-Type:\s*text\/plain[^;]*;?\s*charset=utf-8$/gm, '') // Remove content-type lines
+                .replace(/^Content-Transfer-Encoding:\s*quoted-printable$/gm, '') // Remove encoding lines
+                .replace(/^Content-Type:\s*text\/html[^;]*;?\s*charset=utf-8$/gm, '') // Remove HTML content-type lines
+                .replace(/^Content-Transfer-Encoding:\s*7bit$/gm, '') // Remove 7bit encoding lines
+                .replace(/^Content-Transfer-Encoding:\s*base64$/gm, '') // Remove base64 encoding lines
+                .replace(/^Content-Disposition:\s*attachment[^;]*;?[^;]*$/gm, '') // Remove attachment lines
+                .replace(/^Content-ID:\s*<[^>]+>$/gm, '') // Remove content-id lines
+                .replace(/^X-Attachment-Id:\s*[^\r\n]+$/gm, '') // Remove x-attachment-id lines
+                .replace(/^\s*$/gm, '') // Remove empty lines
+                .trim();
+
+            // If the cleaned content is too short, try parsing the original
+            if (cleanedRaw.length < 10) {
+                cleanedRaw = raw;
+            }
+
+            const parsed = await simpleParser(cleanedRaw);
             let body = parsed.text || '';
 
+            // If no text content, try HTML
             if (!body && parsed.html) {
                 body = parsed.html
                     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                     .replace(/<[^>]+>/g, '')
                     .replace(/&nbsp;/g, ' ')
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
                     .replace(/\s+/g, ' ')
                     .trim();
             }
+            
+            // If still no body and we have clean text, use it directly
+            if (!body && cleanedRaw.trim()) {
+                body = cleanedRaw.trim();
+            }
 
-            // Clean up quoted replies
+            // Additional cleanup for Apple Mail artifacts and MIME boundaries
             body = body
-                .replace(/^>+.*/gm, '')
-                .replace(/On.*wrote:[\s\S]*$/gm, '')
-                .replace(/From:.*\nSent:.*\nTo:.*\nSubject:.*/g, '')
-                .replace(/\[.*?\]/g, '')
-                .replace(/\n{3,}/g, '\n\n')
+                .replace(/^--Apple-Mail-[A-F0-9-]+$/gm, '') // Remove boundary lines
+                .replace(/^Content-Type:\s*text\/plain[^;]*;?\s*charset=utf-8$/gm, '') // Remove content-type lines
+                .replace(/^Content-Transfer-Encoding:\s*quoted-printable$/gm, '') // Remove encoding lines
+                .replace(/^Content-Type:\s*text\/html[^;]*;?\s*charset=utf-8$/gm, '') // Remove HTML content-type lines
+                .replace(/^Content-Transfer-Encoding:\s*7bit$/gm, '') // Remove 7bit encoding lines
+                .replace(/^Content-Transfer-Encoding:\s*base64$/gm, '') // Remove base64 encoding lines
+                .replace(/^Content-Disposition:\s*attachment[^;]*;?[^;]*$/gm, '') // Remove attachment lines
+                .replace(/^Content-ID:\s*<[^>]+>$/gm, '') // Remove content-id lines
+                .replace(/^X-Attachment-Id:\s*[^\r\n]+$/gm, '') // Remove x-attachment-id lines
+                .replace(/^>+.*/gm, '') // Remove quoted replies
+                .replace(/On.*wrote:[\s\S]*$/gm, '') // Remove "On X wrote:" signatures
+                .replace(/From:.*\nSent:.*\nTo:.*\nSubject:.*/g, '') // Remove email headers
+                .replace(/\[.*?\]/g, '') // Remove brackets content
+                .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+                .replace(/^\s+|\s+$/g, '') // Trim whitespace
                 .trim();
 
             return body || 'No content available';
         } catch (error) {
             console.error('📧 Error extracting email body:', error);
-            return 'Error extracting email content';
+            // Fallback: try to extract text manually from raw content
+            try {
+                const lines = raw.split('\n');
+                let contentLines = [];
+                let inContent = false;
+                
+                for (const line of lines) {
+                    // Skip MIME headers and boundaries
+                    if (line.includes('Content-Type:') || 
+                        line.includes('Content-Transfer-Encoding:') ||
+                        line.includes('--Apple-Mail-') ||
+                        line.includes('Content-Disposition:') ||
+                        line.includes('Content-ID:')) {
+                        continue;
+                    }
+                    
+                    // Start collecting content after headers
+                    if (line.trim() === '' && !inContent) {
+                        inContent = true;
+                        continue;
+                    }
+                    
+                    if (inContent && line.trim()) {
+                        contentLines.push(line);
+                    }
+                }
+                
+                const fallbackContent = contentLines.join('\n').trim();
+                return fallbackContent || 'No content available';
+            } catch (fallbackError) {
+                console.error('📧 Fallback extraction also failed:', fallbackError);
+                return 'Error extracting email content';
+            }
         }
     }
 
@@ -547,32 +661,52 @@ class EmailPoller {
 }
 
 // --- Export Function ---
-function startEmailPoller(socketIoInstance) {
-    // Check for critical environment variables before starting
-    if (!EMAIL_USER || !EMAIL_PASS || !SUPABASE_KEY) {
-        console.error('CRITICAL: Cannot start poller. Missing EMAIL_USER, EMAIL_PASS, or SUPABASE_KEY environment variables.');
-        return;
+function startEmailPoller(socketIoInstance, accountKeys = ['primary']) {
+    if (!SUPABASE_KEY) {
+        console.error('CRITICAL: Cannot start poller. Missing SUPABASE_KEY environment variable.');
+        return [];
     }
-    
-    const poller = new EmailPoller(socketIoInstance);
-    poller.connect();
 
-    // Set up the recurring backup scan (slower now to avoid conflict)
-    setInterval(async () => {
-        if (poller.isConnected && poller.client?.usable) {
-            console.log('📧 🔄 Scheduled backup email scan starting...');
-            try {
-                await poller.scanUnprocessedMessages();
-                console.log('📧 ✅ Scheduled backup email scan completed');
-            } catch (error) {
-                console.error('📧 ❌ Scheduled backup email scan failed:', error.message);
-            }
-        } else {
-            console.log('📧 ⚠️ Skipping scheduled scan - not connected');
+    const pollers = [];
+
+    // Start a poller for each configured account
+    for (const accountKey of accountKeys) {
+        const account = EMAIL_ACCOUNTS[accountKey];
+
+        if (!account || !account.user || !account.pass) {
+            console.log(`📧 Skipping ${accountKey} email poller: Account not configured`);
+            continue;
         }
-    }, BACKUP_SCAN_INTERVAL_MS); // 30 minutes
 
-    console.log('📧 ✅ Email poller started with 30-minute recurring backup scans (optimized for egress)');
+        console.log(`📧 Starting email poller for ${account.name} (${account.user})...`);
+
+        const poller = new EmailPoller(socketIoInstance, accountKey);
+        poller.connect();
+
+        // Set up the recurring backup scan for this account
+        setInterval(async () => {
+            if (poller.isConnected && poller.client?.usable) {
+                console.log(`📧 [${account.name}] 🔄 Scheduled backup email scan starting...`);
+                try {
+                    await poller.scanUnprocessedMessages();
+                    console.log(`📧 [${account.name}] ✅ Scheduled backup email scan completed`);
+                } catch (error) {
+                    console.error(`📧 [${account.name}] ❌ Scheduled backup email scan failed:`, error.message);
+                }
+            } else {
+                console.log(`📧 [${account.name}] ⚠️ Skipping scheduled scan - not connected`);
+            }
+        }, BACKUP_SCAN_INTERVAL_MS); // 30 minutes
+
+        pollers.push(poller);
+        console.log(`📧 ✅ [${account.name}] Email poller started with 30-minute recurring backup scans`);
+    }
+
+    if (pollers.length === 0) {
+        console.error('❌ No email pollers started - no accounts configured');
+    }
+
+    return pollers;
 }
 
-module.exports = { startEmailPoller };
+module.exports = { startEmailPoller, EmailPoller, EMAIL_ACCOUNTS };
