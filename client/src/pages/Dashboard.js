@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
+import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -34,7 +34,8 @@ const Dashboard = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [selectedBooker, setSelectedBooker] = useState(null);
   const [isBookerModalOpen, setIsBookerModalOpen] = useState(false);
-  const [selectedActivityDate, setSelectedActivityDate] = useState(new Date().toISOString().split('T')[0]);
+  // Locked to today only - no date navigation
+  const selectedActivityDate = new Date().toISOString().split('T')[0];
 
   // Fetch all dashboard data
   const fetchStats = useCallback(async () => {
@@ -122,12 +123,12 @@ const Dashboard = () => {
       // Group by booker with sales
       const bookerStats = {};
 
-      // Process bookings - show ONLY "Booked" status bookings created today
+      // Process bookings - show ALL bookings created today using ever_booked (including cancelled)
       leads.forEach(lead => {
         const bookerId = lead.booker_id;
-        const status = (lead.status || '').toLowerCase();
 
-        if (bookerId && status === 'booked') {
+        // ✅ EVER_BOOKED FIX: Count all bookings made today, regardless of current status
+        if (bookerId && lead.ever_booked) {
           if (!bookerStats[bookerId]) {
             const user = users.find(u => u.id === bookerId);
             bookerStats[bookerId] = {
@@ -148,7 +149,7 @@ const Dashboard = () => {
             name: lead.name,
             phone: lead.phone || lead.phone_number,
             time: lead.date_booked ? new Date(lead.date_booked).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '12:00',
-            status: lead.status,
+            status: 'Booked', // Always show as "Booked" in daily activities (real status tracked elsewhere)
             dateBooked: lead.date_booked,
             bookedAt: lead.updated_at || lead.created_at,
             bookedAgo: timeAgo(new Date(lead.updated_at || lead.created_at))
@@ -515,15 +516,7 @@ const Dashboard = () => {
     return `${days}d ago`;
   };
 
-  // Navigate activity date (previous/next day)
-  const navigateActivityDate = (direction) => {
-    const current = new Date(selectedActivityDate);
-    current.setDate(current.getDate() + direction);
-    setSelectedActivityDate(current.toISOString().split('T')[0]);
-  };
-
-  // Check if selected date is today
-  const isActivityToday = selectedActivityDate === new Date().toISOString().split('T')[0];
+  // Locked to today only - navigation removed
 
   if (loading) {
     return (
@@ -642,47 +635,9 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Date Navigation */}
-            <div className="flex items-center justify-between mb-3 sm:mb-4 bg-gray-50 rounded-lg p-3">
-              <button
-                onClick={() => navigateActivityDate(-1)}
-                className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-                title="Previous Day"
-              >
-                <FiArrowLeft className="h-4 w-4" />
-                <span className="text-sm font-medium">Previous</span>
-              </button>
-
-              <div className="flex flex-col items-center">
-                <input
-                  type="date"
-                  value={selectedActivityDate}
-                  onChange={(e) => setSelectedActivityDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {!isActivityToday && (
-                  <button
-                    onClick={() => setSelectedActivityDate(new Date().toISOString().split('T')[0])}
-                    className="text-xs text-blue-600 hover:text-blue-700 mt-1"
-                  >
-                    Back to Today
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={() => navigateActivityDate(1)}
-                disabled={isActivityToday}
-                className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Next Day"
-              >
-                <span className="text-sm font-medium">Next</span>
-                <FiArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4">
-              {isActivityToday ? 'Viewing Today - Resets at midnight' : `Viewing ${new Date(selectedActivityDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+            {/* Today's Activity - No Navigation */}
+            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4 bg-gray-50 rounded-lg p-3">
+              Viewing Today - Resets at midnight
             </div>
             <div className="space-y-3">
               {bookerActivity.length === 0 ? (

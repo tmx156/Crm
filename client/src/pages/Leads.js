@@ -282,7 +282,7 @@ const Leads = () => {
       // Build params for stats API with date filter if applicable
       const params = {};
       const dateRange = getDateRange();
-      
+
       if (dateRange) {
         // Always use created_at for stats counters
         // (assigned_at is only used for the actual leads list when viewing Assigned status)
@@ -295,7 +295,18 @@ const Leads = () => {
       console.log('📊 Fetched lead counts with date filter:', response.data);
       setLeadCounts(response.data);
     } catch (error) {
-      console.error('Error fetching lead counts:', error);
+      console.error('❌ Error fetching lead counts:', error);
+      // Set default values to indicate an error occurred
+      setLeadCounts({
+        total: 0,
+        new: 0,
+        booked: 0,
+        attended: 0,
+        cancelled: 0,
+        assigned: 0,
+        rejected: 0,
+        error: true
+      });
     }
   }, [dateFilter, customDateStart, customDateEnd, getDateRange]);
 

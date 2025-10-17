@@ -1,0 +1,869 @@
+{
+  "summary": {
+    "totalChecked": 111,
+    "booked": 5,
+    "unbookedInDb": 93,
+    "notFoundInDb": 13,
+    "checkedAt": "2025-10-14T01:59:55.921Z"
+  },
+  "bookedLeads": [
+    {
+      "csvName": "Karen Hill",
+      "dbName": "Karen Hill",
+      "phone": "7539719925",
+      "email": "kazzah81@gmail.com",
+      "assignedTo": "Unassigned",
+      "dateAssigned": "2025-10-04T17:54:42.827735+00:00",
+      "leadId": "b4fb89bc-1bae-4670-a856-ba3e5b36a7d7"
+    },
+    {
+      "csvName": "Jacqueline Robinson",
+      "dbName": "Jacqueline Robinson",
+      "phone": "7876074808",
+      "email": "jcqln.robinson@googlemail.com",
+      "assignedTo": "Unassigned",
+      "dateAssigned": "2025-10-04T18:42:17.055264+00:00",
+      "leadId": "a45432a8-4fdb-432f-8e64-04f31a400338"
+    },
+    {
+      "csvName": "Sandra Murgatroyd",
+      "dbName": "Sandra Murgatroyd",
+      "phone": "7946157836",
+      "email": "murgy64@yahoo.co.uk",
+      "assignedTo": "Unassigned",
+      "dateAssigned": "2025-10-06T23:07:06.142376+00:00",
+      "leadId": "3da6cf8c-0498-4748-a1c4-106e19355555"
+    },
+    {
+      "csvName": "Michelle sharif",
+      "dbName": "Michelle sharif",
+      "phone": "7971833670",
+      "email": "michelle@westwoodhomecare.co.uk",
+      "assignedTo": "Unassigned",
+      "dateAssigned": "2025-10-06T23:07:06.142376+00:00",
+      "leadId": "2002028b-2066-4f0a-8e6b-15b16fd79dca"
+    },
+    {
+      "csvName": "Angela cooney",
+      "dbName": "Angela cooney",
+      "phone": "7722569722",
+      "email": "angelajcooney@icloud.com",
+      "assignedTo": "Unassigned",
+      "dateAssigned": "2025-10-10T05:21:19.910584+00:00",
+      "leadId": "697b37f4-d975-4bef-9922-da83c1867b74"
+    }
+  ],
+  "unbookedLeads": [
+    {
+      "csvName": "Monica",
+      "dbName": "Monica",
+      "phone": "7763111121",
+      "email": "monicamccahery@btinternet.com",
+      "status": "Assigned",
+      "leadId": "7c7a74ee-0c72-4d78-8a95-4549ab0f56cb"
+    },
+    {
+      "csvName": "Elizabeth cousins",
+      "dbName": "Elizabeth cousins",
+      "phone": "7871974546",
+      "email": "cousinselizabeth1967@icloud.com",
+      "status": "Assigned",
+      "leadId": "66dd809d-9373-4bf4-8c52-64fc1805e3f8"
+    },
+    {
+      "csvName": "Karen ward",
+      "dbName": "Karen ward",
+      "phone": "7496835469",
+      "email": "karen.ward67@outlook.com",
+      "status": "Assigned",
+      "leadId": "a267ee96-e9e1-4139-9a20-00639fe0a59c"
+    },
+    {
+      "csvName": "Jordan jack barrs",
+      "dbName": "Jordan jack barrs",
+      "phone": "7379335598",
+      "email": "emmabarrs2020@icloud.com",
+      "status": "Assigned",
+      "leadId": "c8b1b1ba-e063-431f-9f0d-90796c9b54e9"
+    },
+    {
+      "csvName": "Shirley Crook",
+      "dbName": "Shirley Crook",
+      "phone": "7751944715",
+      "email": "shirleyk1967@hotmail.co.uk",
+      "status": "Assigned",
+      "leadId": "03579374-bc5a-4258-a055-a27778df67e9"
+    },
+    {
+      "csvName": "ZYDA AHMAD",
+      "dbName": "ZYDA AHMAD",
+      "phone": "7854682799",
+      "email": "zahidaha@hotmail.co.uk",
+      "status": "Assigned",
+      "leadId": "5e0df8d2-3823-4d1b-b8c9-6b58355c9ae3"
+    },
+    {
+      "csvName": "Carolyn Coulson",
+      "dbName": "Carolyn Coulson",
+      "phone": "7359113397",
+      "email": "Caroleene2001@yahoo.com",
+      "status": "Assigned",
+      "leadId": "7d696e5e-53a4-4ebb-8140-00d6cdbebe61"
+    },
+    {
+      "csvName": "Richard Maughan",
+      "dbName": "Richard Maughan",
+      "phone": "7910317819",
+      "email": "Richiemaughan@gmail.com",
+      "status": "Assigned",
+      "leadId": "3dabe825-d187-4191-b79b-203fcf3d9e35"
+    },
+    {
+      "csvName": "Janet oneill",
+      "dbName": "Janet oneill",
+      "phone": "7518930323",
+      "email": "janetoneill1@outlook.com",
+      "status": "Assigned",
+      "leadId": "3e9e8dcc-06fb-461c-91ed-9d80eda4c863"
+    },
+    {
+      "csvName": "Darren Morris",
+      "dbName": "Darren Morris",
+      "phone": "7774290949",
+      "email": "gixer771@icloud.com",
+      "status": "Assigned",
+      "leadId": "93ebe8dc-3eb4-4d94-96cd-226e90a6e024"
+    },
+    {
+      "csvName": "Delia Cannings",
+      "dbName": "Delia Cannings",
+      "phone": "7973506487",
+      "email": "dcannings@sky.com",
+      "status": "Assigned",
+      "leadId": "08b7bae3-0854-4bd8-924a-557891d93e3b"
+    },
+    {
+      "csvName": "Tony Alleyne",
+      "dbName": "Tony Alleyne",
+      "phone": "7928101721",
+      "email": "Aja24c@hotmail.com",
+      "status": "Assigned",
+      "leadId": "2b4c39a7-f95c-41d6-9be0-152996db7bb7"
+    },
+    {
+      "csvName": "Mark Sarginson",
+      "dbName": "Mark Sarginson",
+      "phone": "7891036442",
+      "email": "marksarginson8@gmail.com",
+      "status": "Assigned",
+      "leadId": "e2bc02dd-5639-4caa-945c-41f524807cdf"
+    },
+    {
+      "csvName": "Nick Rhodes-Heaton",
+      "dbName": "Nick Rhodes-Heaton",
+      "phone": "7967705558",
+      "email": "rhodesheatons@sky.com",
+      "status": "Assigned",
+      "leadId": "10e57be6-1bea-4e25-ad93-42318644f83a"
+    },
+    {
+      "csvName": "Wendy precious",
+      "dbName": "Wendy precious",
+      "phone": "7713711755",
+      "email": "wendyprecious87@gmail.com",
+      "status": "Assigned",
+      "leadId": "d4062d44-ac9e-4336-926f-54a3392d4a82"
+    },
+    {
+      "csvName": "Diane Fildes",
+      "dbName": "Diane Fildes",
+      "phone": "7779367992",
+      "email": "dianemfildes@gmail.com",
+      "status": "Assigned",
+      "leadId": "c6b060f1-4d9f-47bb-946c-8984528b193a"
+    },
+    {
+      "csvName": "Anita Nivikanguaq Olsen",
+      "dbName": "Anita Nivikanguaq Olsen",
+      "phone": "7785358083",
+      "email": "anita.olsen@sky.com",
+      "status": "Assigned",
+      "leadId": "52ee36f5-dce7-4352-955f-4b13c38ecceb"
+    },
+    {
+      "csvName": "Jane Finch",
+      "dbName": "Jane Finch",
+      "phone": "7841668005",
+      "email": "jane.browne@nca.nhs.uk",
+      "status": "Assigned",
+      "leadId": "f7b3edd5-4330-4f20-bd5f-096ea7ab9c55"
+    },
+    {
+      "csvName": "Jane Hiles",
+      "dbName": "Jane Hiles",
+      "phone": "7968882291",
+      "email": "janey_bubbles@yahoo.co.uk",
+      "status": "Assigned",
+      "leadId": "081efb61-4d86-4949-bcd3-f7ccdba42558"
+    },
+    {
+      "csvName": "Samantha Spendlow",
+      "dbName": "Samantha Spendlow",
+      "phone": "7854127738",
+      "email": "samspendlow130@btinternet.com",
+      "status": "Assigned",
+      "leadId": "ec6897cd-1aac-44d3-b80a-43b838050dba"
+    },
+    {
+      "csvName": "Armand Zogs",
+      "dbName": "Armand Zogs",
+      "phone": "7909675415",
+      "email": "arinacollection12@gmail.com",
+      "status": "Assigned",
+      "leadId": "806ffcee-386f-42a7-bfac-dfdb4f1efa0f"
+    },
+    {
+      "csvName": "Rosalyn buckley",
+      "dbName": "Rosalyn buckley",
+      "phone": "7946525414",
+      "email": "roziceskating@btinternet.com",
+      "status": "Assigned",
+      "leadId": "e1a62636-416e-4942-80ad-66851bc46ce9"
+    },
+    {
+      "csvName": "Samantha green",
+      "dbName": "Samantha green",
+      "phone": "7734691019",
+      "email": "samanthargreen@aol.com",
+      "status": "Assigned",
+      "leadId": "236e4fa3-77ef-49e9-8eb9-5558dba357c5"
+    },
+    {
+      "csvName": "Helen Binns",
+      "dbName": "Helen Binns",
+      "phone": "7970839511",
+      "email": "helenjbinns@gmail.com",
+      "status": "Assigned",
+      "leadId": "735aa153-2762-42bc-984f-cb95260f93a2"
+    },
+    {
+      "csvName": "Rhian Evans",
+      "dbName": "Rhian Evans",
+      "phone": "7944627417",
+      "email": "erhian@yahoo.co.uk",
+      "status": "Assigned",
+      "leadId": "0b4b1895-a687-4bc7-aed1-32bc13924513"
+    },
+    {
+      "csvName": "Shari Royle",
+      "dbName": "Shari Royle",
+      "phone": "7825333019",
+      "email": "shari@shariroyle.co.uk",
+      "status": "Assigned",
+      "leadId": "351345a8-609d-475d-8c16-3c1f4ebab3ba"
+    },
+    {
+      "csvName": "Carol",
+      "dbName": "Carol",
+      "phone": "7940991514",
+      "email": "carolhargreaves321@gmail.com",
+      "status": "Assigned",
+      "leadId": "25b1aca3-6d45-4f89-9822-f5066041c376"
+    },
+    {
+      "csvName": "Stacey beardsworth",
+      "dbName": "Stacey beardsworth",
+      "phone": "7519767959",
+      "email": "staceybeardsworth@hotmail.com",
+      "status": "Assigned",
+      "leadId": "a15416ae-abd6-4966-884c-18f48d7d5b75"
+    },
+    {
+      "csvName": "Sally thomas",
+      "dbName": "Sally thomas",
+      "phone": "7943503648",
+      "email": "sallythomas65@hotmail.com",
+      "status": "Assigned",
+      "leadId": "4e74fa4e-976b-4b52-a09b-482a2427dc15"
+    },
+    {
+      "csvName": "Jacqueline  rossi",
+      "dbName": "Jacqueline  rossi",
+      "phone": "7710229845",
+      "email": "littlejacquie340@gmail.com",
+      "status": "Assigned",
+      "leadId": "15fb43b4-85f7-47d4-bbcd-b6a39948a865"
+    },
+    {
+      "csvName": "Jess hill",
+      "dbName": "Jess hill",
+      "phone": "7800806417",
+      "email": "hilljf75@gmail.com",
+      "status": "Assigned",
+      "leadId": "079690e2-2eea-4a89-9a49-e49ac424531e"
+    },
+    {
+      "csvName": "Melanie Brookes",
+      "dbName": "Melanie Brookes",
+      "phone": "7973622162",
+      "email": "melanie.brookes68@googlemail.com",
+      "status": "Assigned",
+      "leadId": "04849bb2-648d-4e78-8812-7842b56a69a8"
+    },
+    {
+      "csvName": "Jenson Graham",
+      "dbName": "Jenson Graham",
+      "phone": "7979752731",
+      "email": "Nataliegeater19@gmail.com",
+      "status": "Assigned",
+      "leadId": "c5ee1f5f-d720-4db4-8ff8-5ae4a7581223"
+    },
+    {
+      "csvName": "Evelyn Nadar",
+      "dbName": "Evelyn Nadar",
+      "phone": "7778103327",
+      "email": "Evelyn_ketcy@rediffmail.com",
+      "status": "Assigned",
+      "leadId": "77861d2a-6719-4483-a6a3-6659a0615287"
+    },
+    {
+      "csvName": "Kanchan Patel",
+      "dbName": "Kanchan Patel",
+      "phone": "7866576451",
+      "email": "Kashmapatel@hotmail.com",
+      "status": "Assigned",
+      "leadId": "8115cb7a-46b5-4514-8c48-b19d9d1e28de"
+    },
+    {
+      "csvName": "Sarah hall",
+      "dbName": "Sarah hall",
+      "phone": "7917631941",
+      "email": "adafthouse@aol.com",
+      "status": "Assigned",
+      "leadId": "23c2caa6-f352-4ad2-913f-4b86bba01954"
+    },
+    {
+      "csvName": "Adam Murdin",
+      "dbName": "Adam Murdin",
+      "phone": "7710490882",
+      "email": "adammurdindressage@btinternet.com",
+      "status": "Assigned",
+      "leadId": "03fd3b01-eaec-4c13-a015-414831a26ca1"
+    },
+    {
+      "csvName": "Monisha Shankar",
+      "dbName": "Michael Corin",
+      "phone": "7444864305",
+      "email": "Michaelcorin888@gmail.com",
+      "status": "Attended",
+      "leadId": "0c22d197-a48d-4377-ba57-dc1ba6e951d7"
+    },
+    {
+      "csvName": "Jamil Mitchell-Lunt",
+      "dbName": "Jamil Mitchell-Lunt",
+      "phone": "7565296911",
+      "email": "Jamillunt@gmail.com",
+      "status": "Assigned",
+      "leadId": "0b46e039-cbe4-417f-b8ca-b18d7aa5b256"
+    },
+    {
+      "csvName": "Samuel thirst",
+      "dbName": "Samuel thirst",
+      "phone": "07944 103326",
+      "email": "Sambuca20@icloud.com",
+      "status": "Assigned",
+      "leadId": "b246d346-9349-4b67-9d60-2dbc3a16ff45"
+    },
+    {
+      "csvName": "Hilary joy john",
+      "dbName": "Hilary joy john",
+      "phone": "7800907893",
+      "email": "hilaryjoyjohn@gmail.com",
+      "status": "Assigned",
+      "leadId": "efb47cc0-8420-4582-80ff-88584e5e62b1"
+    },
+    {
+      "csvName": "Ruth Alexandra Ashford",
+      "dbName": "Ruth Alexandra Ashford",
+      "phone": "7956076012",
+      "email": "drruthashford@yahoo.com",
+      "status": "Assigned",
+      "leadId": "e1fe090d-7537-4433-9d32-f5f6d8205285"
+    },
+    {
+      "csvName": "Jane Kennedy",
+      "dbName": "Jane Kennedy",
+      "phone": "7584002362",
+      "email": "jdcook@hotmail.co.uk",
+      "status": "Assigned",
+      "leadId": "e9f64b2d-c556-490c-98d8-cb44f1677d53"
+    },
+    {
+      "csvName": "Amanda Hartley-Denton",
+      "dbName": "Amanda Hartley-Denton",
+      "phone": "7946588047",
+      "email": "amanda.hartleydenton@gmail.com",
+      "status": "Assigned",
+      "leadId": "f0163add-8445-4a46-b428-9748fdd0f1ae"
+    },
+    {
+      "csvName": "Vanessa Byrne",
+      "dbName": "Vanessa Byrne",
+      "phone": "7446395474",
+      "email": "vpbyrne62@gmail.com",
+      "status": "Assigned",
+      "leadId": "710fc819-30f2-4098-b336-bf7e18ce7dad"
+    },
+    {
+      "csvName": "Melissa Power",
+      "dbName": "Melissa Power",
+      "phone": "7808861890",
+      "email": "miapower8@gmail.com",
+      "status": "Assigned",
+      "leadId": "7dc521ad-f700-4a5d-9aae-98fb2846d9fd"
+    },
+    {
+      "csvName": "Alex Candlin",
+      "dbName": "Alex Candlin",
+      "phone": "7527023382",
+      "email": "alexcandlin3220@aol.com",
+      "status": "Assigned",
+      "leadId": "39cc3570-88f8-4caa-adf2-93f423c67641"
+    },
+    {
+      "csvName": "Desislava Dimitrova",
+      "dbName": "Desislava Dimitrova",
+      "phone": "7901013836",
+      "email": "desislavadim100@gmail.com",
+      "status": "Assigned",
+      "leadId": "b3ae78ac-4c98-4639-bd45-cb78655d1f9b"
+    },
+    {
+      "csvName": "Dakota Cardie",
+      "dbName": "Dakota Cardie",
+      "phone": "7563572259",
+      "email": "cardie4444@gmail.com",
+      "status": "Assigned",
+      "leadId": "0e5d7fbf-fc04-4cf9-b93f-e49a5877378d"
+    },
+    {
+      "csvName": "Donna",
+      "dbName": "Donna",
+      "phone": "7804734152",
+      "email": "donnateresacarrington2015@outlook.com",
+      "status": "Assigned",
+      "leadId": "d13a9d5e-a244-4ae2-8aee-cb973e550b46"
+    },
+    {
+      "csvName": "Neil Higgins",
+      "dbName": "Neil Higgins",
+      "phone": "7793461090",
+      "email": "neilhiggins38@live.co.uk",
+      "status": "Assigned",
+      "leadId": "e52beeaf-4990-4b30-a31a-538b2f7435aa"
+    },
+    {
+      "csvName": "Annie Stirk",
+      "dbName": "Annie Stirk",
+      "phone": "7771655756",
+      "email": "annie@anniestirk.com",
+      "status": "Assigned",
+      "leadId": "2482a44f-63e5-4660-8d0c-677b3af348e9"
+    },
+    {
+      "csvName": "Mihaela Szentpali",
+      "dbName": "Mihaela Szentpali",
+      "phone": "7443142350",
+      "email": "ellavip@hotmail.com",
+      "status": "Assigned",
+      "leadId": "7a9a0fb6-45d2-4562-9355-64e7f43c4384"
+    },
+    {
+      "csvName": "Aoun Abbas",
+      "dbName": "Aoun Abbas",
+      "phone": "7880643125",
+      "email": "aounibutt123@gmail.com",
+      "status": "Assigned",
+      "leadId": "1e996a1a-b931-4ee9-b899-d878267e1dcc"
+    },
+    {
+      "csvName": "Alison Jones",
+      "dbName": "Alison Jones",
+      "phone": "7825357024",
+      "email": "thesewingbox@yahoo.co.uk",
+      "status": "Assigned",
+      "leadId": "2a086a3a-aedd-479a-8252-220a8d8930b4"
+    },
+    {
+      "csvName": "Ann marie maccormick",
+      "dbName": "Ann marie maccormick",
+      "phone": "7830246215",
+      "email": "anniedoc47@gmail.com",
+      "status": "Assigned",
+      "leadId": "f655b907-47c7-4fb8-8171-7e0e605595c6"
+    },
+    {
+      "csvName": "Julie Clarkson",
+      "dbName": "Julie Clarkson",
+      "phone": "7554526509",
+      "email": "julie.clarkson@sharplane.co.uk",
+      "status": "Assigned",
+      "leadId": "f0d841ce-2f29-4c65-909a-5a01acd3ea18"
+    },
+    {
+      "csvName": "Nancy Alderson",
+      "dbName": "Nancy Alderson",
+      "phone": "7762887666",
+      "email": "nancyalderson96@gmail.com",
+      "status": "Assigned",
+      "leadId": "fc6b72db-8dea-4613-85ef-774c8de53fbd"
+    },
+    {
+      "csvName": "Karon Crossley",
+      "dbName": "Karon Crossley",
+      "phone": "7733386397",
+      "email": "karoncrossley@ymail.com",
+      "status": "Assigned",
+      "leadId": "7b47493e-45bc-4b36-bcd2-666c3e97cdab"
+    },
+    {
+      "csvName": "Richard ingham",
+      "dbName": "Richard ingham",
+      "phone": "7707152653",
+      "email": "richard.ingham@talktalk.net",
+      "status": "Assigned",
+      "leadId": "ba71ad0b-d3e8-4d8e-b2a3-fdeee650c0ae"
+    },
+    {
+      "csvName": "Catherine Davies",
+      "dbName": "Catherine Davies",
+      "phone": "7803750856",
+      "email": "cathdavies1974@gmail.com",
+      "status": "Assigned",
+      "leadId": "5ca10db9-cf33-4dad-840a-9f477bd2372d"
+    },
+    {
+      "csvName": "Linda Robinson",
+      "dbName": "Linda Robinson",
+      "phone": "7718056475",
+      "email": "lyndarobbo52@hotmail.co.uk",
+      "status": "Assigned",
+      "leadId": "42290fbd-ce1e-48c7-802f-1be2a485c986"
+    },
+    {
+      "csvName": "TARIQ Darr",
+      "dbName": "TARIQ Darr",
+      "phone": "7475268465",
+      "email": "tariq_darr2000@yahoo.com.com",
+      "status": "Assigned",
+      "leadId": "53660f6a-35a5-4e18-b696-a494b6a2ce30"
+    },
+    {
+      "csvName": "Suzy Orr",
+      "dbName": "Suzy Orr",
+      "phone": "7979695550",
+      "email": "mrssuzyorr@gmail.com",
+      "status": "Assigned",
+      "leadId": "159e4f90-cd06-4d5a-a0d8-fa584f77c792"
+    },
+    {
+      "csvName": "Uds",
+      "dbName": "Uds",
+      "phone": "7305526334",
+      "email": "pauluds95@icloud.com",
+      "status": "Cancelled",
+      "leadId": "e4cd8e49-0950-490e-a7cd-f192e312afff"
+    },
+    {
+      "csvName": "Kerry burnley",
+      "dbName": "Kerry burnley",
+      "phone": "447342832410",
+      "email": "tulula74@hotmail.com",
+      "status": "Assigned",
+      "leadId": "56dc1779-a340-488a-8ae4-dac7ca04a3f5"
+    },
+    {
+      "csvName": "Lorraine caswell",
+      "dbName": "Lorraine caswell",
+      "phone": "7469767804",
+      "email": "Lmhypnobirthingni@gmail.com",
+      "status": "Assigned",
+      "leadId": "73c713ae-231b-437b-a98c-2eaa78bb3292"
+    },
+    {
+      "csvName": "Sophie Hanna",
+      "dbName": "Sophie Hanna",
+      "phone": "7709854106",
+      "email": "15sophiehanna@gmail.com",
+      "status": "Assigned",
+      "leadId": "af97583c-fd09-4cb1-923c-0a7665072c55"
+    },
+    {
+      "csvName": "Ausra Baneviciute",
+      "dbName": "Ausra Baneviciute",
+      "phone": "7305330787",
+      "email": "kaledos@hotmail.it",
+      "status": "Assigned",
+      "leadId": "1aac19be-9fc9-4e3a-8979-6e4f77d465e0"
+    },
+    {
+      "csvName": "Rebecca iddon",
+      "dbName": "Rebecca iddon",
+      "phone": "7942758063",
+      "email": "rebeccaiddon81@gmail.com",
+      "status": "Cancelled",
+      "leadId": "49af0595-83e4-4eed-814f-cd14c1dce0bc"
+    },
+    {
+      "csvName": "valery armstrong",
+      "dbName": "valery armstrong",
+      "phone": "7739731876",
+      "email": "val.armstrong2565@gmail.com",
+      "status": "Assigned",
+      "leadId": "384fd007-1684-4f28-a0f9-2a7d518db0ac"
+    },
+    {
+      "csvName": "Jane rose crawley",
+      "dbName": "Jane rose crawley",
+      "phone": "7552726486",
+      "email": "janerc@hotmail.com",
+      "status": "Assigned",
+      "leadId": "5efa787d-7310-4b5b-a818-639bdc268998"
+    },
+    {
+      "csvName": "Nicola barlow",
+      "dbName": "Nicola barlow",
+      "phone": "7709106393",
+      "email": "nikkibarlow@hotmail.com",
+      "status": "Cancelled",
+      "leadId": "9a806b7c-cb09-4358-98db-17b1138f2357"
+    },
+    {
+      "csvName": "Melanie Leverton",
+      "dbName": "Melanie Leverton",
+      "phone": "7485532762",
+      "email": "melanieleverton@hotmail.co.uk",
+      "status": "Assigned",
+      "leadId": "6a59b32c-0f29-4415-b490-75d2f3972e8b"
+    },
+    {
+      "csvName": "Lisa Turner",
+      "dbName": "Lisa Turner",
+      "phone": "7908898319",
+      "email": "lisa.turner67@yahoo.com",
+      "status": "Assigned",
+      "leadId": "7ae17944-df17-4d34-a604-4d3d75be7f07"
+    },
+    {
+      "csvName": "Ann McKenna",
+      "dbName": "Ann McKenna",
+      "phone": "7970011346",
+      "email": "m.a.properties@hotmail.com",
+      "status": "Cancelled",
+      "leadId": "6bce2a33-63ef-46ed-b02d-5a0af54099f2"
+    },
+    {
+      "csvName": "Linda Hughes",
+      "dbName": "Linda Hughes",
+      "phone": "7933113430",
+      "email": "lindahughes2008@gmail.com",
+      "status": "Assigned",
+      "leadId": "517cf03d-5250-4b6e-977f-81968fd080fa"
+    },
+    {
+      "csvName": "Zoe Whittaker",
+      "dbName": "Zoe Whittaker",
+      "phone": "7889280519",
+      "email": "Zoe_whittaker@btinternet.com",
+      "status": "Assigned",
+      "leadId": "12714b53-75a4-4613-8f74-4d7b313f51dc"
+    },
+    {
+      "csvName": "Karan Lowe",
+      "dbName": "Karan Lowe",
+      "phone": "7989428912",
+      "email": "crazykaran81@outlook.com",
+      "status": "Assigned",
+      "leadId": "28790534-f183-4553-9a67-936363941671"
+    },
+    {
+      "csvName": "Andy Gardner",
+      "dbName": "Andy Gardner",
+      "phone": "7803136806",
+      "email": "andy.gardner35@btinternet.com",
+      "status": "Assigned",
+      "leadId": "993db466-8a8f-47f0-af2e-2429aa7d6cc7"
+    },
+    {
+      "csvName": "Tara curry",
+      "dbName": "Tara curry",
+      "phone": "7706006007",
+      "email": "tara_embara@icloud.com",
+      "status": "Assigned",
+      "leadId": "51369fb1-f0aa-4d1c-b62d-e7bb21c4d1fe"
+    },
+    {
+      "csvName": "Shabnam Anam",
+      "dbName": "Shabnam Anam",
+      "phone": "7985494131",
+      "email": "shabnam.a.anam@gmail.com",
+      "status": "Assigned",
+      "leadId": "78c03155-12b4-4b08-ac75-0847ce063ac5"
+    },
+    {
+      "csvName": "Allan",
+      "dbName": "Allan Bruce",
+      "phone": "7590729497",
+      "email": "abruce3631@gmail.com",
+      "status": "Attended",
+      "leadId": "390eac42-36a7-4f0c-a333-73c3dbc6bc1e"
+    },
+    {
+      "csvName": "Oliwia Haglauer",
+      "dbName": "Oliwia Haglauer",
+      "phone": "7597960441",
+      "email": "oliwiahaglauer@gmail.com",
+      "status": "Assigned",
+      "leadId": "14e7e286-ad49-41c5-8bed-32d38755c740"
+    },
+    {
+      "csvName": "Parisima",
+      "dbName": "Parisima",
+      "phone": "7880902191",
+      "email": "parrysima@yahoo.co.uk",
+      "status": "Assigned",
+      "leadId": "394cffa8-4077-4e64-9a0d-b39baa529014"
+    },
+    {
+      "csvName": "Aaron young",
+      "dbName": "Aaron young",
+      "phone": "7949563152",
+      "email": "azzaboibox@gmail.com",
+      "status": "Assigned",
+      "leadId": "244339a0-1428-4f07-a8a5-ff18c3340860"
+    },
+    {
+      "csvName": "Emma longman",
+      "dbName": "Emma longman",
+      "phone": "7939633046",
+      "email": "emmalongman@rocketmail.com",
+      "status": "Assigned",
+      "leadId": "50bfb230-be30-40ac-9a08-f29029985670"
+    },
+    {
+      "csvName": "Vinujan Rajeswaran",
+      "dbName": "Vinujan Rajeswaran",
+      "phone": "7888623409",
+      "email": "vinujanvinujan066@gmail.com",
+      "status": "Assigned",
+      "leadId": "0b655c5d-d0f9-4d00-b01a-444c0032f7d1"
+    },
+    {
+      "csvName": "KYRIAKOS TSOLAKIS",
+      "dbName": "KYRIAKOS TSOLAKIS",
+      "phone": "7362591903",
+      "email": "kyrtsol@hotmail.com",
+      "status": "Assigned",
+      "leadId": "56f3600c-3c8a-40e5-afe3-2c214ad5deef"
+    },
+    {
+      "csvName": "Patryk Lesiak",
+      "dbName": "Patryk Lesiak",
+      "phone": "7564620210",
+      "email": "patryklesiak8907@gmail.com",
+      "status": "Assigned",
+      "leadId": "d96b13a6-0806-4639-847e-e4fcf7577d63"
+    },
+    {
+      "csvName": "Geoff Cawley",
+      "dbName": "Geoff Cawley",
+      "phone": "7880314454",
+      "email": "geoff.cawley@icloud.com",
+      "status": "Assigned",
+      "leadId": "7cd2f6ad-92ed-4b4d-aaf6-9c261f70520c"
+    },
+    {
+      "csvName": "Nicki Connor",
+      "dbName": "Nicki Connor",
+      "phone": "7399863770",
+      "email": "dolly3333@hotmail.com",
+      "status": "Assigned",
+      "leadId": "c035a808-9089-4ffb-9601-3646b3d8372b"
+    },
+    {
+      "csvName": "Natalie Henshall",
+      "dbName": "Natalie Henshall",
+      "phone": "7971069551",
+      "email": "andy8369@gmail.com",
+      "status": "Assigned",
+      "leadId": "d1df0cbf-138d-476b-a210-b191d836d5c4"
+    }
+  ],
+  "notFoundLeads": [
+    {
+      "name": "Diane mcgranaghan",
+      "phone": "7783301985",
+      "email": "Dianemc171@gmail.com"
+    },
+    {
+      "name": "Femi Taylor",
+      "phone": "7940543031",
+      "email": "femiclaire@mac.com"
+    },
+    {
+      "name": "Maria Fuentes",
+      "phone": "7900800427",
+      "email": "mariafuentes8@hotmail.com"
+    },
+    {
+      "name": "Siobhan Robb",
+      "phone": "7359631785",
+      "email": "Siobhanrobb7007@gmail.com"
+    },
+    {
+      "name": "Richard Edwards",
+      "phone": "7703722122",
+      "email": "ededs0077@live.co.uk"
+    },
+    {
+      "name": "Dennise Sweeny",
+      "phone": "7956900884",
+      "email": "denise.sweeney5@btinternet.com"
+    },
+    {
+      "name": "Ruth Foster",
+      "phone": "7494775753",
+      "email": "Flowergardenflorists@gmail.com"
+    },
+    {
+      "name": "Emma Williamson",
+      "phone": "7887933639",
+      "email": "Ladymissemma@gmail.com"
+    },
+    {
+      "name": "Samantha Miller",
+      "phone": "7715993456",
+      "email": "sam.s.miller@btopenworld.com"
+    },
+    {
+      "name": "Debbie",
+      "phone": "7719875340",
+      "email": "debrastephen07@aol.com"
+    },
+    {
+      "name": "Paul Hunter",
+      "phone": "7708244157",
+      "email": "Paul.Hunter59.ph@gmail.com"
+    },
+    {
+      "name": "Valerie",
+      "phone": "7709686649",
+      "email": "Vallewis31@icloud.com"
+    },
+    {
+      "name": "Susan Anne Gough",
+      "phone": "7713982838",
+      "email": "suegough1@gmail.com"
+    }
+  ]
+}

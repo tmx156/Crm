@@ -293,9 +293,9 @@ const Reports = () => {
     // Count leads CREATED (assigned) in date range for "leadsAssigned"
     const createdLeads = leads.filter(lead => lead.created_at);
 
-    // DASHBOARD LOGIC: Count ONLY leads with status === 'booked' (current status)
-    // This matches exactly what the Dashboard daily activity shows
-    const bookedLeads = leads.filter(lead => (lead.status || '').toLowerCase() === 'booked');
+    // ✅ EVER_BOOKED FIX: Count ALL leads ever booked (including cancelled)
+    // This matches the Dashboard daily activity logic using ever_booked
+    const bookedLeads = leads.filter(lead => lead.ever_booked);
 
     // Count attended (current status is Attended/Complete)
     const attendedLeads = leads.filter(lead =>
@@ -353,10 +353,9 @@ const Reports = () => {
         breakdown[createdDate].assigned += 1;
       }
       
-      // DASHBOARD LOGIC: Count as "booked" ONLY if current status is 'booked'
-      // This matches exactly what the Dashboard shows
-      const status = (lead.status || '').toLowerCase();
-      if (status === 'booked') {
+      // ✅ EVER_BOOKED FIX: Count as "booked" if ever_booked is true (includes cancelled)
+      // This matches the Dashboard logic using ever_booked
+      if (lead.ever_booked) {
         // Use booked_at if available, otherwise fall back to created_at
         const bookedDate = lead.booked_at ?
           new Date(lead.booked_at).toISOString().split('T')[0] :
@@ -450,9 +449,8 @@ const Reports = () => {
         }
       }
       
-      // DASHBOARD LOGIC: Count as "booked" ONLY if current status is 'booked'
-      const status = (lead.status || '').toLowerCase();
-      if (status === 'booked') {
+      // ✅ EVER_BOOKED FIX: Count as "booked" if ever_booked is true (includes cancelled)
+      if (lead.ever_booked) {
         // Use booked_at if available, otherwise fall back to created_at
         const bookedDate = lead.booked_at ? new Date(lead.booked_at) : new Date(lead.created_at);
         const bookedWeekStart = new Date(bookedDate);

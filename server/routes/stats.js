@@ -14,33 +14,71 @@ router.get('/leads-public', async (req, res) => {
     console.log('📊 PUBLIC STATS API: Dashboard requesting booking stats');
     console.log(`📅 Date range: ${startDate} to ${endDate}`);
 
-    let queryOptions = {
-      select: 'id, status, created_at, booker_id, date_booked'
-    };
+    // Use direct Supabase query to get accurate count (same as leads API)
+    let countQuery = dbManager.client.from('leads').select('id', { count: 'exact', head: true });
+    let statusQuery = dbManager.client.from('leads').select('status, ever_booked');
 
     // Apply date filters using created_at for daily booking activity
     if (startDate && endDate) {
-      queryOptions.gte = { created_at: startDate };
-      queryOptions.lte = { created_at: endDate };
+      countQuery = countQuery.gte('created_at', startDate).lte('created_at', endDate);
+      statusQuery = statusQuery.gte('created_at', startDate).lte('created_at', endDate);
       console.log(`📅 Public stats filtering by booking creation date: ${startDate} to ${endDate}`);
     }
 
-    // Get all leads to calculate counts
-    const leads = await dbManager.query('leads', queryOptions);
+    // Get total count
+    const { count: totalCount, error: countError } = await countQuery;
+    if (countError) throw countError;
 
-    // Calculate counts from the leads data
-    const total = leads.length;
+    console.log(`📊 Public stats: total count from database: ${totalCount}`);
+
+    // Get all status data using pagination (same approach as verification script)
+    let statusData = [];
+    let from = 0;
+    const batchSize = 1000;
+
+    while (true) {
+      console.log(`📊 Public stats: fetching batch from ${from} to ${from + batchSize - 1}`);
+
+      let batchQuery = dbManager.client
+        .from('leads')
+        .select('status, ever_booked')
+        .range(from, from + batchSize - 1);
+
+      if (startDate && endDate) {
+        batchQuery = batchQuery.gte('created_at', startDate).lte('created_at', endDate);
+      }
+
+      const { data: batch, error: batchError } = await batchQuery;
+
+      if (batchError) {
+        console.log(`❌ Batch error:`, batchError);
+        throw batchError;
+      }
+
+      console.log(`📊 Public stats: batch returned ${batch?.length || 0} records`);
+      if (!batch || batch.length === 0) break;
+
+      statusData = statusData.concat(batch);
+      from += batchSize;
+
+      if (batch.length < batchSize) break; // Last batch
+    }
+
+    console.log(`📊 Public stats: total fetched ${statusData.length} status records from database`);
+
+    // Calculate counts from the status data
+    // ✅ BOOKING HISTORY FIX: Use ever_booked to count all bookings (including cancelled)
     const statusCounts = {
-      new: leads.filter(lead => lead.status === 'New').length,
-      booked: leads.filter(lead => lead.status === 'Booked').length,
-      attended: leads.filter(lead => lead.status === 'Attended').length,
-      cancelled: leads.filter(lead => lead.status === 'Cancelled').length,
-      assigned: leads.filter(lead => lead.status === 'Assigned').length,
-      rejected: leads.filter(lead => lead.status === 'Rejected').length
+      new: statusData.filter(lead => lead.status === 'New').length,
+      booked: statusData.filter(lead => lead.ever_booked).length, // All leads ever booked
+      attended: statusData.filter(lead => lead.status === 'Attended').length,
+      cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
+      assigned: statusData.filter(lead => lead.status === 'Assigned').length,
+      rejected: statusData.filter(lead => lead.status === 'Rejected').length
     };
 
     const result = {
-      total: total || 0,
+      total: totalCount || 0,
       new: statusCounts.new || 0,
       booked: statusCounts.booked || 0,
       attended: statusCounts.attended || 0,
@@ -49,7 +87,7 @@ router.get('/leads-public', async (req, res) => {
       rejected: statusCounts.rejected || 0
     };
 
-    console.log(`📊 PUBLIC STATS RESULT: Found ${total} bookings`);
+    console.log(`📊 PUBLIC STATS RESULT: Found ${totalCount} total bookings`);
     res.json(result);
   } catch (error) {
     console.error('❌ Public stats error:', error);
@@ -65,22 +103,12 @@ router.get('/leads', auth, async (req, res) => {
     // Parse filters from query - support both old and new parameter names
     const { startDate, endDate, userId, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
-    // ROLE-BASED ACCESS CONTROL
-    if (req.user.role !== 'admin') {
-      console.log(`🔒 Stats filtering: User ${req.user.name} (${req.user.role}) can only see stats for their assigned leads`);
-    } else {
-      console.log(`👑 Admin stats access: User ${req.user.name} can see all lead stats`);
-    }
+    // ROLE-BASED ACCESS CONTROL - Counters show global stats, not filtered by user
+    console.log(`👑 Lead counters show global stats for user ${req.user.name} (${req.user.role})`);
 
-    // Build query options for role-based filtering (same as leads endpoint)
-    let queryOptions = {
-      select: 'id, status, created_at, booker_id, assigned_at'
-    };
-
-    // Apply role-based filtering
-    if (req.user.role !== 'admin') {
-      queryOptions.eq = { booker_id: req.user.id };
-    }
+    // Use direct Supabase queries to get accurate counts (same as leads endpoint)
+    let countQuery = dbManager.client.from('leads').select('id', { count: 'exact', head: true });
+    let statusQuery = dbManager.client.from('leads').select('status, ever_booked');
 
     // Apply date filters - support both created_at and assigned_at
     // Prioritize new parameter names over old ones
@@ -89,40 +117,100 @@ router.get('/leads', auth, async (req, res) => {
     const useLegacy = !useCreatedAt && !useAssignedAt && startDate && endDate;
 
     if (useCreatedAt) {
-      queryOptions.gte = { created_at: created_at_start };
-      queryOptions.lte = { created_at: created_at_end };
+      countQuery = countQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
+      statusQuery = statusQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
       console.log(`📅 Stats filtering by creation date: ${created_at_start} to ${created_at_end}`);
     } else if (useAssignedAt) {
-      queryOptions.gte = { assigned_at: assigned_at_start };
-      queryOptions.lte = { assigned_at: assigned_at_end };
+      countQuery = countQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
+      statusQuery = statusQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
       console.log(`📅 Stats filtering by assignment date: ${assigned_at_start} to ${assigned_at_end}`);
     } else if (useLegacy) {
-      queryOptions.gte = { created_at: startDate };
-      queryOptions.lte = { created_at: endDate };
+      countQuery = countQuery.gte('created_at', startDate).lte('created_at', endDate);
+      statusQuery = statusQuery.gte('created_at', startDate).lte('created_at', endDate);
       console.log(`📅 Stats filtering by creation date (legacy): ${startDate} to ${endDate}`);
     }
 
     // Apply user filter (booker) - only for admins
     if (userId && userId !== 'all' && req.user.role === 'admin') {
-      queryOptions.eq = { ...queryOptions.eq, booker_id: userId };
+      countQuery = countQuery.eq('booker_id', userId);
+      statusQuery = statusQuery.eq('booker_id', userId);
     }
 
-    // Get all leads to calculate counts (using same method as leads endpoint)
-    const leads = await dbManager.query('leads', queryOptions);
+    // Get total count
+    const { count: totalCount, error: countError } = await countQuery;
+    if (countError) throw countError;
 
-    // Calculate counts from the leads data
-    const total = leads.length;
+    console.log(`📊 Stats: total count from database: ${totalCount}`);
+
+    // Get all status data using pagination (rebuild query for each batch)
+    let statusData = [];
+    let offset = 0;
+    const batchSize = 1000;
+    let batchCount = 0;
+
+    while (true) {
+      console.log(`📊 Stats: fetching batch ${batchCount + 1}, offset ${offset} to ${offset + batchSize - 1}`);
+
+      // Rebuild the query for each batch to ensure range works correctly
+      let batchQuery = dbManager.client.from('leads').select('status, ever_booked');
+
+      if (useCreatedAt) {
+        batchQuery = batchQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
+      } else if (useAssignedAt) {
+        batchQuery = batchQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
+      } else if (useLegacy) {
+        batchQuery = batchQuery.gte('created_at', startDate).lte('created_at', endDate);
+      }
+
+      if (userId && userId !== 'all' && req.user.role === 'admin') {
+        batchQuery = batchQuery.eq('booker_id', userId);
+      }
+
+      const { data: batch, error: batchError } = await batchQuery
+        .range(offset, offset + batchSize - 1);
+
+      if (batchError) {
+        console.log(`❌ Batch ${batchCount + 1} error:`, batchError);
+        throw batchError;
+      }
+
+      console.log(`📊 Stats: batch ${batchCount + 1} returned ${batch?.length || 0} records`);
+      if (!batch || batch.length === 0) {
+        console.log(`📊 Stats: no more data, stopping pagination`);
+        break;
+      }
+
+      statusData = statusData.concat(batch);
+      offset += batchSize;
+      batchCount++;
+
+      if (batch.length < batchSize) {
+        console.log(`📊 Stats: batch ${batchCount} was partial (${batch.length} < ${batchSize}), stopping pagination`);
+        break; // Last batch
+      }
+
+      // Safety check to prevent infinite loops
+      if (batchCount > 10) {
+        console.log(`📊 Stats: safety limit reached, stopping pagination`);
+        break;
+      }
+    }
+
+    console.log(`📊 Stats: total fetched ${statusData.length} status records from database (${batchCount} batches)`);
+
+    // Calculate counts from the status data
+    // ✅ BOOKING HISTORY FIX: Use ever_booked to count all bookings (including cancelled)
     const statusCounts = {
-      new: leads.filter(lead => lead.status === 'New').length,
-      booked: leads.filter(lead => lead.status === 'Booked').length,
-      attended: leads.filter(lead => lead.status === 'Attended').length,
-      cancelled: leads.filter(lead => lead.status === 'Cancelled').length,
-      assigned: leads.filter(lead => lead.status === 'Assigned').length,
-      rejected: leads.filter(lead => lead.status === 'Rejected').length
+      new: statusData.filter(lead => lead.status === 'New').length,
+      booked: statusData.filter(lead => lead.ever_booked).length, // All leads ever booked
+      attended: statusData.filter(lead => lead.status === 'Attended').length,
+      cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
+      assigned: statusData.filter(lead => lead.status === 'Assigned').length,
+      rejected: statusData.filter(lead => lead.status === 'Rejected').length
     };
 
     const result = {
-      total: total || 0,
+      total: totalCount || 0,
       new: statusCounts.new || 0,
       booked: statusCounts.booked || 0,
       attended: statusCounts.attended || 0,
@@ -148,30 +236,78 @@ router.get('/dashboard', auth, async (req, res) => {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
-    // Build query options for role-based filtering
-    let queryOptions = {
-      select: 'id, status, created_at, booker_id',
-      gte: { created_at: firstDayOfMonth.toISOString() },
-      lte: { created_at: lastDayOfMonth.toISOString() }
-    };
-    
-    // ROLE-BASED ACCESS CONTROL
-    if (req.user.role !== 'admin') {
-      queryOptions.eq = { booker_id: req.user.id };
-      console.log(`🔒 Dashboard stats filtering: User ${req.user.name} (${req.user.role}) can only see stats for their assigned leads`);
-    } else {
-      console.log(`👑 Admin dashboard stats access: User ${req.user.name} can see all stats`);
+
+    // Use direct Supabase queries to get accurate counts
+    const countQuery = dbManager.client
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', firstDayOfMonth.toISOString())
+      .lte('created_at', lastDayOfMonth.toISOString());
+
+    let statusQuery = dbManager.client
+      .from('leads')
+      .select('status, ever_booked')
+      .gte('created_at', firstDayOfMonth.toISOString())
+      .lte('created_at', lastDayOfMonth.toISOString());
+
+    // Get total count
+    const { count: totalCount, error: countError } = await countQuery;
+    if (countError) throw countError;
+
+    // Get all status data using pagination (rebuild query for each batch)
+    let statusData = [];
+    let offset = 0;
+    const batchSize = 1000;
+    let batchCount = 0;
+
+    while (true) {
+      console.log(`📊 Dashboard: fetching batch ${batchCount + 1}, offset ${offset} to ${offset + batchSize - 1}`);
+
+      // Rebuild the query for each batch to ensure range works correctly
+      let batchQuery = dbManager.client
+        .from('leads')
+        .select('status, ever_booked')
+        .gte('created_at', firstDayOfMonth.toISOString())
+        .lte('created_at', lastDayOfMonth.toISOString());
+
+      const { data: batch, error: batchError } = await batchQuery
+        .range(offset, offset + batchSize - 1);
+
+      if (batchError) {
+        console.log(`❌ Dashboard batch ${batchCount + 1} error:`, batchError);
+        throw batchError;
+      }
+
+      console.log(`📊 Dashboard: batch ${batchCount + 1} returned ${batch?.length || 0} records`);
+      if (!batch || batch.length === 0) {
+        console.log(`📊 Dashboard: no more data, stopping pagination`);
+        break;
+      }
+
+      statusData = statusData.concat(batch);
+      offset += batchSize;
+      batchCount++;
+
+      if (batch.length < batchSize) {
+        console.log(`📊 Dashboard: batch ${batchCount} was partial (${batch.length} < ${batchSize}), stopping pagination`);
+        break; // Last batch
+      }
+
+      // Safety check to prevent infinite loops
+      if (batchCount > 10) {
+        console.log(`📊 Dashboard: safety limit reached, stopping pagination`);
+        break;
+      }
     }
-    
-    // Get all leads for this month to calculate stats
-    const leads = await dbManager.query('leads', queryOptions);
-    const totalLeadsThisMonth = leads.length;
-    
-    // Calculate stats from the leads data
-    const clientsBookedThisMonth = leads.filter(lead => lead.status === 'Booked').length;
-    const totalBooked = leads.filter(lead => lead.status === 'Booked').length;
-    const totalAttended = leads.filter(lead => lead.status === 'Attended').length;
+
+    console.log(`📊 Dashboard: total fetched ${statusData.length} status records from database (${batchCount} batches)`);
+
+    // Calculate stats from the status data
+    // ✅ BOOKING HISTORY FIX: Use ever_booked to count all bookings (including cancelled)
+    const totalLeadsThisMonth = totalCount || 0;
+    const clientsBookedThisMonth = statusData.filter(lead => lead.ever_booked).length;
+    const totalBooked = statusData.filter(lead => lead.ever_booked).length;
+    const totalAttended = statusData.filter(lead => lead.status === 'Attended').length;
     const showUpRate = totalBooked > 0 ? Math.round((totalAttended / totalBooked) * 100) : 0;
 
     console.log(`📊 Dashboard stats for user ${req.user.name} (${req.user.role}): total=${totalLeadsThisMonth}, booked=${clientsBookedThisMonth}`);
@@ -224,23 +360,24 @@ router.get('/monthly-booking-tally', auth, async (req, res) => {
 
     console.log(`📊 Fetching booking tally for ${year}-${month}: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
-    // Build query options for role-based filtering
-    let queryOptions = {
-      select: 'id, status, date_booked, booker_id, created_at',
-      gte: { date_booked: startDate.toISOString() },
-      lte: { date_booked: endDate.toISOString() }
-    };
+    // Use direct Supabase query to avoid 1000 record limit
+    let query = dbManager.client
+      .from('leads')
+      .select('id, status, date_booked, booker_id, created_at')
+      .gte('date_booked', startDate.toISOString())
+      .lte('date_booked', endDate.toISOString());
 
     // ROLE-BASED ACCESS CONTROL
     if (req.user.role !== 'admin') {
-      queryOptions.eq = { booker_id: req.user.id };
+      query = query.eq('booker_id', req.user.id);
       console.log(`🔒 Monthly tally filtering: User ${req.user.name} (${req.user.role}) can only see their assigned leads`);
     } else {
       console.log(`👑 Admin monthly tally access: User ${req.user.name} can see all leads`);
     }
 
     // Get leads for the month
-    const leads = await dbManager.query('leads', queryOptions);
+    const { data: leads, error } = await query.limit(10000);
+    if (error) throw error;
 
     // Group by day and calculate tally
     const tally = {};
@@ -315,36 +452,37 @@ router.get('/daily-analytics', auth, async (req, res) => {
 
     console.log(`📊 Fetching daily analytics for ${date}: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
-    // Build query options for role-based filtering
+    // Use direct Supabase queries to avoid 1000 record limit
     // ✅ DAILY ACTIVITY FIX: Use booked_at to track when leads were booked, not when appointments are scheduled
-    let queryOptions = {
-      select: 'id, status, date_booked, booker_id, created_at, booking_history, has_sale, booked_at',
-      gte: { booked_at: startOfDay.toISOString() },
-      lte: { booked_at: endOfDay.toISOString() }
-    };
+    let leadsQuery = dbManager.client
+      .from('leads')
+      .select('id, status, date_booked, booker_id, created_at, booking_history, has_sale, booked_at')
+      .gte('booked_at', startOfDay.toISOString())
+      .lte('booked_at', endOfDay.toISOString());
+
+    let assignedQuery = dbManager.client
+      .from('leads')
+      .select('id, status, booker_id, created_at')
+      .gte('created_at', startOfDay.toISOString())
+      .lte('created_at', endOfDay.toISOString());
 
     // ROLE-BASED ACCESS CONTROL
     if (req.user.role !== 'admin') {
-      queryOptions.eq = { booker_id: req.user.id };
+      leadsQuery = leadsQuery.eq('booker_id', req.user.id);
+      assignedQuery = assignedQuery.eq('booker_id', req.user.id);
       console.log(`🔒 Daily analytics filtering: User ${req.user.name} (${req.user.role}) can only see their assigned leads`);
     } else {
       console.log(`👑 Admin daily analytics access: User ${req.user.name} can see all leads`);
     }
 
     // Get leads booked on this day (status changed to Booked)
-    const leads = await dbManager.query('leads', queryOptions);
+    const { data: leads, error: leadsError } = await leadsQuery.limit(10000);
+    if (leadsError) throw leadsError;
     console.log(`📊 Found ${leads.length} leads booked on ${date} (using booked_at timestamp)`);
 
     // Get leads assigned on this day (for conversion calculation)
-    const assignedQueryOptions = {
-      select: 'id, status, booker_id, created_at',
-      gte: { created_at: startOfDay.toISOString() },
-      lte: { created_at: endOfDay.toISOString() }
-    };
-    if (req.user.role !== 'admin') {
-      assignedQueryOptions.eq = { booker_id: req.user.id };
-    }
-    const assignedLeads = await dbManager.query('leads', assignedQueryOptions);
+    const { data: assignedLeads, error: assignedError } = await assignedQuery.limit(10000);
+    if (assignedError) throw assignedError;
 
     // Calculate metrics
     const metrics = {
@@ -366,15 +504,18 @@ router.get('/daily-analytics', auth, async (req, res) => {
     const nextWeek = new Date(selectedDate);
     nextWeek.setDate(nextWeek.getDate() + 7);
 
-    const upcomingQueryOptions = {
-      select: 'id, name, phone, date_booked, status, booker_id',
-      gte: { date_booked: endOfDay.toISOString() },
-      lte: { date_booked: nextWeek.toISOString() }
-    };
+    let upcomingQuery = dbManager.client
+      .from('leads')
+      .select('id, name, phone, date_booked, status, booker_id')
+      .gte('date_booked', endOfDay.toISOString())
+      .lte('date_booked', nextWeek.toISOString());
+
     if (req.user.role !== 'admin') {
-      upcomingQueryOptions.eq = { booker_id: req.user.id };
+      upcomingQuery = upcomingQuery.eq('booker_id', req.user.id);
     }
-    const upcomingBookings = await dbManager.query('leads', upcomingQueryOptions);
+
+    const { data: upcomingBookings, error: upcomingError } = await upcomingQuery.limit(100);
+    if (upcomingError) throw upcomingError;
 
     console.log(`📊 Daily analytics for ${date}: ${metrics.leadsAssigned} assigned, ${metrics.bookingsMade} booked, ${metrics.bookingsAttended} attended`);
 
@@ -667,11 +808,12 @@ router.get('/user-analytics', async (req, res) => {
       const leadsAssignedCount = leadsAssigned.length;
 
       // 2. Fetch bookings made today by this booker
+      // ✅ BOOKING HISTORY FIX: Use booked_at to get all bookings made today (including cancelled)
       const bookingsMadeQuery = {
-        select: 'id, status, created_at, booker_id, date_booked',
-        eq: { booker_id: userId, status: 'Booked' },
-        gte: { created_at: `${today}T00:00:00.000Z` },
-        lte: { created_at: `${today}T23:59:59.999Z` }
+        select: 'id, status, created_at, booker_id, date_booked, booked_at, ever_booked',
+        eq: { booker_id: userId },
+        gte: { booked_at: `${today}T00:00:00.000Z` },
+        lte: { booked_at: `${today}T23:59:59.999Z` }
       };
       const bookingsMade = await dbManager.query('leads', bookingsMadeQuery);
       const bookingsMadeCount = bookingsMade.length;
@@ -714,10 +856,10 @@ router.get('/user-analytics', async (req, res) => {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
       const yesterdayBookingsQuery = {
-        select: 'id, status, created_at, booker_id',
-        eq: { booker_id: userId, status: 'Booked' },
-        gte: { created_at: `${yesterdayStr}T00:00:00.000Z` },
-        lte: { created_at: `${yesterdayStr}T23:59:59.999Z` }
+        select: 'id, status, created_at, booker_id, booked_at',
+        eq: { booker_id: userId },
+        gte: { booked_at: `${yesterdayStr}T00:00:00.000Z` },
+        lte: { booked_at: `${yesterdayStr}T23:59:59.999Z` }
       };
       const yesterdayBookings = await dbManager.query('leads', yesterdayBookingsQuery);
       const yesterdayBookingsCount = yesterdayBookings.length;

@@ -173,9 +173,11 @@ const updateUserStatistics = async (userId, statusChange) => {
       if (statusChange.to === 'Attended') {
         updateFields.show_ups = (userData.show_ups || 0) + 1;
       }
-      if (statusChange.from === 'Booked' && statusChange.to === 'Cancelled') {
-        updateFields.bookings_made = Math.max((userData.bookings_made || 0) - 1, 0);
-      }
+      // ✅ BOOKING HISTORY FIX: Don't decrement bookings_made on cancellation
+      // Cancelled bookings should remain in stats to track booking performance accurately
+      // if (statusChange.from === 'Booked' && statusChange.to === 'Cancelled') {
+      //   updateFields.bookings_made = Math.max((userData.bookings_made || 0) - 1, 0);
+      // }
     }
     
     if (Object.keys(updateFields).length > 0) {
@@ -335,12 +337,6 @@ router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
-  console.log('🔍 Leads API request params:', {
-    page, limit, status, booker, search,
-    created_at_start, created_at_end,
-    assigned_at_start, assigned_at_end
-  });
-
     // Validate and cap limit to prevent performance issues
     const validatedLimit = Math.min(parseInt(limit) || 50, 100);
     const pageInt = Math.max(parseInt(page) || 1, 1);
@@ -413,7 +409,6 @@ router.get('/', auth, async (req, res) => {
 
     // Apply assigned_at date range filter for assigned leads
     if (assigned_at_start && assigned_at_end) {
-      console.log(`📅 Applying assigned_at filter: ${assigned_at_start} to ${assigned_at_end}`);
       dataQuery = dataQuery
         .gte('assigned_at', assigned_at_start)
         .lte('assigned_at', assigned_at_end);
@@ -530,8 +525,8 @@ router.get('/calendar', auth, async (req, res) => {
     // PERFORMANCE: Get pagination and date range from query params
     const { start, end, page = 1, limit = 200, offset = 0 } = req.query;
 
-    // Validate and cap limit to prevent performance issues
-    const validatedLimit = Math.min(parseInt(limit) || 200, 500);
+    // Validate and cap limit to prevent performance issues - increased for diary-style loading
+    const validatedLimit = Math.min(parseInt(limit) || 1000, 2000);
     const pageInt = Math.max(parseInt(page) || 1, 1);
     const offsetInt = parseInt(offset) || ((pageInt - 1) * validatedLimit);
     
@@ -553,7 +548,8 @@ router.get('/calendar', auth, async (req, res) => {
         created_at, updated_at, postcode, notes, image_url
       `)
       .or('date_booked.not.is.null,status.eq.Booked')
-      .is('deleted_at', null); // Ensure we don't fetch deleted leads
+      .is('deleted_at', null) // Ensure we don't fetch deleted leads
+      .not('status', 'in', '(Cancelled,Rejected)'); // ✅ Exclude cancelled/rejected bookings from calendar
     
     // PERFORMANCE: Apply date range filter if provided
     if (start && end) {
@@ -577,7 +573,8 @@ router.get('/calendar', auth, async (req, res) => {
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .or('date_booked.not.is.null,status.eq.Booked')
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .not('status', 'in', '(Cancelled,Rejected)'); // ✅ Exclude cancelled/rejected from count
 
     if (start && end) {
       const startDate = new Date(start);
@@ -735,12 +732,26 @@ router.get('/calendar', auth, async (req, res) => {
               };
             });
             
-            // Merge and deduplicate
+            // Merge and deduplicate with improved logic
             const allHistory = [...bookingHistory, ...messageHistory];
             const seenKeys = new Set();
             const uniqueHistory = allHistory.filter(entry => {
-              const key = `${entry.action}_${entry.timestamp}_${entry.details?.body || entry.details?.message || ''}`;
-              if (seenKeys.has(key)) return false;
+              // Create a more robust deduplication key
+              const timestamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : '';
+              const action = entry.action || '';
+              const body = entry.details?.body || entry.details?.message || '';
+              const subject = entry.details?.subject || '';
+              const performedBy = entry.performed_by || '';
+              
+              // Use a combination of action, timestamp (rounded to nearest minute), and performer
+              // This handles cases where the same email appears in both booking_history and messages
+              const timeKey = timestamp ? new Date(timestamp).setSeconds(0, 0) : 0;
+              const key = `${action}_${timeKey}_${performedBy}_${subject.substring(0, 50)}`;
+              
+              if (seenKeys.has(key)) {
+                console.log(`🔄 Deduplicating entry: ${action} at ${timestamp} by ${performedBy}`);
+                return false;
+              }
               seenKeys.add(key);
               return true;
             });
@@ -777,6 +788,7 @@ router.get('/calendar', auth, async (req, res) => {
           `)
           .not('date_booked', 'is', null)
           .is('deleted_at', null)
+          .not('status', 'in', '(Cancelled,Rejected)') // ✅ Exclude cancelled/rejected from fallback
           .order('date_booked', { ascending: true })
           .limit(parseInt(limit));
         
@@ -1235,6 +1247,8 @@ router.post('/', auth, async (req, res) => {
             status: 'Booked',
             date_booked: finalBody.date_booked ? preserveLocalTime(finalBody.date_booked) : null,
             booker_id: req.user.id,
+            booked_at: new Date().toISOString(), // ✅ BOOKING HISTORY FIX: Set booked_at timestamp
+            ever_booked: true, // ✅ BOOKING HISTORY FIX: Mark as ever booked
             updated_at: new Date().toISOString()
           };
           
@@ -1354,6 +1368,8 @@ router.post('/', auth, async (req, res) => {
       booking_status: leadData.booking_status || null,
       // ✅ DAILY ACTIVITY FIX: Set booked_at timestamp if creating with Booked status
       booked_at: leadData.status === 'Booked' ? new Date().toISOString() : null,
+      // ✅ BOOKING HISTORY FIX: Set ever_booked flag to track booking history for stats
+      ever_booked: leadData.status === 'Booked' ? true : false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1581,13 +1597,17 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
     // ✅ DAILY ACTIVITY FIX: Set booked_at timestamp when status changes to Booked
     if (oldStatus !== 'Booked' && req.body.status === 'Booked') {
       req.body.booked_at = new Date().toISOString();
+      req.body.ever_booked = true; // ✅ BOOKING HISTORY FIX: Mark as ever booked
       console.log(`📊 Setting booked_at timestamp for ${lead.name}: ${req.body.booked_at}`);
     }
     
-    // If cancelling, clear dateBooked and keep status as Cancelled
+    // ✅ DAILY ACTIVITY FIX: Don't clear date_booked on cancellation
+    // This preserves the original appointment time for historical tracking
+    // Cancelled bookings will remain visible in daily activities with their original time
     if (req.body.status === 'Cancelled') {
-      req.body.date_booked = null;
-      // Keep status as 'Cancelled' instead of changing to 'New'
+      // Keep date_booked intact - only change status to 'Cancelled'
+      // Calendar won't show it because it filters by status
+      console.log(`📅 Lead cancelled but preserving original date_booked for tracking`);
     }
     // Update the lead - filter out problematic fields and ensure valid data types
     const { _id, ...updateData } = req.body;
@@ -1701,6 +1721,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       // ✅ SCOREBOARD FIX: Set booked_at timestamp when status changes to 'Booked'
       if (supabaseUpdateFields.status === 'Booked' && lead.status !== 'Booked') {
         supabaseUpdateFields.booked_at = new Date().toISOString();
+        supabaseUpdateFields.ever_booked = true; // ✅ BOOKING HISTORY FIX: Mark as ever booked
         console.log(`📊 Lead ${lead.name} booked at ${supabaseUpdateFields.booked_at}`);
       }
       
@@ -2660,7 +2681,8 @@ router.get('/calendar-public', async (req, res) => {
         created_at, updated_at, postcode, notes, image_url
       `)
       .or('date_booked.not.is.null,status.eq.Booked')
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .not('status', 'in', '(Cancelled,Rejected)'); // ✅ Exclude cancelled/rejected from calendar
 
     if (start && end) {
       query = query
@@ -3954,11 +3976,12 @@ router.patch('/:id/reject', auth, async (req, res) => {
     const now = new Date().toISOString();
     
     // Update the lead status
+    // ✅ DAILY ACTIVITY FIX: Don't clear date_booked on rejection (preserve history)
     await dbManager.update('leads', req.params.id, {
       status: 'Rejected',
       reject_reason: reason,
-      rejected_at: now,
-      date_booked: null
+      rejected_at: now
+      // date_booked preserved for tracking
     });
     
     const updatedLeads = await dbManager.query('leads', {
@@ -4321,7 +4344,7 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
       'Cancel': {
         status: 'Cancelled',
         is_confirmed: false,
-        date_booked: null,
+        // date_booked NOT cleared - preserve original appointment time for tracking
         description: 'Cancel appointment'
       },
       'Complete': {
@@ -4333,7 +4356,7 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
       'Reject Lead': {
         status: 'Rejected',
         is_confirmed: false,
-        date_booked: null,
+        // date_booked NOT cleared - preserve history
         description: 'Reject this lead'
       }
     };
@@ -4368,6 +4391,12 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
       is_confirmed: statusMapping.is_confirmed,
       updated_at: new Date().toISOString()
     };
+
+    // ✅ BOOKING HISTORY FIX: Set ever_booked and booked_at when booking via quick status
+    if (statusMapping.status === 'Booked' && oldStatus !== 'Booked') {
+      updateData.booked_at = new Date().toISOString();
+      updateData.ever_booked = true;
+    }
 
     // Handle special cases
     if (statusMapping.has_sale !== undefined) {

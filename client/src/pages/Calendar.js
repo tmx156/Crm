@@ -28,9 +28,8 @@ const Calendar = () => {
   // Toggle to expand additional quick status actions
   const [showMoreStatuses, setShowMoreStatuses] = useState(false);
   
-  // PERFORMANCE: Cache for loaded date ranges
-  const [loadedRanges, setLoadedRanges] = useState([]);
-  const [eventCache, setEventCache] = useState({});
+  // PERFORMANCE: Cache for loaded date ranges - Track which date ranges have been loaded
+  const [loadedRanges, setLoadedRanges] = useState(new Set());
 
   const [showLeadFormModal, setShowLeadFormModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -126,6 +125,13 @@ const Calendar = () => {
   
   // Memoize fetchEvents to prevent recreating it on every render
   const fetchEvents = useCallback(async (force = false) => {
+    // If force refresh, clear the cache
+    if (force) {
+      console.log('📅 Force refresh: Clearing calendar cache');
+      setLoadedRanges(new Set());
+      setEvents([]);
+    }
+    
     // Prevent multiple simultaneous calls
     if (isFetching && !force) {
       console.log('📅 Calendar: Fetch already in progress, skipping...');
@@ -155,11 +161,25 @@ const Calendar = () => {
       // PERFORMANCE: Get visible date range from calendar to only fetch relevant events
       const calendarApi = calendarRef.current?.getApi();
       let dateParams = '';
+      let rangeKey = null;
+      let startDate = null;
+      let endDate = null;
+      
       if (calendarApi && calendarApi.view) {
         const view = calendarApi.view;
         // Only fetch visible calendar dates (no buffer needed for month navigation)
-        const startDate = new Date(view.activeStart);
-        const endDate = new Date(view.activeEnd);
+        startDate = new Date(view.activeStart);
+        endDate = new Date(view.activeEnd);
+
+        // Create range key for tracking
+        rangeKey = `${startDate.toISOString()}_${endDate.toISOString()}`;
+        
+        // Check if this range was already loaded (unless force refresh)
+        if (!force && loadedRanges.has(rangeKey)) {
+          console.log('📅 Range already loaded, skipping fetch:', rangeKey);
+          setIsFetching(false);
+          return;
+        }
 
         dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
         console.log(`📅 Fetching events for range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
@@ -330,8 +350,20 @@ const Calendar = () => {
 
       console.log(`📅 Calendar: Final events array has ${finalEvents.length} unique events`);
 
-      // Set events directly without complex merging logic
-      setEvents(finalEvents);
+      // Mark this range as loaded if we have a rangeKey
+      if (rangeKey) {
+        setLoadedRanges(prev => new Set([...prev, rangeKey]));
+        console.log(`📅 Marked range as loaded: ${rangeKey}`);
+      }
+
+      // DIARY-STYLE LOADING: Merge new events with existing ones (no duplicates)
+      setEvents(prevEvents => {
+        const existingIds = new Set(prevEvents.map(e => e.id));
+        const newUniqueEvents = finalEvents.filter(e => !existingIds.has(e.id));
+        const mergedEvents = [...prevEvents, ...newUniqueEvents];
+        console.log(`📅 Merging ${newUniqueEvents.length} new events with ${prevEvents.length} existing events = ${mergedEvents.length} total events`);
+        return mergedEvents;
+      });
 
       // Check for highlighting after events are set (reduced timeout for performance)
       setTimeout(() => {
@@ -1793,7 +1825,10 @@ const Calendar = () => {
             dayGridMonth: {
               dayMaxEventRows: 3,
               moreLinkClick: 'popover',
-              showNonCurrentDates: true
+              showNonCurrentDates: true,
+              weekNumbers: false,
+              fixedWeekCount: false,
+              height: 500
             },
             timeGridWeek: {
               allDaySlot: false,
@@ -1811,12 +1846,22 @@ const Calendar = () => {
           eventContent={(arg) => {
             // PERFORMANCE: Skip SMS message processing entirely - too slow
             // This was causing 23+ function calls on every render
+
+            // Don't show "A" tag for brand new bookings (status = "New")
+            // Show it for all other bookings (Booked, Confirmed, etc.)
+            const isNewBooking = arg.event.extendedProps?.status === 'New';
+
             return (
               <div className="fc-event-main p-1 flex items-center justify-between">
                 <div className="fc-event-title-container flex-1 overflow-hidden">
                   <div className="fc-event-title text-xs truncate">
                     {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
-                    {arg.event.title}
+                    <span className="inline-flex items-center gap-1">
+                      {!isNewBooking && (
+                        <span className="bg-gray-500 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">A</span>
+                      )}
+                      {arg.event.title}
+                    </span>
                   </div>
                 </div>
               </div>

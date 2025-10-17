@@ -207,6 +207,12 @@ const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
       return;
     }
 
+    // Prevent duplicate sends
+    if (sending) {
+      console.log('Reply already being sent, ignoring duplicate request');
+      return;
+    }
+
     try {
       setSending(true);
       if (notification?.type === 'email') {
@@ -401,7 +407,33 @@ const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
             </div>
           ) : (
             <div className="space-y-3">
-              {conversationHistory.map((message, index) => (
+              {conversationHistory
+                .filter((message, index) => {
+                  // Filter out the current notification message to prevent duplication
+                  const currentMessageContent = notification?.content || '';
+                  const historyMessageContent = message.details?.body || message.details?.message || message.details?.subject || '';
+                  
+                  // Skip if this is the same message as the current notification
+                  if (currentMessageContent.trim() === historyMessageContent.trim()) {
+                    console.log('🔄 Filtering out duplicate message from conversation history');
+                    return false;
+                  }
+                  
+                  // Skip if timestamps are very close (within 5 seconds) and content is similar
+                  if (notification?.timestamp && message.timestamp) {
+                    const currentTime = new Date(notification.timestamp).getTime();
+                    const historyTime = new Date(message.timestamp).getTime();
+                    const timeDiff = Math.abs(currentTime - historyTime);
+                    
+                    if (timeDiff < 5000 && currentMessageContent.includes(historyMessageContent.substring(0, 50))) {
+                      console.log('🔄 Filtering out near-duplicate message from conversation history');
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                })
+                .map((message, index) => (
                 <div 
                   key={`${message.timestamp}-${index}`}
                   className={`flex ${(['SMS_SENT','EMAIL_SENT'].includes(message.action)) ? 'justify-end' : 'justify-start'}`}
