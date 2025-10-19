@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import MessageModal from '../components/MessageModal';
+import { decodeEmailContent, getEmailContentPreview } from '../utils/emailContentDecoder';
 import {
   FiMessageSquare,
   FiMail,
@@ -1328,7 +1329,7 @@ const Messages = () => {
                         </div>
                       </div>
                       <p className="text-sm text-gray-500 truncate mt-1">
-                        {message.content}
+                        {getEmailContentPreview(message.content, 100)}
                       </p>
                       {/* Error message for failed deliveries */}
                       {message.direction === 'sent' && message.delivery_status === 'failed' && message.error_message && (

@@ -2,6 +2,8 @@ const { ImapFlow } = require('imapflow');
 const { createClient } = require('@supabase/supabase-js');
 const { simpleParser } = require('mailparser');
 const { randomUUID } = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 // --- Configuration ---
 // Using existing Supabase credentials from config
@@ -31,6 +33,9 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_BASE_DELAY_MS = 5000;
 const HEARTBEAT_INTERVAL_MS = 60000; // 1 minute
 const BACKUP_SCAN_INTERVAL_MS = 1800000; // 30 minutes (Primary is IDLE, optimized for egress)
+
+// Persistent tracking for processed messages
+const PROCESSED_MESSAGES_FILE = path.join(__dirname, '../data/processed_email_messages.json');
 
 // --- EmailPoller Class ---
 class EmailPoller {
@@ -71,6 +76,65 @@ class EmailPoller {
 
         // Initialize Supabase client
         this.supabase = this.getSupabase();
+        
+        // Initialize persistent tracking
+        this.processedMessages = new Set();
+        this.loadProcessedMessages();
+    }
+
+    // Load processed messages from persistent storage
+    loadProcessedMessages() {
+        try {
+            // Ensure data directory exists
+            const dataDir = path.dirname(PROCESSED_MESSAGES_FILE);
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
+            
+            if (fs.existsSync(PROCESSED_MESSAGES_FILE)) {
+                const data = JSON.parse(fs.readFileSync(PROCESSED_MESSAGES_FILE, 'utf8'));
+                if (data.processedIds && Array.isArray(data.processedIds)) {
+                    data.processedIds.forEach(id => this.processedMessages.add(id));
+                }
+                console.log(`📧 [${this.accountConfig.name}] Loaded ${this.processedMessages.size} processed message IDs`);
+            } else {
+                console.log(`📧 [${this.accountConfig.name}] No existing processed messages file found, starting fresh`);
+            }
+        } catch (error) {
+            console.error(`📧 [${this.accountConfig.name}] Error loading processed messages:`, error.message);
+        }
+    }
+
+    // Save processed messages to persistent storage
+    saveProcessedMessages() {
+        try {
+            const data = {
+                lastUpdated: new Date().toISOString(),
+                processedIds: Array.from(this.processedMessages)
+            };
+            
+            const dataDir = path.dirname(PROCESSED_MESSAGES_FILE);
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
+            
+            fs.writeFileSync(PROCESSED_MESSAGES_FILE, JSON.stringify(data, null, 2));
+        } catch (error) {
+            console.error(`📧 [${this.accountConfig.name}] Error saving processed messages:`, error.message);
+        }
+    }
+
+    // Mark message as processed
+    markMessageProcessed(uid, leadId) {
+        const key = `${this.accountKey}_${uid}_${leadId}`;
+        this.processedMessages.add(key);
+        this.saveProcessedMessages();
+    }
+
+    // Check if message was already processed
+    isMessageProcessed(uid, leadId) {
+        const key = `${this.accountKey}_${uid}_${leadId}`;
+        return this.processedMessages.has(key);
     }
 
     getSupabase() {
@@ -324,6 +388,13 @@ class EmailPoller {
                 console.log(`📧 Processing: UID ${message.uid}, From: ${fromAddr}, To: ${toAddr}, Subject: "${subject}"`);
 
                 try {
+                    // Check if message was already processed (persistent tracking)
+                    if (this.isMessageProcessed(message.uid, null)) {
+                        console.log(`📧 ⚠️ Message UID ${message.uid} already processed, skipping`);
+                        skippedCount++;
+                        continue;
+                    }
+
                     // Check if a lead exists first (to avoid unnecessary processing)
                     const lead = await this.findLead(fromAddr);
 
@@ -333,16 +404,28 @@ class EmailPoller {
                         continue;
                     }
 
+                    // Check again with lead ID
+                    if (this.isMessageProcessed(message.uid, lead.id)) {
+                        console.log(`📧 ⚠️ Message UID ${message.uid} for lead ${lead.id} already processed, skipping`);
+                        skippedCount++;
+                        continue;
+                    }
+
                     console.log(`📧 📋 Found lead: ${lead.name} (${lead.email}) for message UID ${message.uid}`);
 
                     // CRITICAL FIX: The processMessage function now handles the UID check
                     await this.processMessage(message, lead);
+                    
+                    // Mark as processed
+                    this.markMessageProcessed(message.uid, lead.id);
+                    
                     processedCount++;
                     console.log(`📧 ✅ Successfully processed message UID ${message.uid}`);
                 } catch (processError) {
-                    if (processError.message.includes('DUPLICATE_IMAP_UID')) {
+                    if (processError.message.includes('DUPLICATE_IMAP_UID') || 
+                        processError.message.includes('DUPLICATE_CONTENT')) {
                         skippedCount++; // Duplicates are skipped, not errors
-                        console.log(`📧 ⚠️ Skipping duplicate message UID ${message.uid}`);
+                        console.log(`📧 ⚠️ Skipping duplicate message UID ${message.uid}: ${processError.message}`);
                     } else if (processError.message.includes('NO_MATCHING_LEAD')) {
                         skippedCount++;
                         console.log(`📧 ⚠️ Skipping message UID ${message.uid} (no lead for ${fromAddr})`);
@@ -381,110 +464,300 @@ class EmailPoller {
         return leadData;
     }
 
+    /**
+     * Decode quoted-printable encoding (=E2=80=99 etc)
+     */
+    decodeQuotedPrintable(str) {
+        if (!str) return '';
+
+        try {
+            // Replace =\r\n or =\n (soft line breaks)
+            str = str.replace(/=\r?\n/g, '');
+
+            // Decode =XX hex codes
+            str = str.replace(/=([0-9A-F]{2})/gi, (match, hex) => {
+                return String.fromCharCode(parseInt(hex, 16));
+            });
+
+            return str;
+        } catch (error) {
+            console.error('Error decoding quoted-printable:', error);
+            return str;
+        }
+    }
+
+    /**
+     * ENHANCED: Extract complete email content with better parsing
+     * Handles all email formats and prevents truncation
+     */
     async extractEmailBody(raw) {
         try {
-            // First, try to clean up Apple Mail MIME boundaries and headers manually
-            let cleanedRaw = raw;
+            console.log('📧 Starting email content extraction...');
             
-            // Remove Apple Mail MIME boundaries and headers (but preserve actual content)
-            cleanedRaw = cleanedRaw
-                .replace(/^--Apple-Mail-[A-F0-9-]+$/gm, '') // Remove boundary lines
-                .replace(/^Content-Type:\s*text\/plain[^;]*;?\s*charset=utf-8$/gm, '') // Remove content-type lines
-                .replace(/^Content-Transfer-Encoding:\s*quoted-printable$/gm, '') // Remove encoding lines
-                .replace(/^Content-Type:\s*text\/html[^;]*;?\s*charset=utf-8$/gm, '') // Remove HTML content-type lines
-                .replace(/^Content-Transfer-Encoding:\s*7bit$/gm, '') // Remove 7bit encoding lines
-                .replace(/^Content-Transfer-Encoding:\s*base64$/gm, '') // Remove base64 encoding lines
-                .replace(/^Content-Disposition:\s*attachment[^;]*;?[^;]*$/gm, '') // Remove attachment lines
-                .replace(/^Content-ID:\s*<[^>]+>$/gm, '') // Remove content-id lines
-                .replace(/^X-Attachment-Id:\s*[^\r\n]+$/gm, '') // Remove x-attachment-id lines
-                .replace(/^\s*$/gm, '') // Remove empty lines
-                .trim();
-
-            // If the cleaned content is too short, try parsing the original
-            if (cleanedRaw.length < 10) {
-                cleanedRaw = raw;
-            }
-
-            const parsed = await simpleParser(cleanedRaw);
-            let body = parsed.text || '';
-
-            // If no text content, try HTML
-            if (!body && parsed.html) {
-                body = parsed.html
-                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                    .replace(/<[^>]+>/g, '')
-                    .replace(/&nbsp;/g, ' ')
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/&quot;/g, '"')
-                    .replace(/&#39;/g, "'")
-                    .replace(/\s+/g, ' ')
-                    .trim();
-            }
+            // Step 1: Parse email using simpleParser with better options
+            const parsed = await simpleParser(raw, {
+                skipHtmlToText: false,
+                skipTextToHtml: true,
+                skipImageLinks: true,
+                maxHtmlLengthToParse: 1000000 // 1MB limit to prevent truncation
+            });
             
-            // If still no body and we have clean text, use it directly
-            if (!body && cleanedRaw.trim()) {
-                body = cleanedRaw.trim();
+            let content = '';
+            let extractionMethod = '';
+
+            // Try to get text content first (plain text is preferred)
+            if (parsed.text && parsed.text.trim()) {
+                content = parsed.text;
+                extractionMethod = 'plain_text';
+                console.log(`📧 Extracted ${content.length} characters from plain text`);
+            }
+            // If no text, extract from HTML with improved conversion
+            else if (parsed.html) {
+                content = this.htmlToText(parsed.html);
+                extractionMethod = 'html_conversion';
+                console.log(`📧 Extracted ${content.length} characters from HTML conversion`);
+            }
+            // Try alternative parsing methods
+            else if (parsed.textAsHtml) {
+                content = this.htmlToText(parsed.textAsHtml);
+                extractionMethod = 'text_as_html';
+                console.log(`📧 Extracted ${content.length} characters from textAsHtml`);
+            }
+            // Last resort: try to extract from raw
+            else if (raw && typeof raw === 'string') {
+                content = raw;
+                extractionMethod = 'raw_string';
+                console.log(`📧 Using raw string content: ${content.length} characters`);
+            } else if (Buffer.isBuffer(raw)) {
+                content = raw.toString('utf8');
+                extractionMethod = 'buffer_conversion';
+                console.log(`📧 Converted buffer to string: ${content.length} characters`);
             }
 
-            // Additional cleanup for Apple Mail artifacts and MIME boundaries
-            body = body
-                .replace(/^--Apple-Mail-[A-F0-9-]+$/gm, '') // Remove boundary lines
-                .replace(/^Content-Type:\s*text\/plain[^;]*;?\s*charset=utf-8$/gm, '') // Remove content-type lines
-                .replace(/^Content-Transfer-Encoding:\s*quoted-printable$/gm, '') // Remove encoding lines
-                .replace(/^Content-Type:\s*text\/html[^;]*;?\s*charset=utf-8$/gm, '') // Remove HTML content-type lines
-                .replace(/^Content-Transfer-Encoding:\s*7bit$/gm, '') // Remove 7bit encoding lines
-                .replace(/^Content-Transfer-Encoding:\s*base64$/gm, '') // Remove base64 encoding lines
-                .replace(/^Content-Disposition:\s*attachment[^;]*;?[^;]*$/gm, '') // Remove attachment lines
-                .replace(/^Content-ID:\s*<[^>]+>$/gm, '') // Remove content-id lines
-                .replace(/^X-Attachment-Id:\s*[^\r\n]+$/gm, '') // Remove x-attachment-id lines
-                .replace(/^>+.*/gm, '') // Remove quoted replies
-                .replace(/On.*wrote:[\s\S]*$/gm, '') // Remove "On X wrote:" signatures
-                .replace(/From:.*\nSent:.*\nTo:.*\nSubject:.*/g, '') // Remove email headers
-                .replace(/\[.*?\]/g, '') // Remove brackets content
-                .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
-                .replace(/^\s+|\s+$/g, '') // Trim whitespace
-                .trim();
+            console.log(`📧 Content extraction method: ${extractionMethod}`);
 
-            return body || 'No content available';
+            // If still no content after all attempts
+            if (!content || content.trim().length === 0) {
+                console.warn('📧 No content extracted from email after all methods');
+                return 'No content available';
+            }
+
+            // Step 2: Decode base64 content if present (enhanced detection)
+            const base64Pattern = /----[A-Za-z0-9._]+\r?\n([A-Za-z0-9+/=\r\n]+)----[A-Za-z0-9._]+/;
+            const base64Match = content.match(base64Pattern);
+            if (base64Match && base64Match[1]) {
+                try {
+                    const decoded = Buffer.from(base64Match[1].replace(/\r?\n/g, ''), 'base64').toString('utf8');
+                    content = decoded;
+                    console.log(`📧 Decoded base64 content: ${decoded.length} characters`);
+                } catch (e) {
+                    console.warn('Failed to decode base64 content:', e.message);
+                }
+            }
+
+            // Additional base64 detection for standalone base64 content
+            const standaloneBase64Pattern = /^([A-Za-z0-9+/=\r\n]+)$/;
+            if (standaloneBase64Pattern.test(content.trim()) && content.length > 50) {
+                try {
+                    const cleanedBase64 = content.replace(/\r?\n/g, '').replace(/\s/g, '');
+                    if (cleanedBase64.length > 0 && cleanedBase64.length % 4 === 0) {
+                        const decoded = Buffer.from(cleanedBase64, 'base64').toString('utf8');
+                        if (decoded.length > 10 && decoded.includes(' ')) { // Valid text should have spaces
+                            content = decoded;
+                            console.log(`📧 Decoded standalone base64 content: ${decoded.length} characters`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to decode standalone base64 content:', e.message);
+                }
+            }
+
+            // Step 3: Decode HTML entities comprehensively
+            content = this.decodeHtmlEntities(content);
+
+            // Step 4: Decode quoted-printable encoding (=E2=80=99 etc)
+            content = this.decodeQuotedPrintable(content);
+
+            // Step 5: Remove any remaining HTML tags (in case some slipped through)
+            content = content.replace(/<[^>]+>/g, ' ');
+
+            // Step 6: Extract customer's response with improved logic
+            let lines = content.split(/\r?\n/);
+            let customerLines = [];
+            let foundCustomerContent = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                // Stop at quoted reply markers but be less aggressive to preserve content
+                if (
+                    line.match(/^On .+wrote:?/i) ||    // "On [date] [person] wrote:"
+                    line.match(/^From:.*Sent:.*To:/i) ||
+                    line.match(/^----+ ?Original [Mm]essage ?----+/) ||
+                    line.match(/^_{5,}/) ||
+                    line.match(/^>+\s{2,}/) ||         // Quoted lines with multiple spaces
+                    line.match(/^charset=/i) ||        // MIME artifacts
+                    line.match(/^Content-Type:/i) ||
+                    line.match(/^Content-Transfer-Encoding:/i)
+                ) {
+                    // Only break if we've found some customer content first
+                    if (foundCustomerContent) {
+                        break;
+                    }
+                    continue;
+                }
+
+                // Stop at signature markers but only after customer content
+                if (foundCustomerContent && (
+                    line.match(/^Sent from/i) ||
+                    line.match(/^Get Outlook/i) ||
+                    line.match(/^Sent from (my|the)/i) ||
+                    line.match(/^(Regards|Kind regards|Best regards|Thanks|Thank you|Cheers|Sincerely)[\s,]*$/i)
+                )) {
+                    break; // Signature found, stop here
+                }
+
+                // Add non-empty lines and mark that we found customer content
+                if (line.length > 0) {
+                    customerLines.push(lines[i]);
+                    foundCustomerContent = true;
+                }
+            }
+
+            let response = customerLines.join('\n');
+            
+            // If we didn't find customer content, try a different approach
+            if (!foundCustomerContent || response.trim().length < 10) {
+                console.log('📧 No customer content found, trying alternative extraction...');
+                
+                // Try to extract content before any obvious reply markers
+                const beforeReplyMatch = content.match(/^([\s\S]*?)(?:\n\s*>|\n\s*On\s+\w+|\n\s*From:)/i);
+                if (beforeReplyMatch && beforeReplyMatch[1].trim().length > 10) {
+                    response = beforeReplyMatch[1].trim();
+                    console.log(`📧 Extracted ${response.length} characters using alternative method`);
+                }
+            }
+
+            // Step 7: Enhanced MIME artifact cleanup
+            response = response.replace(/^Content-Type:.*$/gm, '');
+            response = response.replace(/^Content-Transfer-Encoding:.*$/gm, '');
+            response = response.replace(/^Content-Disposition:.*$/gm, '');
+            response = response.replace(/^--[A-Za-z0-9._-]+$/gm, '');
+            response = response.replace(/^--[A-Za-z0-9._-]+--$/gm, '');
+            response = response.replace(/^boundary=.*$/gm, '');
+            
+            // Clean up additional MIME artifacts
+            response = response.replace(/^charset=.*$/gm, '');
+            response = response.replace(/^MIME-Version:.*$/gm, '');
+            response = response.replace(/^X-.*$/gm, '');
+            response = response.replace(/^Message-ID:.*$/gm, '');
+            response = response.replace(/^Date:.*$/gm, '');
+            response = response.replace(/^From:.*$/gm, '');
+            response = response.replace(/^To:.*$/gm, '');
+            response = response.replace(/^Subject:.*$/gm, '');
+            
+            // Clean up encoding artifacts
+            response = response.replace(/^\s*=\r?\n/gm, ''); // Soft line breaks
+            response = response.replace(/^=\r?\n/gm, ''); // Hard line breaks
+
+            // Step 8: Final whitespace cleanup
+            response = response.replace(/\n{3,}/g, '\n\n');
+            response = response.replace(/[ \t]+/g, ' ');
+            response = response.replace(/^\s+|\s+$/gm, '');
+            response = response.trim();
+
+            // Final check
+            if (!response || response.length < 3) {
+                console.warn('📧 Extracted content too short or empty');
+                return 'No content available';
+            }
+
+            return response;
+
         } catch (error) {
             console.error('📧 Error extracting email body:', error);
-            // Fallback: try to extract text manually from raw content
-            try {
-                const lines = raw.split('\n');
-                let contentLines = [];
-                let inContent = false;
-                
-                for (const line of lines) {
-                    // Skip MIME headers and boundaries
-                    if (line.includes('Content-Type:') || 
-                        line.includes('Content-Transfer-Encoding:') ||
-                        line.includes('--Apple-Mail-') ||
-                        line.includes('Content-Disposition:') ||
-                        line.includes('Content-ID:')) {
-                        continue;
-                    }
-                    
-                    // Start collecting content after headers
-                    if (line.trim() === '' && !inContent) {
-                        inContent = true;
-                        continue;
-                    }
-                    
-                    if (inContent && line.trim()) {
-                        contentLines.push(line);
-                    }
-                }
-                
-                const fallbackContent = contentLines.join('\n').trim();
-                return fallbackContent || 'No content available';
-            } catch (fallbackError) {
-                console.error('📧 Fallback extraction also failed:', fallbackError);
-                return 'Error extracting email content';
-            }
+            return 'Error extracting email content';
         }
+    }
+
+    /**
+     * Convert HTML to plain text with better formatting
+     */
+    htmlToText(html) {
+        if (!html) return '';
+
+        let text = html;
+
+        // Remove style and script tags with their content
+        text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
+        // Convert common block elements to newlines
+        text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
+        text = text.replace(/<\/td>/gi, '\t');
+        text = text.replace(/<hr[^>]*>/gi, '\n---\n');
+
+        // Convert links to readable format
+        text = text.replace(/<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gi, '$2 ($1)');
+
+        // Remove all other HTML tags
+        text = text.replace(/<[^>]+>/g, '');
+
+        // Clean up whitespace
+        text = text.replace(/\n\s*\n\s*\n/g, '\n\n'); // Max 2 consecutive newlines
+        text = text.replace(/[ \t]+/g, ' '); // Multiple spaces to single
+        text = text.replace(/^\s+|\s+$/gm, ''); // Trim lines
+
+        return text.trim();
+    }
+
+    /**
+     * Decode HTML entities comprehensively
+     */
+    decodeHtmlEntities(str) {
+        if (!str) return '';
+
+        const entities = {
+            '&nbsp;': ' ',
+            '&amp;': '&',
+            '&lt;': '<',
+            '&gt;': '>',
+            '&quot;': '"',
+            '&#34;': '"',
+            '&#39;': "'",
+            '&apos;': "'",
+            '&#x27;': "'",
+            '&ldquo;': '"',
+            '&rdquo;': '"',
+            '&lsquo;': "'",
+            '&rsquo;': "'",
+            '&mdash;': '-',
+            '&ndash;': '-',
+            '&hellip;': '...',
+            // Fix common UTF-8 encoding issues
+            'â€™': "'",
+            'â€œ': '"',
+            'â€': '"',
+            'â€"': '-',
+            'â€"': '-',
+            'â€¦': '...',
+            'â': ''
+        };
+
+        let result = str;
+        for (const [entity, char] of Object.entries(entities)) {
+            result = result.replace(new RegExp(entity, 'g'), char);
+        }
+
+        // Decode numeric entities
+        result = result.replace(/&#(\d+);/g, (match, dec) => {
+            return String.fromCharCode(dec);
+        });
+        result = result.replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+            return String.fromCharCode(parseInt(hex, 16));
+        });
+
+        return result;
     }
 
     async processMessage(message, lead) {
@@ -517,28 +790,58 @@ class EmailPoller {
                               bodyParts.get('text') ||
                               bodyParts.get('1') ||
                               bodyParts.get('1.1') ||
+                              bodyParts.get('1.2') ||
+                              bodyParts.get('2') ||
                               bodyParts.get('BODY[TEXT]') ||
                               Array.from(bodyParts.values())[0]; // First available part as fallback
+
+                // Log which body part was used for debugging
+                if (bodyContent) {
+                    const usedKey = Array.from(bodyParts.entries()).find(([k, v]) => v === bodyContent)?.[0];
+                    console.log(`📧 Using body part key: ${usedKey} for UID ${uid}`);
+                }
             }
 
             if (!bodyContent || !Buffer.isBuffer(bodyContent)) {
                 console.warn(`⚠️ No valid text content found for email UID ${uid}, trying subject only`);
                 bodyContent = Buffer.from(subject || 'No content available');
+            } else {
+                console.log(`📧 Body content size for UID ${uid}: ${bodyContent.length} bytes`);
             }
 
-            // CRITICAL FIX: Check for duplicate using IMAP_UID
-            const { data: existingMessages, error: checkError } = await this.supabase
-                .from('messages')
-                .select('id')
-                .eq('imap_uid', uid.toString()) // Match on UID
-                .eq('lead_id', lead.id)
-                .limit(1);
-
-            if (checkError) throw new Error(`DB_ERROR_DUPE_CHECK: ${checkError.message}`);
             
-            if (existingMessages && existingMessages.length > 0) {
-                throw new Error('DUPLICATE_IMAP_UID');
+            // BULLETPROOF DEDUPLICATION - Will be applied after body extraction
+            
+            // ENHANCED DEDUPLICATION: Multiple checks to prevent duplicates
+            console.log(`📧 Checking for duplicates for UID ${uid}, Lead ${lead.id}...`);
+            
+            // BULLETPROOF DEDUPLICATION - Will be applied after body extraction
+        
+            // Check 2: Content + timestamp within 5 minutes (backup check)
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const { data: existingByContent, error: contentCheckError } = await this.supabase
+                .from('messages')
+                .select('id, content, created_at')
+                .eq('lead_id', lead.id)
+                .eq('recipient_email', fromAddr)
+                .gte('created_at', fiveMinutesAgo)
+                .limit(5);
+
+            if (contentCheckError) {
+                console.warn(`📧 ⚠️ Content check error: ${contentCheckError.message}`);
+            } else if (existingByContent && existingByContent.length > 0) {
+                // Check if any existing message has similar content
+                const bodyPreview = body.substring(0, 100);
+                for (const existing of existingByContent) {
+                    const existingPreview = existing.content?.substring(0, 100) || '';
+                    if (existingPreview === bodyPreview && existingPreview.length > 10) {
+                        console.log(`📧 ⚠️ Duplicate found by content similarity: ${existing.id}`);
+                        throw new Error('DUPLICATE_CONTENT');
+                    }
+                }
             }
+
+            console.log(`📧 ✅ No duplicates found for UID ${uid}`);
             
             // Determine actual received date
             const emailReceivedDate = (internalDate && internalDate instanceof Date && !isNaN(internalDate.getTime()))
@@ -550,7 +853,72 @@ class EmailPoller {
             const processingDate = new Date().toISOString();
 
             // Extract email body from bodyContent (now using text-only parts instead of full source)
-            let body = await this.extractEmailBody(bodyContent.toString('utf8'));
+            const rawBodyString = bodyContent.toString('utf8');
+            console.log(`📧 Raw body preview for UID ${uid}:`, rawBodyString.substring(0, 200) + '...');
+
+            let body = await this.extractEmailBody(rawBodyString);
+            
+            // BULLETPROOF DEDUPLICATION - PREVENTS ALL DUPLICATES
+            console.log(`🛡️ BULLETPROOF duplicate check for UID ${uid}, Lead ${lead.id}...`);
+            
+            // Check 1: IMAP UID (most reliable)
+            const { data: existingByUid, error: uidCheckError } = await this.supabase
+                .from('messages')
+                .select('id, content, created_at')
+                .eq('imap_uid', uid.toString())
+                .eq('lead_id', lead.id)
+                .limit(1);
+
+            if (uidCheckError) throw new Error(`DB_ERROR_UID_CHECK: ${uidCheckError.message}`);
+            
+            if (existingByUid && existingByUid.length > 0) {
+                console.log(`🛡️ BULLETPROOF: Duplicate found by UID: ${existingByUid[0].id}`);
+                throw new Error('DUPLICATE_IMAP_UID');
+            }
+
+            // Check 2: Content similarity against ALL messages from this lead (BULLETPROOF)
+            const { data: allLeadMessages, error: allLeadError } = await this.supabase
+                .from('messages')
+                .select('id, content, created_at')
+                .eq('lead_id', lead.id)
+                .eq('recipient_email', fromAddr)
+                .eq('type', 'email')
+                .limit(50);
+
+            if (allLeadError) {
+                console.warn(`🛡️ BULLETPROOF: All lead messages check error: ${allLeadError.message}`);
+            } else if (allLeadMessages && allLeadMessages.length > 0) {
+                const bodyPreview = body.substring(0, 200);
+                for (const existing of allLeadMessages) {
+                    const existingPreview = existing.content?.substring(0, 200) || '';
+                    if (existingPreview === bodyPreview && existingPreview.length > 20) {
+                        console.log(`🛡️ BULLETPROOF: Duplicate found by content similarity: ${existing.id}`);
+                        throw new Error('DUPLICATE_CONTENT');
+                    }
+                }
+            }
+
+            // Check 3: Content hash comparison (ULTIMATE PROTECTION)
+            const crypto = require('crypto');
+            const contentHash = crypto.createHash('md5').update(body).digest('hex');
+            const { data: existingByHash, error: hashCheckError } = await this.supabase
+                .from('messages')
+                .select('id, content')
+                .eq('lead_id', lead.id)
+                .eq('recipient_email', fromAddr)
+                .eq('type', 'email')
+                .limit(20);
+
+            if (!hashCheckError && existingByHash && existingByHash.length > 0) {
+                for (const existing of existingByHash) {
+                    const existingHash = crypto.createHash('md5').update(existing.content || '').digest('hex');
+                    if (existingHash === contentHash) {
+                        console.log(`🛡️ BULLETPROOF: Duplicate found by content hash: ${existing.id}`);
+                        throw new Error('DUPLICATE_CONTENT_HASH');
+                    }
+                }
+            }
+            console.log(`📧 Extracted body for UID ${uid} (${body.length} chars):`, body.substring(0, 150) + '...');
 
             if (!isProcessing) return; // Check after slow operations
 

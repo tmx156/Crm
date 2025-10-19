@@ -13,6 +13,7 @@ import {
 } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
+import { decodeEmailContent, isEmailContentEncoded } from '../utils/emailContentDecoder';
 
 const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
   const [replyText, setReplyText] = useState('');
@@ -40,9 +41,31 @@ const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
           ? ['EMAIL_SENT', 'EMAIL_RECEIVED']
           : ['SMS_SENT', 'SMS_RECEIVED', 'SMS_FAILED'];
 
-        const convo = history
+        let convo = history
           .filter(entry => wantedActions.includes(entry.action))
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        // CLIENT-SIDE DEDUPLICATION - Remove exact duplicates
+        const seenKeys = new Set();
+        convo = convo.filter(entry => {
+          const timestamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : '';
+          const action = entry.action || '';
+          const body = entry.details?.body || entry.details?.message || '';
+          const subject = entry.details?.subject || '';
+          const performedBy = entry.performed_by || '';
+          
+          // Create a unique key including body content to catch duplicates
+          const timeKey = timestamp ? new Date(timestamp).setSeconds(0, 0) : 0;
+          const bodyContent = body.substring(0, 200).trim().toLowerCase();
+          const key = `${action}_${timeKey}_${performedBy}_${subject.substring(0, 50)}_${bodyContent}`;
+          
+          if (seenKeys.has(key)) {
+            console.log('🔄 Client-side deduplication: Removing duplicate entry');
+            return false;
+          }
+          seenKeys.add(key);
+          return true;
+        });
 
         setConversationHistory(convo);
       }
@@ -383,13 +406,18 @@ const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500">
                   {notification.direction === 'received' ? 'Received Message' : 'Sent Message'}
+                  {isEmailContentEncoded(notification.content) && (
+                    <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
+                      Auto-decoded
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-gray-400">
                   {formatTime(notification.timestamp)}
                 </span>
               </div>
               <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
-                {notification.content}
+                {decodeEmailContent(notification.content)}
               </p>
             </div>
           )}
@@ -446,7 +474,7 @@ const MessageModal = ({ notification, isOpen, onClose, onReply }) => {
                         : 'bg-gray-100 border text-gray-900'
                   }`}>
                     <p className="text-sm whitespace-pre-wrap break-words">
-                      {message.details?.body || message.details?.message || message.details?.subject || 'No content'}
+                      {decodeEmailContent(message.details?.body || message.details?.message || message.details?.subject || 'No content')}
                     </p>
                     <div className="flex items-center justify-between mt-1">
                       <p className={`text-xs ${

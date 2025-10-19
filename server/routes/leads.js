@@ -735,6 +735,7 @@ router.get('/calendar', auth, async (req, res) => {
             // Merge and deduplicate with improved logic
             const allHistory = [...bookingHistory, ...messageHistory];
             const seenKeys = new Set();
+            let duplicateCount = 0;
             const uniqueHistory = allHistory.filter(entry => {
               // Create a more robust deduplication key
               const timestamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : '';
@@ -743,18 +744,23 @@ router.get('/calendar', auth, async (req, res) => {
               const subject = entry.details?.subject || '';
               const performedBy = entry.performed_by || '';
               
-              // Use a combination of action, timestamp (rounded to nearest minute), and performer
+              // Use a combination of action, timestamp (rounded to nearest minute), performer, and body content
               // This handles cases where the same email appears in both booking_history and messages
               const timeKey = timestamp ? new Date(timestamp).setSeconds(0, 0) : 0;
-              const key = `${action}_${timeKey}_${performedBy}_${subject.substring(0, 50)}`;
+              const bodyContent = body.substring(0, 200).trim().toLowerCase();
+              const key = `${action}_${timeKey}_${performedBy}_${subject.substring(0, 50)}_${bodyContent}`;
               
               if (seenKeys.has(key)) {
-                console.log(`🔄 Deduplicating entry: ${action} at ${timestamp} by ${performedBy}`);
+                duplicateCount++;
                 return false;
               }
               seenKeys.add(key);
               return true;
             });
+            
+            if (duplicateCount > 0) {
+              console.log(`🧹 Removed ${duplicateCount} duplicate entries from lead history`);
+            }
             
             // Sort by timestamp (most recent first)
             uniqueHistory.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
@@ -1162,9 +1168,10 @@ router.post('/', auth, async (req, res) => {
               _id,
               req.user.id,
               updateData.date_booked,
-              { 
-                sendEmail: bodyWithoutId.sendEmail || false, 
-                sendSms: bodyWithoutId.sendSms || false 
+              {
+                sendEmail: bodyWithoutId.sendEmail || false,
+                sendSms: bodyWithoutId.sendSms || false,
+                templateId: bodyWithoutId.templateId || null
               }
             );
             console.log(`📧 Booking confirmation triggered for lead ${_id}`);
