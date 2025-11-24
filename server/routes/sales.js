@@ -3,9 +3,8 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
-const nodemailer = require('nodemailer');
 const { sendCustomMessage } = require('../utils/smsService');
-const { sendEmail, createTransporter } = require('../utils/emailService');
+const { sendEmail, createTransporter, EMAIL_ACCOUNTS } = require('../utils/emailService');
 const dbManager = require('../database-connection-manager');
 
 // Import Supabase client for direct operations
@@ -169,23 +168,7 @@ const upload = multer({
   }
 });
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 60000, // 60 seconds - increased for Gmail
-  greetingTimeout: 30000,   // 30 seconds - increased for Gmail
-  socketTimeout: 60000,    // 60 seconds - increased for Gmail
-  pool: true, // Use connection pooling
-  maxConnections: 5, // Maximum number of connections
-  maxMessages: 100, // Maximum messages per connection
-  rateDelta: 20000, // Rate limiting
-  rateLimit: 5 // Maximum messages per rateDelta
-});
-
+// Email configuration - using centralized emailService
 // SMS sending is handled via BulkSMS in utils/smsService
 
 // Get all sales with filtering and pagination
@@ -734,21 +717,16 @@ router.post('/:saleId/send-receipt/email', auth, async (req, res) => {
       `;
     }
 
-    // Determine which email account to use based on template setting
-    const accountToUse = emailAccount === 'secondary' ? 'secondary' : 'primary';
-    console.log(`📧 Email account selection:`, {
-      templateEmailAccount: emailAccount,
-      accountToUse,
-      willUseCamry: accountToUse === 'secondary',
-      willUseAvensis: accountToUse === 'primary'
-    });
+    // Only primary account is available
+    const accountToUse = 'primary';
+    console.log(`📧 Email account selection: Using primary account (The Editorial Co)`);
 
-    // Use the emailService which handles multiple accounts correctly
+    // Use the emailService which handles primary account
     const transporter = createTransporter(accountToUse);
 
     if (!transporter) {
-      console.error(`❌ Failed to create transporter for ${accountToUse} account`);
-      return res.status(500).json({ error: `Email account ${accountToUse} not configured` });
+      console.error(`❌ Failed to create transporter for primary account`);
+      return res.status(500).json({ error: `Email account not configured` });
     }
 
     const mailOptions = {
@@ -759,7 +737,7 @@ router.post('/:saleId/send-receipt/email', auth, async (req, res) => {
 
     console.log(`📤 Sending receipt email:`, {
       to: email,
-      from: accountToUse === 'secondary' ? 'CAMRY (secondary)' : 'AVENSIS (primary)',
+      from: 'The Editorial Co',
       subject: emailSubject?.substring(0, 50) + '...'
     });
 

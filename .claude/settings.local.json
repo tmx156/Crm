@@ -16,14 +16,11 @@
       "Bash(timeout:*)",
       "Bash(tasklist)",
       "Bash(dir /b *.js)",
-      "Bash(echo:*)",
-      "Bash(railway login --help:*)",
-      "Bash(set \"RAILWAY_TOKEN=f6e95579-3313-45af-b0e6-c0249690ad9a\")",
-      "Bash(railway logs --help:*)",
-      "Bash(set RAILWAY_TOKEN=f6e95579-3313-45af-b0e6-c0249690ad9a)",
-      "Bash(railway whoami:*)",
-      "Bash(powershell -Command \"$env:RAILWAY_TOKEN=''f6e95579-3313-45af-b0e6-c0249690ad9a''; railway whoami\")",
-      "Bash(cmd /c \"set RAILWAY_TOKEN=f6e95579-3313-45af-b0e6-c0249690ad9a && railway whoami\")"
+      "Bash(dir /b:*)",
+      "Bash(npm run build:*)",
+      "Bash(set CI=false)",
+      "Bash(set GENERATE_SOURCEMAP=false)",
+      "Bash(react-scripts build)"
     ],
     "deny": [],
     "ask": []

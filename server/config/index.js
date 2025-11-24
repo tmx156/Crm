@@ -22,21 +22,29 @@ const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppcXN2d295YWZlc3B2YXljaGxnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzQyMjUyNiwiZXhwIjoyMDc4OTk4NTI2fQ.VT-JI3OAZ_ecZO28mW7YUmVXKltk3ENXwSe_yvnK2kQ'
   },
 
-  // SMS Configuration (BulkSMS) - Check credentials
+  // SMS Configuration (BulkSMS) - DISABLED
   sms: {
-    username: process.env.BULKSMS_USERNAME || 'tmx2566',
-    password: process.env.BULKSMS_PASSWORD || 'Booker100',
-    fromNumber: process.env.BULKSMS_FROM_NUMBER || '+447786201100',
-    pollEnabled: true, // Always enabled for SMS reply polling
-    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000 // 60s (1 min) - optimized for egress (was 30s)
+    username: process.env.BULKSMS_USERNAME || null,
+    password: process.env.BULKSMS_PASSWORD || null,
+    fromNumber: process.env.BULKSMS_FROM_NUMBER || null,
+    pollEnabled: false, // SMS functionality disabled
+    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000
   },
 
-  // Email Configuration
+  // Email Configuration - Use EMAIL_USER/EMAIL_PASSWORD as primary
   email: {
-    user: process.env.EMAIL_USER || null,
-    password: process.env.EMAIL_PASSWORD || null,
-    gmailUser: process.env.GMAIL_USER || null,
-    gmailPass: process.env.GMAIL_PASS || null
+    user: process.env.EMAIL_USER || process.env.GMAIL_USER || null,
+    password: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS || null,
+    // Aliases for backward compatibility - all point to same credentials
+    gmailUser: process.env.EMAIL_USER || process.env.GMAIL_USER || null,
+    gmailPass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS || null
+  },
+
+  // Google OAuth Configuration (Gmail API)
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '624909188074-r4s5bdbf628krnethdr3ngclnuao6l5h.apps.googleusercontent.com',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
   },
 
   // Client Configuration

@@ -1394,7 +1394,7 @@ router.post('/', auth, async (req, res) => {
                   sms: result?.smsSent
                 },
                 emailAccount: result?.emailAccount,
-                emailAccountName: result?.emailAccount === 'secondary' ? 'Camry Models' : 'Avensis Models',
+                emailAccountName: 'The Editorial Co',
                 smsProvider: result?.smsProvider || 'BulkSMS',
                 message: `Booking confirmation sent successfully via ${result?.emailSent ? 'Email' : ''}${result?.emailSent && result?.smsSent ? ' and ' : ''}${result?.smsSent ? 'SMS' : ''}`,
                 timestamp: new Date()
@@ -1563,7 +1563,7 @@ router.post('/', auth, async (req, res) => {
                     sms: result?.smsSent
                   },
                   emailAccount: result?.emailAccount,
-                  emailAccountName: result?.emailAccount === 'secondary' ? 'Camry Models' : 'Avensis Models',
+                  emailAccountName: 'The Editorial Co',
                   smsProvider: result?.smsProvider || 'BulkSMS',
                   message: `Booking confirmation sent successfully via ${result?.emailSent ? 'Email' : ''}${result?.emailSent && result?.smsSent ? ' and ' : ''}${result?.smsSent ? 'SMS' : ''}`,
                   timestamp: new Date()
@@ -2202,7 +2202,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
                   sms: result?.smsSent
                 },
                 emailAccount: result?.emailAccount,
-                emailAccountName: result?.emailAccount === 'secondary' ? 'Camry Models' : 'Avensis Models',
+                emailAccountName: 'The Editorial Co',
                 smsProvider: result?.smsProvider || 'BulkSMS',
                 message: `Booking confirmation sent successfully via ${result?.emailSent ? 'Email' : ''}${result?.emailSent && result?.smsSent ? ' and ' : ''}${result?.smsSent ? 'SMS' : ''}`,
                 timestamp: new Date()
@@ -2295,7 +2295,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
                   sms: result?.smsSent
                 },
                 emailAccount: result?.emailAccount,
-                emailAccountName: result?.emailAccount === 'secondary' ? 'Camry Models' : 'Avensis Models',
+                emailAccountName: 'The Editorial Co',
                 smsProvider: result?.smsProvider || 'BulkSMS',
                 message: `Reschedule confirmation sent successfully via ${result?.emailSent ? 'Email' : ''}${result?.emailSent && result?.smsSent ? ' and ' : ''}${result?.smsSent ? 'SMS' : ''}`,
                 timestamp: new Date()

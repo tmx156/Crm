@@ -25,6 +25,11 @@ process.env.EMAIL_PASSWORD = config.email.password;
 process.env.GMAIL_USER = config.email.gmailUser;
 process.env.GMAIL_PASS = config.email.gmailPass;
 
+// Set Google OAuth environment variables from centralized config
+process.env.GOOGLE_CLIENT_ID = config.google.clientId;
+process.env.GOOGLE_CLIENT_SECRET = config.google.clientSecret;
+process.env.GOOGLE_REDIRECT_URI = config.google.redirectUri;
+
 // Set environment variables programmatically (backward compatibility)
 process.env.SUPABASE_URL = config.supabase.url;
 process.env.SUPABASE_ANON_KEY = config.supabase.anonKey;
@@ -52,6 +57,8 @@ const bookerAnalyticsRoutes = require('./routes/booker-analytics');
 const emailTestRoutes = require('./routes/email-test');
 const usersPublicRoutes = require('./routes/usersPublic');
 const salesapeRoutes = require('./routes/salesape');
+// Gmail API routes disabled - using IMAP instead
+// const gmailRoutes = require('./routes/gmail');
 // TEMPORARILY DISABLED: const scheduler = require('./utils/scheduler');
 const { startEmailPoller } = require('./utils/emailPoller');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
@@ -431,9 +438,8 @@ app.use('/api/legacy', legacyRoutes);
 app.use('/api/booker-analytics', bookerAnalyticsRoutes);
 app.use('/api/email-test', emailTestRoutes);
 app.use('/api/salesape', salesapeRoutes);
-// SalesApe Webhook Integration (for receiving updates from SalesApe)
-const { router: salesapeWebhookRouter } = require('./routes/salesape-webhook');
-app.use('/api/salesape-webhook', salesapeWebhookRouter);
+// Gmail API routes disabled - using IMAP instead
+// app.use('/api/gmail', gmailRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
 // --- Lightweight short link storage for long booking confirmations ---
@@ -635,29 +641,43 @@ testDatabaseConnection().then(() => {
     // DISABLED: Start the message scheduler
     // scheduler.start();
 
-    // SMS auto-sync note
-    console.log('📡 Using BulkSMS for inbound polling');
+    // SMS auto-sync note - DISABLED
+    // console.log('📡 Using BulkSMS for inbound polling');
 
-    // Start BulkSMS reply poller for offline/online inbound without webhooks
+    // DISABLED: Start BulkSMS reply poller
+    // try {
+    //   const { startBulkSmsPolling } = require('./utils/bulkSmsPoller');
+    //   if (typeof startBulkSmsPolling === 'function') {
+    //     startBulkSmsPolling();
+    //   }
+    // } catch (e) {
+    //   console.error('❌ Failed to start BulkSMS reply poller:', e?.message || e);
+    // }
+
+    // IMAP Email Poller - DISABLED (not needed, only sending emails)
+    // To re-enable: uncomment below and ensure IMAP is enabled in Gmail settings
+    console.log('📧 IMAP Email Poller: DISABLED (only sending emails, no polling needed)');
+    /*
     try {
-      const { startBulkSmsPolling } = require('./utils/bulkSmsPoller');
-      if (typeof startBulkSmsPolling === 'function') {
-        startBulkSmsPolling();
+      console.log('📧 Starting Email Poller (IMAP)...');
+      const primaryEmail = config.email.user || config.email.gmailUser || process.env.EMAIL_USER || process.env.GMAIL_USER;
+
+      if (primaryEmail) {
+        console.log(`   📧 Primary account: ${primaryEmail}`);
+        startEmailPoller(io, ['primary']);
+        console.log(`✅ IMAP email poller started for primary account`);
+      } else {
+        console.warn('   ⚠️  No email account configured - email poller will not start');
       }
-    } catch (e) {
-      console.error('❌ Failed to start BulkSMS reply poller:', e?.message || e);
-    }
-
-    // CRITICAL FIX: Start Email Poller for Gmail IMAP monitoring
-    try {
-      console.log('📧 Starting Email Poller...');
-      startEmailPoller(io);
-      console.log('✅ Email poller started successfully');
     } catch (e) {
       console.error('❌ Failed to start email poller:', e?.message || e);
     }
+    */
 
-    // ENABLED: Finance Reminder Service (now converted to Supabase)
+    // Finance Reminder Service - DISABLED (missing database columns)
+    // To re-enable: add email_reminders and sms_reminders columns to finance table
+    console.log('📧 Finance Reminder Service: DISABLED (database schema incomplete)');
+    /*
     try {
       const financeReminderService = new FinanceReminderService();
       financeReminderService.startReminderScheduler();
@@ -665,6 +685,7 @@ testDatabaseConnection().then(() => {
     } catch (e) {
       console.error('❌ Failed to start finance reminder service:', e?.message || e);
     }
+    */
   });
 }).catch(() => {
   // Start server even if Supabase connection fails

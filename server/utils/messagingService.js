@@ -135,7 +135,7 @@ class MessagingService {
         second: '2-digit',
         timeZone: 'UTC' // Keep UTC time to match calendar
       }) : '',
-      '{companyName}': 'Avensis Models',
+      '{companyName}': 'The Editorial Co',
       '{currentDate}': new Date().toLocaleDateString(),
       '{currentTime}': new Date().toLocaleTimeString()
     };
@@ -463,7 +463,12 @@ class MessagingService {
       // Track which services were used for notification
       let emailResult = null;
       let smsResult = null;
-      const emailAccount = options.emailAccount || template.email_account || 'primary';
+      // Only primary account is supported - force to primary if template has secondary
+      let emailAccount = options.emailAccount || template.email_account || 'primary';
+      if (emailAccount !== 'primary') {
+        console.warn(`⚠️ Template ${template.id} has email_account='${emailAccount}' but only 'primary' is supported. Using primary account.`);
+        emailAccount = 'primary';
+      }
 
       if (effectiveSendEmail) {
         emailResult = await this.sendEmail(message, emailAccount);
@@ -800,8 +805,23 @@ class MessagingService {
     }  
   }
 
-  // Send SMS
+  // Send SMS - DISABLED
   static async sendSMS(message) {
+    // SMS functionality disabled
+    console.log('🚫 SMS sending is disabled');
+    
+    const messageId = message.id || 'unknown';
+    const { error: updateError } = await supabase
+      .from('messages')
+      .update({ status: 'failed', error_message: 'SMS functionality has been disabled' })
+      .eq('id', messageId);
+    
+    return {
+      success: false,
+      error: 'SMS functionality has been disabled'
+    };
+    
+    /* DISABLED CODE
     const messageId = message.id || 'unknown';
     console.log('\n' + '='.repeat(80));
     console.log(`📨 [SMS SEND ATTEMPT]`);
@@ -958,6 +978,7 @@ class MessagingService {
 
       return false;
     }
+    END DISABLED CODE */
   }
 
   // Stub for logging received SMS (to be called by future reply API)

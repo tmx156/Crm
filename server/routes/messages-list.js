@@ -69,12 +69,12 @@ router.get('/', auth, async (req, res) => {
     // Query controls to cap egress
     const rawSince = req.query.since;
     const rawLimit = parseInt(req.query.limit, 10);
-    const MAX_LIMIT = 100; // Reduced from 200 to optimize egress usage
+    const MAX_LIMIT = 1000; // Increased to show all emails (from 100)
     const validatedLimit = Math.min(Number.isFinite(rawLimit) ? rawLimit : MAX_LIMIT, MAX_LIMIT);
     const sinceIso = (() => {
       try { return rawSince ? new Date(rawSince).toISOString() : null; } catch { return null; }
     })();
-    const defaultSinceIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(); // last 3 days by default (reduced from 7 for egress)
+    const defaultSinceIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(); // last 90 days (increased from 3 days)
     const createdAfter = sinceIso || defaultSinceIso;
 
     const messagesData = [];

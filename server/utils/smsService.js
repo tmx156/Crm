@@ -252,6 +252,15 @@ const trackMessageDelivery = async (messageData) => {
 module.exports.trackMessageDelivery = trackMessageDelivery;
 
 const sendSMS = async (to, message) => {
+  // SMS functionality disabled
+  console.log('🚫 SMS sending is disabled');
+  return {
+    success: false,
+    provider: 'bulksms',
+    error: 'SMS functionality has been disabled'
+  };
+  
+  /* DISABLED CODE
   try {
     const normalized = normalizePhoneE164(to);
     console.log(`🔍 DEBUG: Full SMS Sending Process`);
@@ -339,6 +348,7 @@ const sendSMS = async (to, message) => {
       fullError: error
     };
   }
+  END DISABLED CODE */
 };
 
 /**

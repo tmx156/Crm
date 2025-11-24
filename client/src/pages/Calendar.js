@@ -2384,7 +2384,7 @@ const Calendar = () => {
                           >
                             {bookingTemplates.map((template) => (
                               <option key={template._id} value={template._id}>
-                                {template.name} {(template.email_account || template.emailAccount) === 'secondary' ? '(Camry)' : '(Avensis)'}
+                                {template.name}
                               </option>
                             ))}
                           </select>
@@ -2835,7 +2835,7 @@ const Calendar = () => {
                               >
                                 {bookingTemplates.map((template) => (
                                   <option key={template._id} value={template._id}>
-                                    {template.name} {(template.email_account || template.emailAccount) === 'secondary' ? '(Camry)' : '(Avensis)'}
+                                    {template.name}
                                   </option>
                                 ))}
                               </select>

@@ -32,7 +32,7 @@ const Messages = () => {
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('sms');
+  const [selectedFilter, setSelectedFilter] = useState('email'); // Changed to show emails first
   const [selectedDirection, setSelectedDirection] = useState('all');
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -699,13 +699,27 @@ const Messages = () => {
       );
     }
 
-    // Type filter (sms or email)
-    filtered = filtered.filter(msg => msg.type === selectedFilter);
+    // Type filter (sms or email) - if not 'all', filter by type
+    if (selectedFilter !== 'all') {
+      filtered = filtered.filter(msg => msg.type === selectedFilter);
+    }
 
     // Direction filter
     if (selectedDirection !== 'all') {
       filtered = filtered.filter(msg => msg.direction === selectedDirection);
     }
+
+    // Sort: Emails first, then SMS, then by timestamp
+    filtered = filtered.sort((a, b) => {
+      // Priority: email > sms
+      if (a.type === 'email' && b.type !== 'email') return -1;
+      if (a.type !== 'email' && b.type === 'email') return 1;
+
+      // If same type, sort by timestamp (newest first)
+      const timeA = new Date(a.timestamp || a.created_at).getTime();
+      const timeB = new Date(b.timestamp || b.created_at).getTime();
+      return timeB - timeA;
+    });
 
     setFilteredMessages(filtered);
   }, [messages, searchTerm, selectedFilter, selectedDirection]);

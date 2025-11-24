@@ -658,8 +658,7 @@ const Templates = () => {
                                 onChange={(e) => setFormData({...formData, emailAccount: e.target.value})}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                               >
-                                <option value="primary">📧 Primary (avensismodels.co.uk.crm.bookings@gmail.com)</option>
-                                <option value="secondary">📧 Secondary (camrymodels.co.uk.crm.bookings@gmail.com)</option>
+                                <option value="primary">📧 Primary (theeditorialco.crm.bookings@gmail.com)</option>
                               </select>
                               <p className="text-xs text-gray-500 mt-1">
                                 Select which email account to send from

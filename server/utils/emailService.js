@@ -8,7 +8,7 @@ const EMAIL_SENDING_DISABLED = false; // Email sending is now ENABLED
 
 console.log('📧 Email Service: Initializing...');
 console.log('📧 EMAIL_USER (Primary):', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
-console.log('📧 EMAIL_USER_2 (Secondary):', process.env.EMAIL_USER_2 ? '✅ Set' : '❌ NOT SET');
+// Secondary email removed - only primary account is used
 
 if (EMAIL_SENDING_DISABLED) {
   console.log('🚫 EMAIL SENDING DISABLED (Temporary kill switch active)');
@@ -19,28 +19,28 @@ if (EMAIL_SENDING_DISABLED) {
 
 const nodemailer = require('nodemailer');
 
-// Email account configurations
+// Email account configurations - Only primary account
 const EMAIL_ACCOUNTS = {
   primary: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
     pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS,
     name: 'Primary Account',
-    senderName: 'Avensis Models' // Display name for primary account
-  },
-  secondary: {
-    user: process.env.EMAIL_USER_2 || process.env.GMAIL_USER_2,
-    pass: process.env.EMAIL_PASSWORD_2 || process.env.GMAIL_PASS_2,
-    name: 'Secondary Account',
-    senderName: 'Camry Models' // Display name for secondary account (CamryModels template)
+    senderName: 'The Editorial Co' // Display name for primary account
   }
 };
 
 /**
  * Create a transporter for a specific email account
- * @param {string} accountKey - 'primary' or 'secondary'
+ * @param {string} accountKey - 'primary' (only account available)
  * @returns {Object} Nodemailer transporter
  */
 function createTransporter(accountKey = 'primary') {
+  // Only primary account is supported
+  if (accountKey !== 'primary') {
+    console.warn(`⚠️ Email account '${accountKey}' not available. Using primary account.`);
+    accountKey = 'primary';
+  }
+  
   const account = EMAIL_ACCOUNTS[accountKey];
 
   if (!account || !account.user || !account.pass) {
@@ -86,14 +86,20 @@ console.log('✅ Email service initialized (verification skipped for Railway com
  * @param {string} subject - Email subject
  * @param {string} text - Email plain text body
  * @param {Array} attachments - Email attachments (optional)
- * @param {string} accountKey - Email account to use: 'primary' or 'secondary' (default: 'primary')
+ * @param {string} accountKey - Email account to use: 'primary' (default: 'primary')
  * @returns {Promise<{success: boolean, response?: string, error?: string}>}
  */
 async function sendEmail(to, subject, text, attachments = [], accountKey = 'primary') {
+  // Only primary account is supported
+  if (accountKey !== 'primary') {
+    console.warn(`⚠️ Email account '${accountKey}' not available. Using primary account.`);
+    accountKey = 'primary';
+  }
+  
   const emailId = Math.random().toString(36).substring(2, 8);
   const account = EMAIL_ACCOUNTS[accountKey];
 
-  console.log(`📧 [${emailId}] Sending email via ${account?.name || accountKey}: ${subject} → ${to}`);
+  console.log(`📧 [${emailId}] Sending email via SMTP: ${subject} → ${to}`);
 
   // 🚫 KILL SWITCH: Return success without sending if disabled
   if (EMAIL_SENDING_DISABLED) {
@@ -162,7 +168,7 @@ async function sendEmail(to, subject, text, attachments = [], accountKey = 'prim
     
     const mailOptions = {
       from: {
-        name: account.senderName || 'Avensis Models', // Use account-specific sender name
+        name: account.senderName || 'The Editorial Co', // Use account-specific sender name
         address: account.user
       },
       to,

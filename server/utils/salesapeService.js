@@ -14,9 +14,6 @@ class SalesAPEService {
     this.airtableTableName = process.env.SALESAPE_AIRTABLE_TABLE_NAME || 'Leads';
     this.webhookUrl = process.env.SALESAPE_WEBHOOK_URL;
     this.enabled = process.env.SALESAPE_ENABLED === 'true';
-    // SalesApe's required endpoint from their requirements
-    this.salesApeUpdateUrl = `https://api.airtable.com/v0/${this.airtableBaseId}/${this.airtableTableName}`;
-    this.salesApePAT = process.env.SALESAPE_PAT; // Personal Access Token
   }
 
   /**
@@ -214,91 +211,6 @@ class SalesAPEService {
       }
     } catch (error) {
       console.error('Error updating lead in SalesAPE:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Notify SalesApe of booking via their Airtable endpoint
-   */
-  async notifyBooking(lead, eventType = 'Meeting Booked') {
-    if (!this.enabled || !this.salesApePAT || !lead.airtable_record_id) {
-      console.log('⚠️ SalesApe booking notification skipped - missing config or record ID');
-      return { success: false, error: 'Configuration missing' };
-    }
-
-    try {
-      const payload = {
-        fields: {
-          "CRM ID": lead.airtable_record_id,
-          "Event Type": eventType
-        }
-      };
-
-      console.log(`📅 Notifying SalesApe of booking: ${lead.name} (${lead.airtable_record_id})`);
-
-      const response = await axios.post(this.salesApeUpdateUrl, payload, {
-        headers: {
-          'Authorization': `Bearer ${this.salesApePAT}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-
-      console.log(`✅ SalesApe booking notification sent successfully`);
-
-      return {
-        success: true,
-        response: response.data
-      };
-    } catch (error) {
-      console.error('❌ Error notifying SalesApe of booking:', {
-        leadName: lead.name,
-        airtableRecordId: lead.airtable_record_id,
-        error: error.message,
-        response: error.response?.data
-      });
-
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Update SalesApe record with booking status
-   */
-  async updateBookingStatus(crmId, eventType = 'Meeting Booked') {
-    if (!this.enabled || !this.salesApePAT) {
-      return { success: false, error: 'SalesApe integration not configured' };
-    }
-
-    try {
-      const payload = {
-        fields: {
-          "CRM ID": crmId,
-          "Event Type": eventType
-        }
-      };
-
-      const response = await axios.post(this.salesApeUpdateUrl, payload, {
-        headers: {
-          'Authorization': `Bearer ${this.salesApePAT}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-
-      return {
-        success: true,
-        response: response.data
-      };
-    } catch (error) {
-      console.error('Error updating SalesApe booking status:', error);
       return {
         success: false,
         error: error.message
