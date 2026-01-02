@@ -3,11 +3,11 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { 
-  FiCalendar, FiClock, FiMapPin, FiUser, FiX, FiPhone, FiMail, 
-  FiFileText, FiWifi, FiActivity, FiCheckCircle, 
+import {
+  FiCalendar, FiClock, FiMapPin, FiUser, FiX, FiPhone, FiMail,
+  FiFileText, FiWifi, FiActivity, FiCheckCircle,
   FiExternalLink, FiCheck, FiSettings, FiEdit, FiMessageSquare,
-  FiChevronDown, FiChevronUp, FiChevronLeft, FiChevronRight, FiSearch
+  FiChevronDown, FiChevronUp, FiChevronLeft, FiChevronRight, FiSearch, FiDownload
 } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
@@ -17,6 +17,10 @@ import SaleModal from '../components/SaleModal';
 import ImageLightbox from '../components/ImageLightbox';
 import LazyImage from '../components/LazyImage';
 import { getOptimizedImageUrl } from '../utils/imageUtils';
+import { getCurrentUKTime, getTodayUK, toUKTime } from '../utils/timeUtils';
+import SlotCalendar from '../components/SlotCalendar';
+import WeeklySlotCalendar from '../components/WeeklySlotCalendar';
+import MonthlySlotCalendar from '../components/MonthlySlotCalendar';
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -28,12 +32,14 @@ const Calendar = () => {
   // Toggle to expand additional quick status actions
   const [showMoreStatuses, setShowMoreStatuses] = useState(false);
   
-  // PERFORMANCE: Cache for loaded date ranges
-  const [loadedRanges, setLoadedRanges] = useState([]);
-  const [eventCache, setEventCache] = useState({});
+  // PERFORMANCE: Cache for loaded date ranges - Track which date ranges have been loaded
+  const [loadedRanges, setLoadedRanges] = useState(new Set());
 
   const [showLeadFormModal, setShowLeadFormModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = getCurrentUKTime();
+    return { dateStr: now.toISOString(), date: now };
+  });
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const calendarRef = useRef(null);
   const { socket, subscribeToCalendarUpdates, subscribeToLeadUpdates, isConnected, emitCalendarUpdate } = useSocket();
@@ -46,7 +52,9 @@ const Calendar = () => {
     status: 'New',
     notes: '',
     image_url: '',
-    isReschedule: false
+    isReschedule: false,
+    booking_slot: 1,
+    time_booked: ''
   });
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
@@ -54,10 +62,16 @@ const Calendar = () => {
   const [notesText, setNotesText] = useState('');
   const [sendEmail, setSendEmail] = useState(true);
   const [sendSms, setSendSms] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [bookingTemplates, setBookingTemplates] = useState([]);
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [isBookingInProgress, setIsBookingInProgress] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [currentView, setCurrentView] = useState('monthly'); // 'daily', 'weekly', or 'monthly' for slot calendar
+  const [currentDate, setCurrentDate] = useState(getCurrentUKTime());
+  const [selectedSlot, setSelectedSlot] = useState(1); // Track selected slot for booking
+  const [selectedTime, setSelectedTime] = useState(''); // Track selected time for booking
+
   // Reject lead modal state
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('Duplicate');
@@ -126,6 +140,13 @@ const Calendar = () => {
   
   // Memoize fetchEvents to prevent recreating it on every render
   const fetchEvents = useCallback(async (force = false) => {
+    // If force refresh, clear the cache
+    if (force) {
+      console.log('📅 Force refresh: Clearing calendar cache');
+      setLoadedRanges(new Set());
+      setEvents([]);
+    }
+    
     // Prevent multiple simultaneous calls
     if (isFetching && !force) {
       console.log('📅 Calendar: Fetch already in progress, skipping...');
@@ -155,24 +176,44 @@ const Calendar = () => {
       // PERFORMANCE: Get visible date range from calendar to only fetch relevant events
       const calendarApi = calendarRef.current?.getApi();
       let dateParams = '';
+      let rangeKey = null;
+      let startDate = null;
+      let endDate = null;
+      
       if (calendarApi && calendarApi.view) {
         const view = calendarApi.view;
         // Only fetch visible calendar dates (no buffer needed for month navigation)
-        const startDate = new Date(view.activeStart);
-        const endDate = new Date(view.activeEnd);
-
-        dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
-        console.log(`📅 Fetching events for range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+        startDate = new Date(view.activeStart);
+        endDate = new Date(view.activeEnd);
+      } else {
+        // Fallback: Use current month if calendar not yet initialized
+        const now = new Date();
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        console.log('📅 Calendar not initialized, using current month range');
       }
 
+      // Create range key for tracking
+      rangeKey = `${startDate.toISOString()}_${endDate.toISOString()}`;
+      
+      // Check if this range was already loaded (unless force refresh)
+      if (!force && loadedRanges.has(rangeKey)) {
+        console.log('📅 Range already loaded, skipping fetch:', rangeKey);
+        setIsFetching(false);
+        return;
+      }
+
+      dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
+      console.log(`📅 Fetching events for range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+
       // Use the new calendar endpoint with date filtering
-      // Add cache busting and date range
-      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=1000`;
+      // Increased limit to 600 for better calendar coverage
+      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=600`;
       const response = await axios.get(`/api/leads/calendar${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        timeout: 10000 // Add timeout to prevent hanging
+        timeout: 15000 // 15 second timeout (reduced from 30s)
       });
 
       const leads = response.data.leads || [];
@@ -185,7 +226,9 @@ const Calendar = () => {
         console.log('📅 Leads received:', leads.map(lead => ({
           name: lead.name,
           status: lead.status,
-          date_booked: lead.date_booked
+          date_booked: lead.date_booked,
+          time_booked: lead.time_booked,
+          booking_slot: lead.booking_slot
         })));
       }
       
@@ -254,7 +297,7 @@ const Calendar = () => {
           
           // Create end date (default to 15 minutes after start)
           const endDate = new Date(startDate);
-          endDate.setMinutes(endDate.getMinutes() + 15);
+          endDate.setMinutes(endDate.getMinutes() + 30);
           
           // Parse booking history for SMS notification icon
           let bookingHistory = lead.booking_history || [];
@@ -298,6 +341,16 @@ const Calendar = () => {
             allDay: false,
             backgroundColor: getEventColor(displayStatus, lead.hasSale, lead.is_confirmed),
             borderColor: getEventColor(displayStatus, lead.hasSale, lead.is_confirmed),
+            // Add flat fields for slot calendar components
+            name: lead.name,
+            phone: lead.phone,
+            email: lead.email,
+            date_booked: lead.date_booked,
+            time_booked: lead.time_booked,
+            booking_slot: lead.booking_slot,
+            is_confirmed: lead.is_confirmed,
+            booking_status: lead.booking_status,
+            has_sale: lead.hasSale,
             extendedProps: {
               lead: {
                 ...lead,
@@ -316,6 +369,18 @@ const Calendar = () => {
         .filter(event => event !== null); // Remove any null events from invalid dates
 
       console.log(`📅 Calendar: Created ${serverEvents.length} server events`);
+      
+      // Debug: Log sample events to verify structure
+      if (serverEvents.length > 0) {
+        console.log('📅 Sample event structure:', {
+          id: serverEvents[0].id,
+          name: serverEvents[0].name,
+          date_booked: serverEvents[0].date_booked,
+          time_booked: serverEvents[0].time_booked,
+          booking_slot: serverEvents[0].booking_slot,
+          start: serverEvents[0].start
+        });
+      }
 
       // Prevent duplicate events by using a Set to track unique event IDs
       const uniqueEventIds = new Set();
@@ -330,8 +395,20 @@ const Calendar = () => {
 
       console.log(`📅 Calendar: Final events array has ${finalEvents.length} unique events`);
 
-      // Set events directly without complex merging logic
-      setEvents(finalEvents);
+      // Mark this range as loaded if we have a rangeKey
+      if (rangeKey) {
+        setLoadedRanges(prev => new Set([...prev, rangeKey]));
+        console.log(`📅 Marked range as loaded: ${rangeKey}`);
+      }
+
+      // DIARY-STYLE LOADING: Merge new events with existing ones (no duplicates)
+      setEvents(prevEvents => {
+        const existingIds = new Set(prevEvents.map(e => e.id));
+        const newUniqueEvents = finalEvents.filter(e => !existingIds.has(e.id));
+        const mergedEvents = [...prevEvents, ...newUniqueEvents];
+        console.log(`📅 Merging ${newUniqueEvents.length} new events with ${prevEvents.length} existing events = ${mergedEvents.length} total events`);
+        return mergedEvents;
+      });
 
       // Check for highlighting after events are set (reduced timeout for performance)
       setTimeout(() => {
@@ -390,6 +467,34 @@ const Calendar = () => {
       setIsFetching(false);
     }
   }, []); // Empty dependency array - function doesn't need to recreate
+
+  // Fetch booking confirmation templates
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        console.log('📋 Fetching booking confirmation templates...');
+        const response = await axios.get('/api/templates?type=booking_confirmation&isActive=true', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        console.log('📋 Templates response:', response.data);
+        console.log('📋 Number of templates:', response.data?.length || 0);
+        setBookingTemplates(response.data || []);
+        // Set the first template as default if available
+        if (response.data && response.data.length > 0) {
+          setSelectedTemplateId(response.data[0]._id);
+          console.log('📋 Default template selected:', response.data[0].name, response.data[0]._id);
+        } else {
+          console.warn('⚠️ No active booking confirmation templates found');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching booking templates:', error);
+        setBookingTemplates([]);
+      }
+    };
+    fetchTemplates();
+  }, []);
 
   // Use useEffect WITHOUT fetchEvents as dependency to prevent loops
   useEffect(() => {
@@ -592,12 +697,49 @@ const Calendar = () => {
         }
       } catch {}
     };
+    // Handle message sent notifications (booking confirmations)
+    const handleMessageSent = (data) => {
+      console.log('📧 ========== MESSAGE SENT NOTIFICATION ==========');
+      console.log('📧 Status:', data.status);
+      console.log('📧 Type:', data.type);
+      console.log('📧 Lead ID:', data.leadId);
+      console.log('📧 Channels:', data.channels);
+      if (data.status === 'success') {
+        console.log('📧 Email Account:', data.emailAccountName);
+        console.log('📧 Email Account Key:', data.emailAccount);
+        console.log('📧 SMS Provider:', data.smsProvider);
+      } else {
+        console.log('📧 Error:', data.error);
+      }
+      console.log('📧 ==============================================');
+
+      if (data.status === 'success') {
+        // Show success notification with details
+        const details = [];
+        if (data.channels.email) {
+          details.push(`Email via ${data.emailAccountName || 'email'}`);
+        }
+        if (data.channels.sms) {
+          details.push(`SMS via ${data.smsProvider || 'SMS'}`);
+        }
+
+        const message = `✅ ${data.message || 'Booking confirmation sent: ' + details.join(' and ')}`;
+        alert(message);
+      } else if (data.status === 'error') {
+        // Show error notification
+        alert(`❌ ${data.message || 'Failed to send booking confirmation'}`);
+      }
+    };
+
     // Listen for both event names to ensure compatibility
     socket.on('sms_received', handleSmsReceived);
     socket.on('message_received', handleSmsReceived);
+    socket.on('message_sent', handleMessageSent);
+
     return () => {
       socket.off('sms_received', handleSmsReceived);
       socket.off('message_received', handleSmsReceived);
+      socket.off('message_sent', handleMessageSent);
     };
   }, [socket, selectedEvent]);
 
@@ -768,18 +910,27 @@ const Calendar = () => {
       console.log('📊 Booking already in progress, ignoring duplicate request');
       return;
     }
-    
+
     if (!leadForm.name || !leadForm.phone) {
       alert('Please fill in required fields (Name and Phone)');
       return;
     }
-    
+
+    console.log('📅 ========== SAVE BOOKING START ==========');
+    console.log('📅 Lead Form:', leadForm);
+    console.log('📅 Is Reschedule:', leadForm.isReschedule);
+    console.log('📅 Send Email:', sendEmail);
+    console.log('📅 Send SMS:', sendSms);
+    console.log('📅 Selected Template ID:', selectedTemplateId);
+    console.log('📅 Available Templates:', bookingTemplates.map(t => ({ id: t._id, name: t.name })));
+    console.log('📅 ========================================');
+
     setIsBookingInProgress(true);
 
     // Use the clicked time directly from selectedDate, but ensure we're working with local time
     const selectedDateTime = selectedDate.date || new Date(selectedDate.dateStr);
     const endDateTime = new Date(selectedDateTime);
-    endDateTime.setMinutes(endDateTime.getMinutes() + 15); // 15-minute booking slots
+    endDateTime.setMinutes(endDateTime.getMinutes() + 30); // 30-minute booking slots to match calendar intervals
     
     // TIMEZONE FIX: Preserve exact local time without UTC conversion
     const year = selectedDateTime.getFullYear();
@@ -790,7 +941,7 @@ const Calendar = () => {
     
     // Create a new date with the same local time components
     const localDateTime = new Date(year, month, date, hours, minutes, 0, 0);
-    const localEndDateTime = new Date(year, month, date, hours, minutes + 15, 0, 0);
+    const localEndDateTime = new Date(year, month, date, hours, minutes + 30, 0, 0);
     
     // Create ISO string that preserves local time (avoiding UTC conversion)
     // This is the key fix - we manually construct the ISO string to avoid timezone shifts
@@ -835,6 +986,8 @@ const Calendar = () => {
       const createData = {
         ...leadDataWithoutId,
         date_booked: localISOString,
+        time_booked: leadForm.time_booked || `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+        booking_slot: leadForm.booking_slot || selectedSlot || 1,
         // Include the _id if we have one (from lead details page)
         ...((_id && _id !== '') ? { _id } : {}),
         status: 'Booked',
@@ -852,8 +1005,17 @@ const Calendar = () => {
         finalData: createData
       });
       
-      const response = await axios.post('/api/leads', { ...createData, sendEmail, sendSms });
-      
+      console.log('📤 Sending booking request with:', {
+        ...createData,
+        sendEmail,
+        sendSms,
+        templateId: selectedTemplateId
+      });
+
+      const response = await axios.post('/api/leads', { ...createData, sendEmail, sendSms, templateId: selectedTemplateId });
+
+      console.log('✅ Booking API response:', response.data);
+
       if (response.data.success || response.data.lead || response.data) {
         const leadResult = response.data.lead || response.data;
         
@@ -861,13 +1023,28 @@ const Calendar = () => {
         const isExistingLead = response.data.isExistingLead || false;
         
         // Create the final calendar event with the real lead ID
+        // Use same display logic as fetchEvents - show "Unconfirmed" for new bookings, "Confirmed" only when manually changed
+        const displayStatus = leadResult.is_confirmed ? 'Confirmed' : 'Unconfirmed';
         const newEvent = {
           id: leadResult.id || tempEventId,
-          title: `${leadForm.name} - Booked`,
+          name: leadForm.name,
+          title: `${leadForm.name} - ${displayStatus}`,
+          phone: leadForm.phone,
+          email: leadForm.email,
+          date_booked: leadResult.date_booked || localISOString,
+          time_booked: leadResult.time_booked || leadForm.time_booked,
+          booking_slot: leadResult.booking_slot || leadForm.booking_slot || 1,
+          status: 'Booked',
+          is_confirmed: leadResult.is_confirmed || false,
+          booking_status: leadResult.booking_status,
+          has_sale: leadResult.has_sale || leadResult.hasSale || 0,
+          image_url: leadResult.image_url,
+          notes: leadResult.notes,
+          postcode: leadResult.postcode,
           start: localDateTime,
           end: localEndDateTime,
-          backgroundColor: getEventColor('Booked', leadResult.hasSale, leadResult.is_confirmed),
-          borderColor: getEventColor('Booked', leadResult.hasSale, leadResult.is_confirmed),
+          backgroundColor: getEventColor(displayStatus, leadResult.hasSale, leadResult.is_confirmed),
+          borderColor: getEventColor(displayStatus, leadResult.hasSale, leadResult.is_confirmed),
           extendedProps: {
             lead: {
               ...leadResult,
@@ -875,6 +1052,7 @@ const Calendar = () => {
             },
             phone: leadForm.phone,
             status: 'Booked',
+            displayStatus: displayStatus,
             booker: currentUser.name || 'Current User',
             isConfirmed: leadResult.is_confirmed || false
           }
@@ -1094,7 +1272,7 @@ const Calendar = () => {
         `This will:\n` +
         `• Remove the booking from the calendar\n` +
         `• Move the lead status to "Cancelled"\n` +
-        `• Clear the booking date\n` +
+        `• Preserve the original booking date for tracking\n` +
         `• Update the daily diary\n\n` +
         `This action cannot be undone.`;
 
@@ -1121,12 +1299,12 @@ const Calendar = () => {
         ...selectedEvent.extendedProps.lead
       };
 
-      // For cancellation, clear the booking date and set to Cancelled
+      // For cancellation, set status to Cancelled but preserve the original booking date
       if (newStatus === 'Cancelled') {
         updateData = {
           ...updateData,
           status: 'Cancelled', // Set to Cancelled status
-          date_booked: null, // Clear the booking date
+          // Keep date_booked preserved for tracking history in daily activities
           cancellation_reason: 'Appointment cancelled via calendar'
         };
       } else if (newStatus === 'Confirmed') {
@@ -1356,10 +1534,14 @@ const Calendar = () => {
     }
 
     const leadName = selectedEvent.extendedProps.lead.name || selectedEvent.title.split(' - ')[0];
-    
+
     if (!window.confirm(`Are you sure you want to reschedule ${leadName}'s appointment?`)) {
       return;
     }
+
+    console.log('📅 Starting reschedule for:', leadName);
+    console.log('📅 Current template selected:', selectedTemplateId);
+    console.log('📅 Available templates:', bookingTemplates.length);
 
     // Load the lead data into the form for rescheduling
     setLeadForm({
@@ -1370,7 +1552,7 @@ const Calendar = () => {
       postcode: selectedEvent.extendedProps.lead.postcode || '',
       status: 'Booked', // Keep as booked for rescheduling
       notes: selectedEvent.extendedProps.lead.notes || '',
-              image_url: selectedEvent.extendedProps.lead.image_url || '',
+      image_url: selectedEvent.extendedProps.lead.image_url || '',
       isReschedule: true
     });
 
@@ -1378,13 +1560,22 @@ const Calendar = () => {
     setShowEventModal(false);
     setSendEmail(true);
     setSendSms(true);
+
+    // Ensure a template is selected - use first template if none selected
+    if (!selectedTemplateId && bookingTemplates.length > 0) {
+      console.log('⚠️ No template selected, setting default template:', bookingTemplates[0].name);
+      setSelectedTemplateId(bookingTemplates[0]._id);
+    }
+
     setShowLeadFormModal(true);
-    
+
     // Set the selected date to the current event date for easy rescheduling
     if (selectedEvent.start) {
       const dt = new Date(selectedEvent.start);
       setSelectedDate({ dateStr: dt.toISOString(), date: dt });
     }
+
+    console.log('📅 Reschedule modal opened - Template ID:', selectedTemplateId || bookingTemplates[0]?._id);
   };
 
   // Navigation functions for day-specific booking browsing
@@ -1624,6 +1815,47 @@ const Calendar = () => {
   //   );
   // };
 
+  // Export calendar day to CSV
+  const handleExportCalendar = async () => {
+    try {
+      // Get the exact date from the calendar API
+      const calendarApi = calendarRef.current.getApi();
+      const viewDate = calendarApi.getDate();
+
+      // Format date in local timezone to avoid UTC conversion issues
+      const year = viewDate.getFullYear();
+      const month = String(viewDate.getMonth() + 1).padStart(2, '0');
+      const day = String(viewDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      console.log(`📥 Exporting calendar for ${dateStr}...`);
+      console.log(`📅 View date:`, viewDate);
+      console.log(`📅 Formatted date string:`, dateStr);
+
+      const response = await axios.get(`/api/leads/calendar/export-csv?date=${dateStr}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        responseType: 'blob'
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `calendar_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      console.log(`✅ Calendar exported successfully for ${dateStr}`);
+    } catch (error) {
+      console.error('Error exporting calendar:', error);
+      alert('Failed to export calendar. Please try again.');
+    }
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 lg:space-y-6">
       {/* Page Header */}
@@ -1679,8 +1911,8 @@ const Calendar = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-3 sm:mb-4">
+      {/* Search Bar and Export Button */}
+      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:max-w-md">
           <div className="absolute inset-y-0 left-0 pl-2 sm:pl-3 flex items-center pointer-events-none">
             <FiSearch className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
@@ -1702,127 +1934,282 @@ const Calendar = () => {
               </button>
             </div>
           )}
+          {searchTerm && (
+            <p className="mt-2 text-xs sm:text-sm text-gray-600">
+              Found {events.filter(event => {
+                const search = searchTerm.toLowerCase();
+                const leadName = event.extendedProps?.lead?.name || event.title || '';
+                const leadPhone = event.extendedProps?.phone || '';
+                const leadEmail = event.extendedProps?.lead?.email || '';
+                return (
+                  leadName.toLowerCase().includes(search) ||
+                  leadPhone.includes(search) ||
+                  leadEmail.toLowerCase().includes(search)
+                );
+              }).length} results
+            </p>
+          )}
         </div>
-        {searchTerm && (
-          <p className="mt-2 text-xs sm:text-sm text-gray-600">
-            Found {events.filter(event => {
-              const search = searchTerm.toLowerCase();
-              const leadName = event.extendedProps?.lead?.name || event.title || '';
-              const leadPhone = event.extendedProps?.phone || '';
-              const leadEmail = event.extendedProps?.lead?.email || '';
-              return (
-                leadName.toLowerCase().includes(search) ||
-                leadPhone.includes(search) ||
-                leadEmail.toLowerCase().includes(search)
-              );
-            }).length} results
-          </p>
+
+        {/* Export Calendar Button - Only show in day view */}
+        {currentView === 'timeGridDay' && (
+          <button
+            onClick={handleExportCalendar}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors whitespace-nowrap"
+          >
+            <FiDownload className="h-4 w-4" />
+            <span className="text-sm font-medium">Export Day to CSV</span>
+          </button>
         )}
       </div>
 
-      {/* Calendar */}
+      {/* Calendar Navigation and View Toggle */}
+      <div className="mobile-card mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          {/* View Toggle */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentView('monthly')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                currentView === 'monthly'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setCurrentView('weekly')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                currentView === 'weekly'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Weekly
+            </button>
+            <button
+              onClick={() => setCurrentView('daily')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                currentView === 'daily'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Daily
+            </button>
+          </div>
+
+          {/* Date Navigation */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                const newDate = new Date(currentDate);
+                if (currentView === 'daily') {
+                  newDate.setDate(newDate.getDate() - 1);
+                } else if (currentView === 'weekly') {
+                  newDate.setDate(newDate.getDate() - 7);
+                } else {
+                  newDate.setMonth(newDate.getMonth() - 1);
+                }
+                setCurrentDate(newDate);
+                fetchEvents(true);
+              }}
+              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+            >
+              <FiChevronLeft className="h-5 w-5" />
+            </button>
+
+            <button
+              onClick={() => {
+                setCurrentDate(getCurrentUKTime());
+                fetchEvents(true);
+              }}
+              className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors font-medium"
+            >
+              Today
+            </button>
+
+            <button
+              onClick={() => {
+                const newDate = new Date(currentDate);
+                if (currentView === 'daily') {
+                  newDate.setDate(newDate.getDate() + 1);
+                } else if (currentView === 'weekly') {
+                  newDate.setDate(newDate.getDate() + 7);
+                } else {
+                  newDate.setMonth(newDate.getMonth() + 1);
+                }
+                setCurrentDate(newDate);
+                fetchEvents(true);
+              }}
+              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+            >
+              <FiChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Slot-Based Calendar */}
       <div className="mobile-card overflow-x-auto">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          initialDate={new Date()}
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay'
-          }}
-          buttonText={{
-            today: window.innerWidth < 640 ? 'Today' : 'Today',
-            month: window.innerWidth < 640 ? 'M' : 'Month',
-            week: window.innerWidth < 640 ? 'W' : 'Week',
-            day: window.innerWidth < 640 ? 'D' : 'Day'
-          }}
-          weekends={true}
-          firstDay={1}
-          events={events.filter(event => {
-            if (!searchTerm) return true;
-            const search = searchTerm.toLowerCase();
-            const leadName = event.extendedProps?.lead?.name || event.title || '';
-            const leadPhone = event.extendedProps?.phone || '';
-            const leadEmail = event.extendedProps?.lead?.email || '';
-            return (
-              leadName.toLowerCase().includes(search) ||
-              leadPhone.includes(search) ||
-              leadEmail.toLowerCase().includes(search)
-            );
-          })}
-          dateClick={handleDateTimeClick}
-          eventClick={handleEventClick}
-          height="auto"
-          eventDisplay="block"
-          datesSet={(dateInfo) => {
-            // PERFORMANCE: Skip this - let initial fetch handle it
-            // This was causing duplicate fetches
-            console.log('📅 View initialized:', dateInfo.view.type, dateInfo.startStr, 'to', dateInfo.endStr);
-          }}
-          eventTimeFormat={{
-            hour: 'numeric',
-            minute: '2-digit',
-            meridiem: 'short'
-          }}
-          slotMinTime="10:00:00"
-          slotMaxTime="18:15:00"
-          slotDuration="00:15:00"
-          slotLabelInterval="00:15:00"
-          slotLabelFormat={{
-            hour: 'numeric',
-            minute: '2-digit',
-            meridiem: 'short'
-          }}
-          allDaySlot={false}
-          snapDuration="00:15:00"
-          selectConstraint={{
-            start: '10:00',
-            end: '18:15'
-          }}
-          timeZone='local'
-          eventMaxStack={5}
-          moreLinkClick="popover"
-          dayMaxEventRows={false}
-          forceEventDuration={true}
-          defaultTimedEventDuration='00:15:00'
-          progressiveEventRendering={true}
-          lazyFetching={false}
-          views={{
-            dayGridMonth: {
-              dayMaxEventRows: 3,
-              moreLinkClick: 'popover',
-              showNonCurrentDates: true
-            },
-            timeGridWeek: {
-              allDaySlot: false,
-              slotMinTime: '10:00:00',
-              slotMaxTime: '18:00:00',
-              height: 'auto'
-            },
-            timeGridDay: {
-              allDaySlot: false,
-              slotMinTime: '10:00:00',
-              slotMaxTime: '18:00:00',
-              height: 'auto'
-            }
-          }}
-          eventContent={(arg) => {
-            // PERFORMANCE: Skip SMS message processing entirely - too slow
-            // This was causing 23+ function calls on every render
-            return (
-              <div className="fc-event-main p-1 flex items-center justify-between">
-                <div className="fc-event-title-container flex-1 overflow-hidden">
-                  <div className="fc-event-title text-xs truncate">
-                    {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
-                    {arg.event.title}
-                  </div>
-                </div>
-              </div>
-            );
-          }}
-        />
+        {currentView === 'monthly' ? (
+          <MonthlySlotCalendar
+            currentDate={currentDate}
+            events={events.filter(event => {
+              if (!event.date_booked) return false;
+              
+              // Filter by search term
+              if (searchTerm) {
+                const search = searchTerm.toLowerCase();
+                const leadName = event.name || '';
+                const leadPhone = event.phone || '';
+                const leadEmail = event.email || '';
+                return (
+                  leadName.toLowerCase().includes(search) ||
+                  leadPhone.includes(search) ||
+                  leadEmail.toLowerCase().includes(search)
+                );
+              }
+              
+              return true;
+            })}
+            onDayClick={(day) => {
+              console.log('Day clicked:', day);
+              // Switch to daily view for selected day
+              setCurrentDate(day);
+              setCurrentView('daily');
+            }}
+            onEventClick={(event) => {
+              console.log('Event clicked:', event);
+              // Find the full event from the events array
+              const fullEvent = events.find(e => e.id === event.id);
+              if (fullEvent) {
+                setSelectedEvent(fullEvent);
+                setShowEventModal(true);
+              } else {
+                console.error('Could not find full event data for:', event.id);
+              }
+            }}
+          />
+        ) : currentView === 'daily' ? (
+          <SlotCalendar
+            selectedDate={currentDate}
+            events={events.filter(event => {
+              if (!event.date_booked) return false;
+              
+              const eventDate = new Date(event.date_booked);
+              const selectedDateStr = currentDate.toISOString().split('T')[0];
+              const eventDateStr = eventDate.toISOString().split('T')[0];
+              
+              // Filter by search term
+              if (searchTerm) {
+                const search = searchTerm.toLowerCase();
+                const leadName = event.name || '';
+                const leadPhone = event.phone || '';
+                const leadEmail = event.email || '';
+                const matchesSearch = 
+                  leadName.toLowerCase().includes(search) ||
+                  leadPhone.includes(search) ||
+                  leadEmail.toLowerCase().includes(search);
+                
+                return eventDateStr === selectedDateStr && matchesSearch;
+              }
+              
+              return eventDateStr === selectedDateStr;
+            })}
+            onSlotClick={(time, slot, slotConfig) => {
+              console.log('Slot clicked:', time, slot, slotConfig);
+              // Open booking modal with pre-filled time and slot
+              setSelectedTime(time);
+              setSelectedSlot(slot);
+              setSelectedDate({
+                dateStr: currentDate.toISOString(),
+                date: currentDate
+              });
+              setLeadForm({
+                ...leadForm,
+                time_booked: time,
+                booking_slot: slot,
+                date_booked: currentDate.toISOString().split('T')[0]
+              });
+              setShowLeadFormModal(true);
+            }}
+            onEventClick={(event) => {
+              console.log('Event clicked:', event);
+              // Find the full event from the events array
+              const fullEvent = events.find(e => e.id === event.id);
+              if (fullEvent) {
+                setSelectedEvent(fullEvent);
+                setShowEventModal(true);
+              } else {
+                console.error('Could not find full event data for:', event.id);
+              }
+            }}
+          />
+        ) : (
+          <WeeklySlotCalendar
+            weekStart={(() => {
+              const date = new Date(currentDate);
+              const day = date.getDay();
+              const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+              return new Date(date.setDate(diff));
+            })()}
+            events={events.filter(event => {
+              if (!event.date_booked) return false;
+              
+              // Filter by search term
+              if (searchTerm) {
+                const search = searchTerm.toLowerCase();
+                const leadName = event.name || '';
+                const leadPhone = event.phone || '';
+                const leadEmail = event.email || '';
+                return (
+                  leadName.toLowerCase().includes(search) ||
+                  leadPhone.includes(search) ||
+                  leadEmail.toLowerCase().includes(search)
+                );
+              }
+              
+              return true;
+            })}
+            onDayClick={(day, time, slot) => {
+              console.log('Day/slot clicked:', day, time, slot);
+              if (time && slot) {
+                // Clicked on a specific slot
+                setSelectedTime(time);
+                setSelectedSlot(slot);
+                setSelectedDate({
+                  dateStr: day.toISOString(),
+                  date: day
+                });
+                setCurrentDate(day);
+                setLeadForm({
+                  ...leadForm,
+                  time_booked: time,
+                  booking_slot: slot,
+                  date_booked: day.toISOString().split('T')[0]
+                });
+                setShowLeadFormModal(true);
+              } else {
+                // Clicked on day header - switch to daily view
+                setCurrentDate(day);
+                setCurrentView('daily');
+              }
+            }}
+            onEventClick={(event) => {
+              console.log('Event clicked:', event);
+              // Find the full event from the events array
+              const fullEvent = events.find(e => e.id === event.id);
+              if (fullEvent) {
+                setSelectedEvent(fullEvent);
+                setShowEventModal(true);
+              } else {
+                console.error('Could not find full event data for:', event.id);
+              }
+            }}
+          />
+        )}
       </div>
 
 
@@ -1981,6 +2368,37 @@ const Calendar = () => {
                     </label>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">Both are checked by default. Uncheck to prevent sending.</p>
+
+                  {/* Template Selector */}
+                  {(sendEmail || sendSms) && (
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select Template
+                      </label>
+                      {bookingTemplates.length > 0 ? (
+                        <>
+                          <select
+                            value={selectedTemplateId || ''}
+                            onChange={(e) => setSelectedTemplateId(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            {bookingTemplates.map((template) => (
+                              <option key={template._id} value={template._id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Template determines which email account to use
+                          </p>
+                        </>
+                      ) : (
+                        <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3">
+                          ⚠️ No active booking confirmation templates found. Please create one in the Templates page.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4">
@@ -1990,7 +2408,7 @@ const Calendar = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">New Date</label>
                       <input
                         type="date"
-                        value={selectedDate ? selectedDate.dateStr.slice(0, 10) : ''}
+                        value={selectedDate ? (selectedDate.dateStr ? selectedDate.dateStr.slice(0, 10) : selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : '') : ''}
                         onChange={(e) => {
                           if (e.target.value) {
                             const newDate = new Date(e.target.value + 'T12:00:00');
@@ -2008,15 +2426,21 @@ const Calendar = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">New Time</label>
                       <div className="grid grid-cols-2 gap-2">
                         <select
-                          value={selectedDate ? selectedDate.date.getHours() : 9}
+                          value={selectedDate ? (selectedDate.date ? selectedDate.date.getHours() : selectedDate instanceof Date ? selectedDate.getHours() : 9) : 9}
                           onChange={(e) => {
                             if (selectedDate) {
-                              const newDate = new Date(selectedDate.date);
+                              const currentDate = selectedDate.date || selectedDate;
+                              const newDate = new Date(currentDate);
                               newDate.setHours(parseInt(e.target.value), newDate.getMinutes());
                               setSelectedDate({ 
                                 dateStr: newDate.toISOString(), 
                                 date: newDate 
                               });
+                              // Update time_booked in leadForm
+                              const hours = parseInt(e.target.value);
+                              const minutes = newDate.getMinutes();
+                              const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                              setLeadForm({ ...leadForm, time_booked: timeStr });
                             }
                           }}
                           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2029,15 +2453,21 @@ const Calendar = () => {
                         </select>
                         
                         <select
-                          value={selectedDate ? selectedDate.date.getMinutes() : 0}
+                          value={selectedDate ? (selectedDate.date ? selectedDate.date.getMinutes() : selectedDate instanceof Date ? selectedDate.getMinutes() : 0) : 0}
                           onChange={(e) => {
                             if (selectedDate) {
-                              const newDate = new Date(selectedDate.date);
+                              const currentDate = selectedDate.date || selectedDate;
+                              const newDate = new Date(currentDate);
                               newDate.setMinutes(parseInt(e.target.value));
                               setSelectedDate({ 
                                 dateStr: newDate.toISOString(), 
                                 date: newDate 
                               });
+                              // Update time_booked in leadForm
+                              const hours = newDate.getHours();
+                              const minutes = parseInt(e.target.value);
+                              const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                              setLeadForm({ ...leadForm, time_booked: timeStr });
                             }
                           }}
                           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2049,6 +2479,24 @@ const Calendar = () => {
                           ))}
                         </select>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Booking Slot</label>
+                      <select
+                        value={leadForm.booking_slot || 1}
+                        onChange={(e) => {
+                          setLeadForm({ ...leadForm, booking_slot: parseInt(e.target.value) });
+                          setSelectedSlot(parseInt(e.target.value));
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={1}>Slot 1</option>
+                        <option value={2}>Slot 2</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select which slot column to book the appointment in
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
@@ -2371,6 +2819,37 @@ const Calendar = () => {
                         </label>
                       </div>
                       <p className="text-xs text-gray-500 mt-2">These settings apply when you reschedule from this modal.</p>
+
+                      {/* Template Selector for Reschedule */}
+                      {(sendEmail || sendSms) && (
+                        <div className="mt-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select Template
+                          </label>
+                          {bookingTemplates.length > 0 ? (
+                            <>
+                              <select
+                                value={selectedTemplateId || ''}
+                                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              >
+                                {bookingTemplates.map((template) => (
+                                  <option key={template._id} value={template._id}>
+                                    {template.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Template determines which email account to use
+                              </p>
+                            </>
+                          ) : (
+                            <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
+                              ⚠️ No active booking templates found
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {/* Assigned User */}
                     {selectedEvent.extendedProps?.booker && (
