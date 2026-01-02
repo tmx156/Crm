@@ -17,10 +17,6 @@ import SaleModal from '../components/SaleModal';
 import ImageLightbox from '../components/ImageLightbox';
 import LazyImage from '../components/LazyImage';
 import { getOptimizedImageUrl } from '../utils/imageUtils';
-import { getCurrentUKTime, getTodayUK, toUKTime } from '../utils/timeUtils';
-import SlotCalendar from '../components/SlotCalendar';
-import WeeklySlotCalendar from '../components/WeeklySlotCalendar';
-import MonthlySlotCalendar from '../components/MonthlySlotCalendar';
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -36,10 +32,7 @@ const Calendar = () => {
   const [loadedRanges, setLoadedRanges] = useState(new Set());
 
   const [showLeadFormModal, setShowLeadFormModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const now = getCurrentUKTime();
-    return { dateStr: now.toISOString(), date: now };
-  });
+  const [selectedDate, setSelectedDate] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const calendarRef = useRef(null);
   const { socket, subscribeToCalendarUpdates, subscribeToLeadUpdates, isConnected, emitCalendarUpdate } = useSocket();
@@ -52,9 +45,7 @@ const Calendar = () => {
     status: 'New',
     notes: '',
     image_url: '',
-    isReschedule: false,
-    booking_slot: 1,
-    time_booked: ''
+    isReschedule: false
   });
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
@@ -67,10 +58,8 @@ const Calendar = () => {
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [isBookingInProgress, setIsBookingInProgress] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentView, setCurrentView] = useState('monthly'); // 'daily', 'weekly', or 'monthly' for slot calendar
-  const [currentDate, setCurrentDate] = useState(getCurrentUKTime());
-  const [selectedSlot, setSelectedSlot] = useState(1); // Track selected slot for booking
-  const [selectedTime, setSelectedTime] = useState(''); // Track selected time for booking
+  const [currentView, setCurrentView] = useState('dayGridMonth');
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   // Reject lead modal state
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -226,9 +215,7 @@ const Calendar = () => {
         console.log('📅 Leads received:', leads.map(lead => ({
           name: lead.name,
           status: lead.status,
-          date_booked: lead.date_booked,
-          time_booked: lead.time_booked,
-          booking_slot: lead.booking_slot
+          date_booked: lead.date_booked
         })));
       }
       
@@ -341,16 +328,6 @@ const Calendar = () => {
             allDay: false,
             backgroundColor: getEventColor(displayStatus, lead.hasSale, lead.is_confirmed),
             borderColor: getEventColor(displayStatus, lead.hasSale, lead.is_confirmed),
-            // Add flat fields for slot calendar components
-            name: lead.name,
-            phone: lead.phone,
-            email: lead.email,
-            date_booked: lead.date_booked,
-            time_booked: lead.time_booked,
-            booking_slot: lead.booking_slot,
-            is_confirmed: lead.is_confirmed,
-            booking_status: lead.booking_status,
-            has_sale: lead.hasSale,
             extendedProps: {
               lead: {
                 ...lead,
@@ -369,18 +346,6 @@ const Calendar = () => {
         .filter(event => event !== null); // Remove any null events from invalid dates
 
       console.log(`📅 Calendar: Created ${serverEvents.length} server events`);
-      
-      // Debug: Log sample events to verify structure
-      if (serverEvents.length > 0) {
-        console.log('📅 Sample event structure:', {
-          id: serverEvents[0].id,
-          name: serverEvents[0].name,
-          date_booked: serverEvents[0].date_booked,
-          time_booked: serverEvents[0].time_booked,
-          booking_slot: serverEvents[0].booking_slot,
-          start: serverEvents[0].start
-        });
-      }
 
       // Prevent duplicate events by using a Set to track unique event IDs
       const uniqueEventIds = new Set();
@@ -986,8 +951,6 @@ const Calendar = () => {
       const createData = {
         ...leadDataWithoutId,
         date_booked: localISOString,
-        time_booked: leadForm.time_booked || `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-        booking_slot: leadForm.booking_slot || selectedSlot || 1,
         // Include the _id if we have one (from lead details page)
         ...((_id && _id !== '') ? { _id } : {}),
         status: 'Booked',
@@ -1027,20 +990,7 @@ const Calendar = () => {
         const displayStatus = leadResult.is_confirmed ? 'Confirmed' : 'Unconfirmed';
         const newEvent = {
           id: leadResult.id || tempEventId,
-          name: leadForm.name,
           title: `${leadForm.name} - ${displayStatus}`,
-          phone: leadForm.phone,
-          email: leadForm.email,
-          date_booked: leadResult.date_booked || localISOString,
-          time_booked: leadResult.time_booked || leadForm.time_booked,
-          booking_slot: leadResult.booking_slot || leadForm.booking_slot || 1,
-          status: 'Booked',
-          is_confirmed: leadResult.is_confirmed || false,
-          booking_status: leadResult.booking_status,
-          has_sale: leadResult.has_sale || leadResult.hasSale || 0,
-          image_url: leadResult.image_url,
-          notes: leadResult.notes,
-          postcode: leadResult.postcode,
           start: localDateTime,
           end: localEndDateTime,
           backgroundColor: getEventColor(displayStatus, leadResult.hasSale, leadResult.is_confirmed),
@@ -1052,7 +1002,7 @@ const Calendar = () => {
             },
             phone: leadForm.phone,
             status: 'Booked',
-            displayStatus: displayStatus,
+            displayStatus: displayStatus, // Store display status for consistency
             booker: currentUser.name || 'Current User',
             isConfirmed: leadResult.is_confirmed || false
           }
@@ -1963,253 +1913,139 @@ const Calendar = () => {
         )}
       </div>
 
-      {/* Calendar Navigation and View Toggle */}
-      <div className="mobile-card mb-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          {/* View Toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentView('monthly')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                currentView === 'monthly'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setCurrentView('weekly')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                currentView === 'weekly'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Weekly
-            </button>
-            <button
-              onClick={() => setCurrentView('daily')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                currentView === 'daily'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Daily
-            </button>
-          </div>
-
-          {/* Date Navigation */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                const newDate = new Date(currentDate);
-                if (currentView === 'daily') {
-                  newDate.setDate(newDate.getDate() - 1);
-                } else if (currentView === 'weekly') {
-                  newDate.setDate(newDate.getDate() - 7);
-                } else {
-                  newDate.setMonth(newDate.getMonth() - 1);
-                }
-                setCurrentDate(newDate);
-                fetchEvents(true);
-              }}
-              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-            >
-              <FiChevronLeft className="h-5 w-5" />
-            </button>
-
-            <button
-              onClick={() => {
-                setCurrentDate(getCurrentUKTime());
-                fetchEvents(true);
-              }}
-              className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors font-medium"
-            >
-              Today
-            </button>
-
-            <button
-              onClick={() => {
-                const newDate = new Date(currentDate);
-                if (currentView === 'daily') {
-                  newDate.setDate(newDate.getDate() + 1);
-                } else if (currentView === 'weekly') {
-                  newDate.setDate(newDate.getDate() + 7);
-                } else {
-                  newDate.setMonth(newDate.getMonth() + 1);
-                }
-                setCurrentDate(newDate);
-                fetchEvents(true);
-              }}
-              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-            >
-              <FiChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Slot-Based Calendar */}
+      {/* Calendar */}
       <div className="mobile-card overflow-x-auto">
-        {currentView === 'monthly' ? (
-          <MonthlySlotCalendar
-            currentDate={currentDate}
-            events={events.filter(event => {
-              if (!event.date_booked) return false;
-              
-              // Filter by search term
-              if (searchTerm) {
-                const search = searchTerm.toLowerCase();
-                const leadName = event.name || '';
-                const leadPhone = event.phone || '';
-                const leadEmail = event.email || '';
-                return (
-                  leadName.toLowerCase().includes(search) ||
-                  leadPhone.includes(search) ||
-                  leadEmail.toLowerCase().includes(search)
-                );
-              }
-              
-              return true;
-            })}
-            onDayClick={(day) => {
-              console.log('Day clicked:', day);
-              // Switch to daily view for selected day
-              setCurrentDate(day);
-              setCurrentView('daily');
-            }}
-            onEventClick={(event) => {
-              console.log('Event clicked:', event);
-              // Find the full event from the events array
-              const fullEvent = events.find(e => e.id === event.id);
-              if (fullEvent) {
-                setSelectedEvent(fullEvent);
-                setShowEventModal(true);
-              } else {
-                console.error('Could not find full event data for:', event.id);
-              }
-            }}
-          />
-        ) : currentView === 'daily' ? (
-          <SlotCalendar
-            selectedDate={currentDate}
-            events={events.filter(event => {
-              if (!event.date_booked) return false;
-              
-              const eventDate = new Date(event.date_booked);
-              const selectedDateStr = currentDate.toISOString().split('T')[0];
-              const eventDateStr = eventDate.toISOString().split('T')[0];
-              
-              // Filter by search term
-              if (searchTerm) {
-                const search = searchTerm.toLowerCase();
-                const leadName = event.name || '';
-                const leadPhone = event.phone || '';
-                const leadEmail = event.email || '';
-                const matchesSearch = 
-                  leadName.toLowerCase().includes(search) ||
-                  leadPhone.includes(search) ||
-                  leadEmail.toLowerCase().includes(search);
-                
-                return eventDateStr === selectedDateStr && matchesSearch;
-              }
-              
-              return eventDateStr === selectedDateStr;
-            })}
-            onSlotClick={(time, slot, slotConfig) => {
-              console.log('Slot clicked:', time, slot, slotConfig);
-              // Open booking modal with pre-filled time and slot
-              setSelectedTime(time);
-              setSelectedSlot(slot);
-              setSelectedDate({
-                dateStr: currentDate.toISOString(),
-                date: currentDate
-              });
-              setLeadForm({
-                ...leadForm,
-                time_booked: time,
-                booking_slot: slot,
-                date_booked: currentDate.toISOString().split('T')[0]
-              });
-              setShowLeadFormModal(true);
-            }}
-            onEventClick={(event) => {
-              console.log('Event clicked:', event);
-              // Find the full event from the events array
-              const fullEvent = events.find(e => e.id === event.id);
-              if (fullEvent) {
-                setSelectedEvent(fullEvent);
-                setShowEventModal(true);
-              } else {
-                console.error('Could not find full event data for:', event.id);
-              }
-            }}
-          />
-        ) : (
-          <WeeklySlotCalendar
-            weekStart={(() => {
-              const date = new Date(currentDate);
-              const day = date.getDay();
-              const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-              return new Date(date.setDate(diff));
-            })()}
-            events={events.filter(event => {
-              if (!event.date_booked) return false;
-              
-              // Filter by search term
-              if (searchTerm) {
-                const search = searchTerm.toLowerCase();
-                const leadName = event.name || '';
-                const leadPhone = event.phone || '';
-                const leadEmail = event.email || '';
-                return (
-                  leadName.toLowerCase().includes(search) ||
-                  leadPhone.includes(search) ||
-                  leadEmail.toLowerCase().includes(search)
-                );
-              }
-              
-              return true;
-            })}
-            onDayClick={(day, time, slot) => {
-              console.log('Day/slot clicked:', day, time, slot);
-              if (time && slot) {
-                // Clicked on a specific slot
-                setSelectedTime(time);
-                setSelectedSlot(slot);
-                setSelectedDate({
-                  dateStr: day.toISOString(),
-                  date: day
-                });
-                setCurrentDate(day);
-                setLeadForm({
-                  ...leadForm,
-                  time_booked: time,
-                  booking_slot: slot,
-                  date_booked: day.toISOString().split('T')[0]
-                });
-                setShowLeadFormModal(true);
-              } else {
-                // Clicked on day header - switch to daily view
-                setCurrentDate(day);
-                setCurrentView('daily');
-              }
-            }}
-            onEventClick={(event) => {
-              console.log('Event clicked:', event);
-              // Find the full event from the events array
-              const fullEvent = events.find(e => e.id === event.id);
-              if (fullEvent) {
-                setSelectedEvent(fullEvent);
-                setShowEventModal(true);
-              } else {
-                console.error('Could not find full event data for:', event.id);
-              }
-            }}
-          />
-        )}
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          initialDate={new Date()}
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay'
+          }}
+          buttonText={{
+            today: window.innerWidth < 640 ? 'Today' : 'Today',
+            month: window.innerWidth < 640 ? 'M' : 'Month',
+            week: window.innerWidth < 640 ? 'W' : 'Week',
+            day: window.innerWidth < 640 ? 'D' : 'Day'
+          }}
+          weekends={true}
+          firstDay={1}
+          events={events.filter(event => {
+            if (!searchTerm) return true;
+            const search = searchTerm.toLowerCase();
+            const leadName = event.extendedProps?.lead?.name || event.title || '';
+            const leadPhone = event.extendedProps?.phone || '';
+            const leadEmail = event.extendedProps?.lead?.email || '';
+            return (
+              leadName.toLowerCase().includes(search) ||
+              leadPhone.includes(search) ||
+              leadEmail.toLowerCase().includes(search)
+            );
+          })}
+          dateClick={handleDateTimeClick}
+          eventClick={handleEventClick}
+          height="auto"
+          eventDisplay="block"
+          datesSet={(dateInfo) => {
+            // PERFORMANCE: Skip this - let initial fetch handle it
+            // This was causing duplicate fetches
+            console.log('📅 View initialized:', dateInfo.view.type, dateInfo.startStr, 'to', dateInfo.endStr);
+
+            // Track current view and date for export functionality
+            setCurrentView(dateInfo.view.type);
+            setCurrentDate(dateInfo.start);
+          }}
+          eventTimeFormat={{
+            hour: 'numeric',
+            minute: '2-digit',
+            meridiem: 'short'
+          }}
+          slotMinTime="10:00:00"
+          slotMaxTime="18:15:00"
+          slotDuration="00:30:00"
+          slotLabelInterval="00:30:00"
+          slotLabelFormat={{
+            hour: 'numeric',
+            minute: '2-digit',
+            meridiem: 'short'
+          }}
+          allDaySlot={false}
+          snapDuration="00:30:00"
+          selectConstraint={{
+            start: '10:00',
+            end: '18:15'
+          }}
+          timeZone='local'
+          eventMaxStack={5}
+          moreLinkClick="popover"
+          dayMaxEventRows={false}
+          forceEventDuration={true}
+          defaultTimedEventDuration='00:30:00'
+          progressiveEventRendering={true}
+          lazyFetching={false}
+          slotEventOverlap={false}
+          eventOverlap={false}
+          displayEventTime={true}
+          displayEventEnd={true}
+          views={{
+            dayGridMonth: {
+              dayMaxEventRows: false,
+              moreLinkClick: 'popover',
+              showNonCurrentDates: true,
+              weekNumbers: false,
+              fixedWeekCount: false,
+              height: 'auto'
+            },
+            timeGridWeek: {
+              allDaySlot: false,
+              slotMinTime: '10:00:00',
+              slotMaxTime: '18:00:00',
+              height: 'auto'
+            },
+            timeGridDay: {
+              allDaySlot: false,
+              slotMinTime: '10:00:00',
+              slotMaxTime: '18:00:00',
+              height: 'auto'
+            }
+          }}
+          eventContent={(arg) => {
+            // PERFORMANCE: Skip SMS message processing entirely - too slow
+            // This was causing 23+ function calls on every render
+
+            // Only show "A" tag for bookings made BEFORE Friday October 17, 2025
+            // Strict rule: No A tags for bookings from Oct 17, 2025 onwards
+            const cutoffDate = new Date('2025-10-17T00:00:00');
+            cutoffDate.setHours(0, 0, 0, 0);
+
+            // Check when the booking was MADE (booked_at), not the appointment date
+            const bookedAtDate = arg.event.extendedProps?.booked_at
+              ? new Date(arg.event.extendedProps.booked_at)
+              : null;
+
+            // Show A tag ONLY if booking was made before October 17, 2025
+            const showATag = bookedAtDate && bookedAtDate < cutoffDate;
+
+            return (
+              <div className="fc-event-main p-2 flex items-center justify-between h-full">
+                <div className="fc-event-title-container flex-1 overflow-hidden">
+                  <div className="fc-event-title text-sm font-semibold">
+                    {arg.timeText && <span className="font-bold mr-1">{arg.timeText} </span>}
+                    <span className="inline-flex items-center gap-1">
+                      {showATag && (
+                        <span className="bg-gray-500 text-white px-2 py-1 rounded text-xs font-semibold">A</span>
+                      )}
+                      {arg.event.title}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          }}
+        />
       </div>
 
 
@@ -2384,7 +2220,7 @@ const Calendar = () => {
                           >
                             {bookingTemplates.map((template) => (
                               <option key={template._id} value={template._id}>
-                                {template.name}
+                                {template.name} {(template.email_account || template.emailAccount) === 'secondary' ? '(Camry)' : '(Avensis)'}
                               </option>
                             ))}
                           </select>
@@ -2408,7 +2244,7 @@ const Calendar = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">New Date</label>
                       <input
                         type="date"
-                        value={selectedDate ? (selectedDate.dateStr ? selectedDate.dateStr.slice(0, 10) : selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : '') : ''}
+                        value={selectedDate ? selectedDate.dateStr.slice(0, 10) : ''}
                         onChange={(e) => {
                           if (e.target.value) {
                             const newDate = new Date(e.target.value + 'T12:00:00');
@@ -2426,21 +2262,15 @@ const Calendar = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">New Time</label>
                       <div className="grid grid-cols-2 gap-2">
                         <select
-                          value={selectedDate ? (selectedDate.date ? selectedDate.date.getHours() : selectedDate instanceof Date ? selectedDate.getHours() : 9) : 9}
+                          value={selectedDate ? selectedDate.date.getHours() : 9}
                           onChange={(e) => {
                             if (selectedDate) {
-                              const currentDate = selectedDate.date || selectedDate;
-                              const newDate = new Date(currentDate);
+                              const newDate = new Date(selectedDate.date);
                               newDate.setHours(parseInt(e.target.value), newDate.getMinutes());
                               setSelectedDate({ 
                                 dateStr: newDate.toISOString(), 
                                 date: newDate 
                               });
-                              // Update time_booked in leadForm
-                              const hours = parseInt(e.target.value);
-                              const minutes = newDate.getMinutes();
-                              const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                              setLeadForm({ ...leadForm, time_booked: timeStr });
                             }
                           }}
                           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2453,21 +2283,15 @@ const Calendar = () => {
                         </select>
                         
                         <select
-                          value={selectedDate ? (selectedDate.date ? selectedDate.date.getMinutes() : selectedDate instanceof Date ? selectedDate.getMinutes() : 0) : 0}
+                          value={selectedDate ? selectedDate.date.getMinutes() : 0}
                           onChange={(e) => {
                             if (selectedDate) {
-                              const currentDate = selectedDate.date || selectedDate;
-                              const newDate = new Date(currentDate);
+                              const newDate = new Date(selectedDate.date);
                               newDate.setMinutes(parseInt(e.target.value));
                               setSelectedDate({ 
                                 dateStr: newDate.toISOString(), 
                                 date: newDate 
                               });
-                              // Update time_booked in leadForm
-                              const hours = newDate.getHours();
-                              const minutes = parseInt(e.target.value);
-                              const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                              setLeadForm({ ...leadForm, time_booked: timeStr });
                             }
                           }}
                           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2479,24 +2303,6 @@ const Calendar = () => {
                           ))}
                         </select>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Booking Slot</label>
-                      <select
-                        value={leadForm.booking_slot || 1}
-                        onChange={(e) => {
-                          setLeadForm({ ...leadForm, booking_slot: parseInt(e.target.value) });
-                          setSelectedSlot(parseInt(e.target.value));
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value={1}>Slot 1</option>
-                        <option value={2}>Slot 2</option>
-                      </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Select which slot column to book the appointment in
-                      </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
@@ -2835,7 +2641,7 @@ const Calendar = () => {
                               >
                                 {bookingTemplates.map((template) => (
                                   <option key={template._id} value={template._id}>
-                                    {template.name}
+                                    {template.name} {(template.email_account || template.emailAccount) === 'secondary' ? '(Camry)' : '(Avensis)'}
                                   </option>
                                 ))}
                               </select>
