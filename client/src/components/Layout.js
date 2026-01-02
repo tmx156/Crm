@@ -5,7 +5,7 @@ import { useSocket } from '../context/SocketContext';
 import axios from 'axios';
 import ConnectionStatus from './ConnectionStatus';
 import MessageModal from './MessageModal';
-import EdgeTalentLogo from '../EDGE TALENT 500x500 px BLK RED LOGOff.png';
+// Logo removed - using text branding
 import { 
   FiHome, 
   FiUsers, 
