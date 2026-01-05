@@ -138,9 +138,9 @@ const Calendar = () => {
       return;
     }
     
-    // Increased debounce for better performance (minimum 3 seconds between fetches)
+    // Increased debounce for better performance (minimum 2 seconds between fetches - faster response)
     const now = Date.now();
-    if (!force && now - lastFetchTime < 3000) {
+    if (!force && now - lastFetchTime < 2000) {
       console.log('📅 Calendar: Fetch debounced, too soon since last fetch');
       return;
     }
@@ -187,12 +187,12 @@ const Calendar = () => {
 
       // Use the new calendar endpoint with date filtering
       // Add cache busting and date range
-      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=1000`;
+      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=500`;
       const response = await axios.get(`/api/leads/calendar${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        timeout: 10000 // Add timeout to prevent hanging
+        timeout: 8000 // Add timeout to prevent hanging
       });
 
       const leads = response.data.leads || [];

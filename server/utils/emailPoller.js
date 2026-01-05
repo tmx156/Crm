@@ -10,17 +10,12 @@ const path = require('path');
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc';
 
-// Email account configurations
+// Email account configuration (single account - The Editorial Co)
 const EMAIL_ACCOUNTS = {
   primary: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
     pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS,
-    name: 'Primary Account'
-  },
-  secondary: {
-    user: process.env.EMAIL_USER_2 || process.env.GMAIL_USER_2,
-    pass: process.env.EMAIL_PASSWORD_2 || process.env.GMAIL_PASS_2,
-    name: 'Secondary Account'
+    name: 'The Editorial Co'
   }
 };
 

@@ -15,47 +15,65 @@ class SupabaseStorageService {
     this.initializeBucket();
   }
 
-  async initializeBucket() {
-    try {
-      // Check if bucket exists
-      const { data: buckets, error } = await supabase.storage.listBuckets();
-      
-      if (error) {
-        console.error('❌ Error listing buckets:', error);
-        return;
-      }
+  async initializeBucket(retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        // Check if bucket exists
+        const { data: buckets, error } = await supabase.storage.listBuckets();
 
-      const bucketExists = buckets.some(bucket => bucket.name === this.bucketName);
-      
-      if (!bucketExists) {
-        console.log(`📦 Creating bucket: ${this.bucketName}`);
-        const { data, error: createError } = await supabase.storage.createBucket(this.bucketName, {
-          public: true,
-          fileSizeLimit: 50 * 1024 * 1024, // 50MB limit
-          allowedMimeTypes: [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp',
-            'text/plain',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          ]
-        });
-
-        if (createError) {
-          console.error('❌ Error creating bucket:', createError);
-        } else {
-          console.log('✅ Bucket created successfully');
+        if (error) {
+          if (attempt < retries) {
+            console.log(`⏳ Bucket check failed (attempt ${attempt}/${retries}), retrying in ${attempt * 2}s...`);
+            await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+            continue;
+          }
+          console.error('❌ Error listing buckets after retries:', error);
+          console.log('⚠️ Storage service will continue - bucket operations may still work');
+          return;
         }
-      } else {
-        console.log('✅ Bucket already exists');
+
+        const bucketExists = buckets.some(bucket => bucket.name === this.bucketName);
+
+        if (!bucketExists) {
+          console.log(`📦 Creating bucket: ${this.bucketName}`);
+          const { data, error: createError } = await supabase.storage.createBucket(this.bucketName, {
+            public: true,
+            fileSizeLimit: 50 * 1024 * 1024, // 50MB limit
+            allowedMimeTypes: [
+              'application/pdf',
+              'application/msword',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'image/jpeg',
+              'image/png',
+              'image/gif',
+              'image/webp',
+              'text/plain',
+              'application/vnd.ms-excel',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ]
+          });
+
+          if (createError) {
+            console.error('❌ Error creating bucket:', createError);
+          } else {
+            console.log('✅ Bucket created successfully');
+          }
+        } else {
+          console.log('✅ Bucket already exists');
+        }
+
+        // Success - exit the retry loop
+        return;
+
+      } catch (error) {
+        if (attempt < retries) {
+          console.log(`⏳ Bucket init error (attempt ${attempt}/${retries}), retrying in ${attempt * 2}s...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+          continue;
+        }
+        console.error('❌ Error initializing bucket after retries:', error);
+        console.log('⚠️ Storage service will continue - bucket operations may still work');
       }
-    } catch (error) {
-      console.error('❌ Error initializing bucket:', error);
     }
   }
 

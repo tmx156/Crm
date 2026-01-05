@@ -89,15 +89,21 @@ const Dashboard = () => {
       const usersRes = await axios.get('/api/users');
       const users = usersRes.data || [];
 
-      // ✅ DAILY ACTIVITY FIX: Get today's leads - filter by booked_at to show leads BOOKED today (UK TIME)
+      // ✅ DAILY ACTIVITY FIX: Get today's leads - filter by updated_at to show leads updated today
+      // Then filter client-side for booked leads (more reliable than booked_at which may not be populated)
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          booked_at_start: startUTC,
-          booked_at_end: endUTC
+          updated_at_start: startUTC,
+          updated_at_end: endUTC,
+          limit: 500
         }
       });
-      const leads = leadsRes.data?.leads || [];
-      console.log(`📊 Dashboard: Found ${leads.length} leads booked today using booked_at filter`);
+      const allLeadsToday = leadsRes.data?.leads || [];
+      // Filter to only include leads that have been booked (status is Booked or ever_booked is true)
+      const leads = allLeadsToday.filter(lead =>
+        lead.status === 'Booked' || lead.ever_booked === true || lead.ever_booked === 1
+      );
+      console.log(`📊 Dashboard: Found ${leads.length} booked leads out of ${allLeadsToday.length} updated today`);
 
       // Fetch sales data for admin/viewer - only sales made on selectedActivityDate
       let salesData = [];
@@ -123,12 +129,12 @@ const Dashboard = () => {
       // Group by booker with sales
       const bookerStats = {};
 
-      // Process bookings - show ALL bookings created today using ever_booked (including cancelled)
+      // Process bookings - show ALL bookings created today (leads already filtered above)
       leads.forEach(lead => {
         const bookerId = lead.booker_id;
 
-        // ✅ EVER_BOOKED FIX: Count all bookings made today, regardless of current status
-        if (bookerId && lead.ever_booked) {
+        // Count all booked leads with a booker
+        if (bookerId) {
           if (!bookerStats[bookerId]) {
             const user = users.find(u => u.id === bookerId);
             bookerStats[bookerId] = {
@@ -966,7 +972,9 @@ const Dashboard = () => {
                     )}
 
                     <p className="text-gray-700 text-sm mb-3 line-clamp-2">
-                      {message.content || message.details?.body || message.body || message.preview || 'No content'}
+                      {typeof (message.content || message.details?.body || message.body || message.preview) === 'string'
+                        ? (message.content || message.details?.body || message.body || message.preview || 'No content')
+                        : 'Message content'}
                     </p>
 
                     <div className="flex items-center justify-between">
@@ -1010,7 +1018,11 @@ const Dashboard = () => {
                   {selectedMessage.subject && (
                     <p className="text-sm text-gray-700 mb-2">Subject: {selectedMessage.subject}</p>
                   )}
-                  <p className="text-sm text-gray-600">{selectedMessage.content || selectedMessage.preview}</p>
+                  <p className="text-sm text-gray-600">
+                    {typeof (selectedMessage.content || selectedMessage.preview) === 'string'
+                      ? (selectedMessage.content || selectedMessage.preview)
+                      : 'Message content'}
+                  </p>
                 </div>
 
                 <div className="flex items-center space-x-4 mb-4">

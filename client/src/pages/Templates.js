@@ -429,7 +429,9 @@ const Templates = () => {
                         </div>
 
                         <div className="mb-4">
-                          <p className="text-sm text-gray-600 line-clamp-2">{template.subject}</p>
+                          <p className="text-sm text-gray-600 line-clamp-2">
+                            {typeof template.subject === 'string' ? template.subject : 'No subject'}
+                          </p>
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -958,10 +960,10 @@ const Templates = () => {
                     </h3>
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <div className="mb-2">
-                        <strong>Subject:</strong> {previewData.template.subject}
+                        <strong>Subject:</strong> {typeof previewData.template.subject === 'string' ? previewData.template.subject : 'No subject'}
                       </div>
                       <div className="whitespace-pre-wrap text-sm">
-                        {previewData.template.emailBody}
+                        {typeof previewData.template.emailBody === 'string' ? previewData.template.emailBody : 'No email content'}
                       </div>
                     </div>
                   </div>
@@ -973,7 +975,7 @@ const Templates = () => {
                     </h3>
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <div className="whitespace-pre-wrap text-sm">
-                        {previewData.template.smsBody}
+                        {typeof previewData.template.smsBody === 'string' ? previewData.template.smsBody : 'No SMS content'}
                       </div>
                     </div>
                   </div>

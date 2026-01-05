@@ -247,7 +247,11 @@ const BookersTemplates = () => {
                   {template.sendSMS && <FiPhone className="text-green-500" title="SMS" />}
                   <span className="text-lg font-semibold">{template.name}</span>
                 </div>
-                <div className="text-gray-700 text-sm line-clamp-3">{template.smsBody || template.emailBody}</div>
+                <div className="text-gray-700 text-sm line-clamp-3">
+                  {typeof (template.smsBody || template.emailBody) === 'string'
+                    ? (template.smsBody || template.emailBody)
+                    : 'Template content'}
+                </div>
                 <div className="flex gap-2 mt-auto">
                   <button onClick={() => handlePreview(template)} className="p-2 hover:bg-gray-100 rounded" title="Preview"><FiEye /></button>
                   <button onClick={() => handleEdit(template)} className="p-2 hover:bg-gray-100 rounded" title="Edit"><FiEdit /></button>

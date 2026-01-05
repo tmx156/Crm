@@ -3,12 +3,11 @@ require('dotenv').config({ path: require('path').join(__dirname, '../../.env') }
 // ========================================
 // 🚫 TEMPORARY KILL SWITCH - DISABLE SENDING
 // ========================================
-const EMAIL_SENDING_DISABLED = true; // Set to false to re-enable email sending
+const EMAIL_SENDING_DISABLED = false; // Email sending enabled
 // ========================================
 
 console.log('📧 Email Service: Initializing...');
-console.log('📧 EMAIL_USER (Primary):', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
-console.log('📧 EMAIL_USER_2 (Secondary):', process.env.EMAIL_USER_2 ? '✅ Set' : '❌ NOT SET');
+console.log('📧 EMAIL_USER (The Editorial Co):', process.env.EMAIL_USER ? '✅ Set' : '❌ NOT SET');
 
 if (EMAIL_SENDING_DISABLED) {
   console.log('🚫 EMAIL SENDING DISABLED (Temporary kill switch active)');
@@ -17,17 +16,12 @@ if (EMAIL_SENDING_DISABLED) {
 
 const nodemailer = require('nodemailer');
 
-// Email account configurations
+// Email account configuration (single account - The Editorial Co)
 const EMAIL_ACCOUNTS = {
   primary: {
     user: process.env.EMAIL_USER || process.env.GMAIL_USER,
     pass: process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS,
-    name: 'Primary Account'
-  },
-  secondary: {
-    user: process.env.EMAIL_USER_2 || process.env.GMAIL_USER_2,
-    pass: process.env.EMAIL_PASSWORD_2 || process.env.GMAIL_PASS_2,
-    name: 'Secondary Account'
+    name: 'The Editorial Co'
   }
 };
 
@@ -158,7 +152,7 @@ async function sendEmail(to, subject, text, attachments = [], accountKey = 'prim
     
     const mailOptions = {
       from: {
-        name: 'Avensismodels',
+        name: 'The Editorial Co',
         address: account.user
       },
       to,

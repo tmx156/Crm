@@ -557,9 +557,9 @@ router.get('/calendar', auth, async (req, res) => {
       const startDate = new Date(start);
       const endDate = new Date(end);
       
-      // Add 7 days buffer on each side for smooth scrolling
-      startDate.setDate(startDate.getDate() - 7);
-      endDate.setDate(endDate.getDate() + 7);
+      // Add 3 days buffer on each side for faster loading
+      startDate.setDate(startDate.getDate() - 3);
+      endDate.setDate(endDate.getDate() + 3);
       
       query = query
         .gte('date_booked', startDate.toISOString())
@@ -579,8 +579,8 @@ router.get('/calendar', auth, async (req, res) => {
     if (start && end) {
       const startDate = new Date(start);
       const endDate = new Date(end);
-      startDate.setDate(startDate.getDate() - 7);
-      endDate.setDate(endDate.getDate() + 7);
+      startDate.setDate(startDate.getDate() - 3);
+      endDate.setDate(endDate.getDate() + 3);
 
       countQuery
         .gte('date_booked', startDate.toISOString())

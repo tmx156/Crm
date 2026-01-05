@@ -393,8 +393,10 @@ const SalesCommunicationModal = ({ isOpen, onClose, selectedSales, onSuccess }) 
                       <div className="mb-3">
                         <div className="text-sm font-medium text-gray-600 mb-1">Email Preview:</div>
                         <div className="text-sm text-gray-800 bg-gray-50 p-2 rounded">
-                          <div className="font-medium">Subject: {preview.emailSubject}</div>
-                          <div className="mt-2 whitespace-pre-wrap">{preview.emailBody}</div>
+                          <div className="font-medium">Subject: {typeof preview.emailSubject === 'string' ? preview.emailSubject : 'No subject'}</div>
+                          <div className="mt-2 whitespace-pre-wrap">
+                            {typeof preview.emailBody === 'string' ? preview.emailBody : 'No email content'}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -403,7 +405,7 @@ const SalesCommunicationModal = ({ isOpen, onClose, selectedSales, onSuccess }) 
                       <div>
                         <div className="text-sm font-medium text-gray-600 mb-1">SMS Preview:</div>
                         <div className="text-sm text-gray-800 bg-gray-50 p-2 rounded">
-                          {preview.smsBody}
+                          {typeof preview.smsBody === 'string' ? preview.smsBody : 'No SMS content'}
                         </div>
                       </div>
                     )}
