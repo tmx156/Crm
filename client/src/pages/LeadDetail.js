@@ -1532,7 +1532,11 @@ const LeadDetail = () => {
                                 ) : (
                                   Object.entries(entry.details).map(([key, value]) => (
                                     <div key={key} className="mb-1">
-                                      <span className="font-medium">{key}:</span> {value}
+                                      <span className="font-medium">{key}:</span> {
+                                        typeof value === 'object' && value !== null
+                                          ? JSON.stringify(value)
+                                          : String(value ?? 'N/A')
+                                      }
                                     </div>
                                   ))
                                 )}
@@ -1544,7 +1548,11 @@ const LeadDetail = () => {
                                 <div className="font-medium mb-1">Lead State:</div>
                                 {Object.entries(entry.leadSnapshot).map(([key, value]) => (
                                   <div key={key}>
-                                    <span className="font-medium">{key}:</span> {value || 'N/A'}
+                                    <span className="font-medium">{key}:</span> {
+                                      typeof value === 'object' && value !== null
+                                        ? JSON.stringify(value)
+                                        : String(value ?? 'N/A')
+                                    }
                                   </div>
                                 ))}
                               </div>
