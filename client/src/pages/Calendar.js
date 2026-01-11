@@ -61,7 +61,12 @@ const Calendar = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('Duplicate');
   const [rejecting, setRejecting] = useState(false);
-  
+
+  // Resend welcome pack state
+  const [resendingWelcomePack, setResendingWelcomePack] = useState(false);
+  const [welcomePackTemplates, setWelcomePackTemplates] = useState([]);
+  const [selectedWelcomePackTemplate, setSelectedWelcomePackTemplate] = useState('');
+
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState(null);
 
@@ -632,6 +637,36 @@ const Calendar = () => {
       socket.off('message_received', handleSmsReceived);
     };
   }, [socket, selectedEvent]);
+
+  // Fetch booking confirmation templates for welcome pack dropdown
+  const fetchWelcomePackTemplates = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/templates', {
+        headers: { 'x-auth-token': token }
+      });
+
+      if (response.data) {
+        // Filter only booking_confirmation type templates
+        const bookingTemplates = response.data.filter(
+          template => template.type === 'booking_confirmation' && template.is_active !== false
+        );
+        setWelcomePackTemplates(bookingTemplates);
+
+        // Set default selection to first template if available
+        if (bookingTemplates.length > 0 && !selectedWelcomePackTemplate) {
+          setSelectedWelcomePackTemplate(bookingTemplates[0].id || bookingTemplates[0]._id);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching welcome pack templates:', error);
+    }
+  }, [selectedWelcomePackTemplate]);
+
+  // Load templates when component mounts
+  useEffect(() => {
+    fetchWelcomePackTemplates();
+  }, [fetchWelcomePackTemplates]);
 
   const checkForHighlighting = (eventsToCheck) => {
     // Check if there's a booking to highlight from Daily Diary
@@ -1546,6 +1581,56 @@ const Calendar = () => {
     setNotesText('');
   };
 
+  const handleResendWelcomePack = async () => {
+    if (!selectedEvent?.extendedProps?.lead?.id) {
+      alert('No lead selected');
+      return;
+    }
+
+    const leadId = selectedEvent.extendedProps.lead.id;
+    const bookingDate = selectedEvent.extendedProps.lead.date_booked;
+
+    if (!bookingDate) {
+      alert('No booking date found for this lead');
+      return;
+    }
+
+    if (!selectedWelcomePackTemplate) {
+      alert('Please select a template');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to resend the welcome pack to this lead?')) {
+      return;
+    }
+
+    setResendingWelcomePack(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `/api/leads/${leadId}/send-booking-confirmation`,
+        {
+          appointmentDate: bookingDate,
+          sendEmail: sendEmail,
+          sendSms: sendSms,
+          templateId: selectedWelcomePackTemplate
+        },
+        { headers: { 'x-auth-token': token } }
+      );
+
+      if (response.data.success) {
+        alert('Welcome pack sent successfully!');
+      } else {
+        alert('Failed to send welcome pack: ' + (response.data.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error resending welcome pack:', error);
+      alert('Failed to send welcome pack: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setResendingWelcomePack(false);
+    }
+  };
+
   const getBookingPreview = () => {
     if (!selectedDate) return null;
     
@@ -2432,6 +2517,43 @@ const Calendar = () => {
                         </div>
                       </div>
                     )}
+                    {/* Resend Welcome Pack */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                          <FiMail className="h-4 w-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Welcome Pack</p>
+                          <p className="text-xs text-gray-500">Resend booking confirmation</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <select
+                          value={selectedWelcomePackTemplate}
+                          onChange={(e) => setSelectedWelcomePackTemplate(e.target.value)}
+                          className="flex-1 px-3 py-2 text-sm border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select template...</option>
+                          {welcomePackTemplates.map((template) => (
+                            <option key={template.id || template._id} value={template.id || template._id}>
+                              {template.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleResendWelcomePack}
+                          disabled={resendingWelcomePack || !selectedWelcomePackTemplate}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                            resendingWelcomePack || !selectedWelcomePackTemplate
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-blue-500 text-white hover:bg-blue-600 hover:shadow-md'
+                          }`}
+                        >
+                          {resendingWelcomePack ? 'Sending...' : 'Resend'}
+                        </button>
+                      </div>
+                    </div>
                     {/* Quick Status Actions */}
                     <div className="bg-white border border-gray-100 rounded-lg p-3">
                       <h5 className="text-sm font-bold text-gray-900 mb-2 flex items-center">

@@ -4148,11 +4148,11 @@ router.post('/:id/send-sms', auth, async (req, res) => {
 });
 
 // @route   POST /api/leads/:id/send-booking-confirmation
-// @desc    Send booking confirmation SMS
+// @desc    Send booking confirmation (email and/or SMS) with optional template selection
 // @access  Private
 router.post('/:id/send-booking-confirmation', auth, async (req, res) => {
   try {
-    const { appointmentDate } = req.body;
+    const { appointmentDate, sendEmail = false, sendSms = true, templateId } = req.body;
     if (!req.params.id || !appointmentDate) {
       return res.status(400).json({ message: 'Invalid lead ID or appointment date' });
     }
@@ -4168,14 +4168,29 @@ router.post('/:id/send-booking-confirmation', auth, async (req, res) => {
 
     const lead = leads[0];
 
-    if (!lead.phone) {
-      return res.status(400).json({ message: 'Lead does not have a phone number' });
+    // Check if at least one channel is available
+    if (sendSms && !lead.phone) {
+      return res.status(400).json({ message: 'Lead does not have a phone number for SMS' });
+    }
+    if (sendEmail && !lead.email) {
+      return res.status(400).json({ message: 'Lead does not have an email address' });
+    }
+    if (!sendEmail && !sendSms) {
+      return res.status(400).json({ message: 'At least one channel (email or SMS) must be selected' });
     }
 
-    const smsResult = await MessagingService.sendBookingConfirmation(lead.id, req.user.id, appointmentDate, { sendEmail: false, sendSms: true });
+    const result = await MessagingService.sendBookingConfirmation(lead.id, req.user.id, appointmentDate, {
+      sendEmail,
+      sendSms,
+      templateId: templateId || null
+    });
 
-    if (smsResult.success) {
+    if (result && result.success !== false) {
       // Add to booking history
+      const channels = [];
+      if (sendEmail) channels.push('email');
+      if (sendSms) channels.push('SMS');
+
       await addBookingHistoryEntry(
         req.params.id,
         'BOOKING_CONFIRMATION_SENT',
@@ -4184,23 +4199,26 @@ router.post('/:id/send-booking-confirmation', auth, async (req, res) => {
         {
           appointmentDate: appointmentDate,
           phone: lead.phone,
+          email: lead.email,
+          channels: channels.join(', '),
+          templateId: templateId || 'default',
           timestamp: new Date()
         },
         createLeadSnapshot(lead)
       );
 
-      res.json({ 
-        success: true, 
-        message: 'Booking confirmation SMS sent successfully',
-        provider: smsResult.provider || 'bulksms',
-        messageId: smsResult.messageId || null,
-        status: smsResult.status || 'submitted'
+      res.json({
+        success: true,
+        message: `Booking confirmation sent via ${channels.join(' and ')}`,
+        provider: result.provider || 'mixed',
+        messageId: result.messageId || null,
+        status: result.status || 'submitted'
       });
     } else {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Failed to send booking confirmation SMS',
-        error: smsResult.error
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send booking confirmation',
+        error: result?.error || 'Unknown error'
       });
     }
 
