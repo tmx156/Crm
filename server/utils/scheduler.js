@@ -1,3 +1,4 @@
+const cron = require('node-cron');
 const MessagingService = require('./messagingService');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
@@ -7,52 +8,90 @@ const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKe
 
 class Scheduler {
   constructor() {
-    this.reminderInterval = null;
+    this.cronJob = null;
     this.isRunning = false;
     this.lastRun = null;
     this.nextRun = null;
+    this.scheduledTime = null;
   }
 
-  // Start the scheduler
+  // Start the scheduler - checks every minute for an exact time match
   start() {
     if (this.isRunning) {
       console.log('Scheduler is already running');
       return;
     }
 
-    console.log('🕐 Starting appointment reminder scheduler...');
+    console.log('🕐 Starting appointment reminder scheduler (cron)...');
     this.isRunning = true;
 
-    // Run appointment reminders every 15 minutes
-    const intervalMs = 15 * 60 * 1000; // 15 minutes
-    this.reminderInterval = setInterval(async () => {
+    // Run every minute, check if current HH:MM matches the template's reminder_time
+    this.cronJob = cron.schedule('* * * * *', async () => {
       try {
-        await this.processAppointmentReminders();
+        await this.tick();
       } catch (error) {
-        console.error('Error processing appointment reminders:', error);
+        console.error('Scheduler tick error:', error);
       }
-    }, intervalMs);
+    });
 
-    // Calculate next run time
-    this.nextRun = new Date(Date.now() + intervalMs).toISOString();
-
-    // Run immediately on startup
-    this.processAppointmentReminders();
+    console.log('✅ Scheduler running - checks every minute for exact time match');
   }
 
   // Stop the scheduler
   stop() {
-    if (this.reminderInterval) {
-      clearInterval(this.reminderInterval);
-      this.reminderInterval = null;
+    if (this.cronJob) {
+      this.cronJob.stop();
+      this.cronJob = null;
     }
     this.isRunning = false;
     this.nextRun = null;
+    this.scheduledTime = null;
     console.log('🛑 Appointment reminder scheduler stopped');
   }
 
+  // Lightweight tick - runs every minute, only does work when time matches exactly
+  async tick() {
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Fetch the template's configured time (quick query)
+    const { data: templates, error } = await supabase
+      .from('templates')
+      .select('reminder_time')
+      .eq('type', 'appointment_reminder')
+      .eq('is_active', true)
+      .limit(1);
+
+    if (error || !templates || templates.length === 0) return;
+
+    const reminderTime = templates[0].reminder_time || '09:00';
+    this.scheduledTime = reminderTime;
+    this.nextRun = this.calculateNextRun(reminderTime);
+
+    // Exact match: HH:MM === HH:MM
+    if (currentTime === reminderTime) {
+      console.log(`🔔 Time match! ${currentTime} === ${reminderTime} - sending reminders...`);
+      await this.processAppointmentReminders(true);
+    }
+  }
+
+  // Calculate when the next run will be
+  calculateNextRun(reminderTime) {
+    const [h, m] = reminderTime.split(':').map(Number);
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(h, m, 0, 0);
+
+    // If the time already passed today, schedule for tomorrow
+    if (next <= now) {
+      next.setDate(next.getDate() + 1);
+    }
+
+    return next.toISOString();
+  }
+
   // Process appointment reminders
-  // skipTimeCheck = true when triggered manually via admin button
+  // skipTimeCheck = true for both cron match and manual triggers
   async processAppointmentReminders(skipTimeCheck = false) {
     try {
       this.lastRun = new Date().toISOString();
@@ -79,21 +118,6 @@ class Scheduler {
       const template = templates[0];
       const reminderDays = template.reminder_days || 1;
       const reminderTime = template.reminder_time || '09:00';
-
-      // Check if it's the right time to send (skip check for manual triggers)
-      const [sendHour, sendMinute] = reminderTime.split(':').map(Number);
-      const now = new Date();
-      const currentHour = now.getHours();
-
-      if (!skipTimeCheck && currentHour !== sendHour) {
-        console.log(`⏳ Not time to send yet. Configured: ${reminderTime}, Current hour: ${currentHour}:00. Skipping.`);
-        this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        return;
-      }
-
-      if (skipTimeCheck) {
-        console.log(`🔔 Manual trigger - skipping time check (configured: ${reminderTime}, current: ${currentHour}:00)`);
-      }
 
       console.log(`📋 Using template: "${template.name}" (remind ${reminderDays} day(s) before, at ${reminderTime})`);
 
@@ -132,7 +156,6 @@ class Scheduler {
 
       if (!leads || leads.length === 0) {
         console.log(`No leads with appointments on ${reminderDate.toDateString()}`);
-        this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         return;
       }
 
@@ -185,8 +208,9 @@ class Scheduler {
         }
       }
 
-      this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      this.nextRun = this.calculateNextRun(reminderTime);
       console.log(`✅ Appointment reminders completed: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
+      console.log(`📅 Next run scheduled for: ${this.nextRun}`);
     } catch (error) {
       console.error('Error processing appointment reminders:', error);
     }
@@ -227,7 +251,8 @@ class Scheduler {
     return {
       isRunning: this.isRunning,
       lastRun: this.lastRun,
-      nextRun: this.nextRun
+      nextRun: this.nextRun,
+      scheduledTime: this.scheduledTime
     };
   }
 }
