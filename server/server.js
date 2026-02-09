@@ -431,6 +431,24 @@ app.use('/api/booker-analytics', bookerAnalyticsRoutes);
 app.use('/api/email-test', emailTestRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
+// Scheduler API - manual trigger + status
+const { auth: schedulerAuth } = require('./middleware/auth');
+app.get('/api/scheduler/status', schedulerAuth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  res.json(scheduler.getStatus());
+});
+app.post('/api/scheduler/run-now', schedulerAuth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  try {
+    console.log('🔔 Manual scheduler trigger by admin');
+    await scheduler.processAppointmentReminders(true); // true = skip time check
+    res.json({ success: true, message: 'Appointment reminders processed', lastRun: scheduler.lastRun });
+  } catch (error) {
+    console.error('Manual scheduler run failed:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // --- Lightweight short link storage for long booking confirmations ---
 // Uses Supabase for persistent storage
 function generateId(length = 8) {

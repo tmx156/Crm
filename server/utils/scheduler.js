@@ -23,8 +23,8 @@ class Scheduler {
     console.log('🕐 Starting appointment reminder scheduler...');
     this.isRunning = true;
 
-    // Run appointment reminders every hour
-    const intervalMs = 60 * 60 * 1000; // 1 hour
+    // Run appointment reminders every 15 minutes
+    const intervalMs = 15 * 60 * 1000; // 15 minutes
     this.reminderInterval = setInterval(async () => {
       try {
         await this.processAppointmentReminders();
@@ -52,7 +52,8 @@ class Scheduler {
   }
 
   // Process appointment reminders
-  async processAppointmentReminders() {
+  // skipTimeCheck = true when triggered manually via admin button
+  async processAppointmentReminders(skipTimeCheck = false) {
     try {
       this.lastRun = new Date().toISOString();
       console.log('🔔 Processing appointment reminders...');
@@ -79,16 +80,19 @@ class Scheduler {
       const reminderDays = template.reminder_days || 1;
       const reminderTime = template.reminder_time || '09:00';
 
-      // Check if it's the right time to send
+      // Check if it's the right time to send (skip check for manual triggers)
       const [sendHour, sendMinute] = reminderTime.split(':').map(Number);
       const now = new Date();
       const currentHour = now.getHours();
 
-      // Only send during the configured hour (scheduler runs hourly)
-      if (currentHour !== sendHour) {
+      if (!skipTimeCheck && currentHour !== sendHour) {
         console.log(`⏳ Not time to send yet. Configured: ${reminderTime}, Current hour: ${currentHour}:00. Skipping.`);
-        this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         return;
+      }
+
+      if (skipTimeCheck) {
+        console.log(`🔔 Manual trigger - skipping time check (configured: ${reminderTime}, current: ${currentHour}:00)`);
       }
 
       console.log(`📋 Using template: "${template.name}" (remind ${reminderDays} day(s) before, at ${reminderTime})`);
@@ -128,7 +132,7 @@ class Scheduler {
 
       if (!leads || leads.length === 0) {
         console.log(`No leads with appointments on ${reminderDate.toDateString()}`);
-        this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         return;
       }
 
@@ -181,7 +185,7 @@ class Scheduler {
         }
       }
 
-      this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      this.nextRun = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       console.log(`✅ Appointment reminders completed: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
     } catch (error) {
       console.error('Error processing appointment reminders:', error);
