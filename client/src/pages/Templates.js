@@ -24,6 +24,7 @@ const Templates = () => {
     emailBody: '',
     smsBody: '',
     reminderDays: 5,
+    reminderTime: '09:00',
     sendEmail: true,
     sendSMS: true,
     isActive: true,
@@ -197,6 +198,7 @@ const Templates = () => {
       emailBody: template.emailBody,
       smsBody: template.smsBody,
       reminderDays: template.reminderDays || 5,
+      reminderTime: template.reminderTime || '09:00',
       sendEmail: template.sendEmail,
       sendSMS: template.sendSMS,
       isActive: template.isActive,
@@ -282,6 +284,7 @@ const Templates = () => {
       emailBody: '',
       smsBody: '',
       reminderDays: 5,
+      reminderTime: '09:00',
       sendEmail: true,
       sendSMS: true,
       isActive: true,
@@ -444,9 +447,14 @@ const Templates = () => {
                               {template.isActive ? 'Active' : 'Inactive'}
                             </span>
                             {template.type === 'appointment_reminder' && (
-                              <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                                {template.reminderDays} days
-                              </span>
+                              <>
+                                <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                                  {template.reminderDays} day{template.reminderDays !== 1 ? 's' : ''} before
+                                </span>
+                                <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
+                                  at {template.reminderTime || '09:00'}
+                                </span>
+                              </>
                             )}
                           </div>
 
@@ -591,18 +599,97 @@ const Templates = () => {
                         </div>
 
                         {formData.type === 'appointment_reminder' && (
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              Reminder Days
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="30"
-                              value={formData.reminderDays}
-                              onChange={(e) => setFormData({...formData, reminderDays: parseInt(e.target.value)})}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                            />
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Days Before Appointment
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="30"
+                                value={formData.reminderDays}
+                                onChange={(e) => setFormData({...formData, reminderDays: parseInt(e.target.value) || 1})}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Send At Time
+                              </label>
+                              <input
+                                type="time"
+                                value={formData.reminderTime}
+                                onChange={(e) => setFormData({...formData, reminderTime: e.target.value})}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                              />
+                            </div>
+
+                            {/* Auto Preview */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Send Preview</span>
+                              </div>
+                              {(() => {
+                                const days = formData.reminderDays || 1;
+                                const [h, m] = (formData.reminderTime || '09:00').split(':');
+                                const timeStr = new Date(2000, 0, 1, parseInt(h), parseInt(m)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                                // Today's send would target appointments X days from now
+                                const today = new Date();
+                                const targetApptDate = new Date(today);
+                                targetApptDate.setDate(targetApptDate.getDate() + days);
+
+                                const todayStr = today.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                                const apptDateStr = targetApptDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+                                // Tomorrow's send
+                                const tomorrow = new Date(today);
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                const tomorrowAppt = new Date(today);
+                                tomorrowAppt.setDate(tomorrowAppt.getDate() + 1 + days);
+
+                                const tomorrowStr = tomorrow.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                                const tomorrowApptStr = tomorrowAppt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+                                // Day after
+                                const dayAfter = new Date(today);
+                                dayAfter.setDate(dayAfter.getDate() + 2);
+                                const dayAfterAppt = new Date(today);
+                                dayAfterAppt.setDate(dayAfterAppt.getDate() + 2 + days);
+
+                                const dayAfterStr = dayAfter.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                                const dayAfterApptStr = dayAfterAppt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+                                const rows = [
+                                  { send: todayStr, appt: apptDateStr, label: 'Today' },
+                                  { send: tomorrowStr, appt: tomorrowApptStr, label: 'Tomorrow' },
+                                  { send: dayAfterStr, appt: dayAfterApptStr, label: '' }
+                                ];
+
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1.5 text-xs">
+                                      <div className="font-semibold text-gray-500"></div>
+                                      <div className="font-semibold text-gray-500">Bookings on</div>
+                                      <div className="font-semibold text-gray-500">Emailed on</div>
+                                      {rows.map((row, i) => (
+                                        <React.Fragment key={i}>
+                                          <div className="text-gray-400 font-medium">{row.label}</div>
+                                          <div className="font-semibold text-gray-800">{row.appt}</div>
+                                          <div className="text-blue-700 font-semibold">{row.send} <span className="text-blue-500">at {timeStr}</span></div>
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                    <p className="text-xs text-gray-400 pt-1 border-t border-blue-100 mt-2">
+                                      {days} day{days !== 1 ? 's' : ''} before appointment at {timeStr}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
                         )}
 

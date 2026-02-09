@@ -22,13 +22,13 @@ const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || null
   },
 
-  // SMS Configuration (BulkSMS) - Check credentials
+  // SMS Configuration (BulkSMS) - reads from .env only, no fallback credentials
   sms: {
-    username: process.env.BULKSMS_USERNAME || 'tmx2566',
-    password: process.env.BULKSMS_PASSWORD || 'Booker100',
+    username: process.env.BULKSMS_USERNAME || null,
+    password: process.env.BULKSMS_PASSWORD || null,
     fromNumber: process.env.BULKSMS_FROM_NUMBER || '+447786201100',
-    pollEnabled: false, // DISABLED - BulkSMS polling turned off
-    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000 // 60s (1 min) - optimized for egress (was 30s)
+    pollEnabled: (process.env.BULKSMS_POLL_ENABLED || 'false').toLowerCase() === 'true',
+    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000
   },
 
   // Email Configuration

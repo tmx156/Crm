@@ -51,7 +51,7 @@ const legacyRoutes = require('./routes/legacy');
 const bookerAnalyticsRoutes = require('./routes/booker-analytics');
 const emailTestRoutes = require('./routes/email-test');
 const usersPublicRoutes = require('./routes/usersPublic');
-// TEMPORARILY DISABLED: const scheduler = require('./utils/scheduler');
+const scheduler = require('./utils/scheduler');
 const { startEmailPoller } = require('./utils/emailPoller');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
 // Removed legacy auto-sync import to avoid accidental background duplication
@@ -627,8 +627,8 @@ testDatabaseConnection().then(() => {
     console.log(`🔌 WebSocket server ready for real-time sync`);
     console.log(`🗄️  Connected to Supabase database`);
     
-    // DISABLED: Start the message scheduler
-    // scheduler.start();
+    // Start the appointment reminder scheduler
+    scheduler.start();
 
     // SMS auto-sync note
     console.log('📡 Using BulkSMS for inbound polling');

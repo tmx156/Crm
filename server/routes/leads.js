@@ -111,6 +111,7 @@ const safeParseBookingHistory = (bookingHistory) => {
 };
 
 // Helper function to add booking history entry
+const MAX_HISTORY_ENTRIES = 50; // Limit history to prevent database bloat
 const addBookingHistoryEntry = async (leadId, action, performedBy, performedByName, details, leadSnapshot) => {
   try {
     const historyEntry = {
@@ -118,8 +119,8 @@ const addBookingHistoryEntry = async (leadId, action, performedBy, performedByNa
       timestamp: new Date(),
       performedBy,
       performedByName,
-      details: details || {},
-      leadSnapshot: leadSnapshot || {}
+      details: details || {}
+      // Note: leadSnapshot removed to reduce data size
     };
 
     // Fetch current booking history from Supabase
@@ -128,9 +129,15 @@ const addBookingHistoryEntry = async (leadId, action, performedBy, performedByNa
       eq: { id: leadId }
     });
     const lead = leadResult.length > 0 ? leadResult[0] : null;
-    const currentHistory = safeParseBookingHistory(lead?.booking_history);
+    let currentHistory = safeParseBookingHistory(lead?.booking_history);
+
+    // Limit history size to prevent database bloat
+    if (currentHistory.length >= MAX_HISTORY_ENTRIES) {
+      currentHistory = currentHistory.slice(-MAX_HISTORY_ENTRIES + 1); // Keep last N-1 entries
+    }
+
     const updatedHistory = [...currentHistory, historyEntry];
-    
+
     // Update booking_history as JSON string
     await dbManager.update('leads', { booking_history: JSON.stringify(updatedHistory) }, { id: leadId });
     console.log(`📅 Booking history added: ${action} for lead ${leadId} by ${performedByName}`);
@@ -1161,23 +1168,22 @@ router.post('/', auth, async (req, res) => {
           eq: { id: _id }
         });
         
-        // Send booking confirmation if requested
-        try {
-          if (updateData.date_booked && (bodyWithoutId.sendEmail || bodyWithoutId.sendSms)) {
-            await MessagingService.sendBookingConfirmation(
-              _id,
-              req.user.id,
-              updateData.date_booked,
-              {
-                sendEmail: bodyWithoutId.sendEmail || false,
-                sendSms: bodyWithoutId.sendSms || false,
-                templateId: bodyWithoutId.templateId || null
-              }
-            );
-            console.log(`📧 Booking confirmation triggered for lead ${_id}`);
-          }
-        } catch (e) {
-          console.error('❌ Failed to send booking confirmation:', e);
+        // Send booking confirmation if requested - ASYNC (non-blocking)
+        if (updateData.date_booked && (bodyWithoutId.sendEmail || bodyWithoutId.sendSms)) {
+          MessagingService.sendBookingConfirmation(
+            _id,
+            req.user.id,
+            updateData.date_booked,
+            {
+              sendEmail: bodyWithoutId.sendEmail || false,
+              sendSms: bodyWithoutId.sendSms || false,
+              templateId: bodyWithoutId.templateId || null
+            }
+          ).then(() => {
+            console.log(`📧 Booking confirmation sent for lead ${_id}`);
+          }).catch(e => {
+            console.error('❌ Failed to send booking confirmation:', e.message);
+          });
         }
         
         // Emit real-time update
@@ -1276,20 +1282,18 @@ router.post('/', auth, async (req, res) => {
           });
           const updatedLead = updatedLeads[0];
 
-          // Immediately trigger booking confirmation on duplicate-update path as well,
-          // because some clients may not issue the subsequent PUT we rely on.
-          try {
-            if (finalBody.date_booked) {
-              await MessagingService.sendBookingConfirmation(
-                existingLead.id,
-                req.user.id,
-                finalBody.date_booked,
-                { sendEmail: sendEmail || false, sendSms: sendSms || false }
-              );
-              console.log(`📧 Booking confirmation triggered (duplicate-update path) for lead ${existingLead.id}`);
-            }
-          } catch (e) {
-            console.error('❌ Failed to send booking confirmation (duplicate-update path):', e);
+          // Immediately trigger booking confirmation on duplicate-update path as well - ASYNC (non-blocking)
+          if (finalBody.date_booked) {
+            MessagingService.sendBookingConfirmation(
+              existingLead.id,
+              req.user.id,
+              finalBody.date_booked,
+              { sendEmail: sendEmail || false, sendSms: sendSms || false }
+            ).then(() => {
+              console.log(`📧 Booking confirmation sent (duplicate-update path) for lead ${existingLead.id}`);
+            }).catch(e => {
+              console.error('❌ Failed to send booking confirmation (duplicate-update path):', e.message);
+            });
           }
 
           // Enhanced real-time update emission
@@ -1466,20 +1470,19 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-    // Trigger booking confirmation (email/SMS) for newly created booked leads
-    try {
-      if (leadData.status === 'Booked' && leadData.date_booked) {
-        const { sendEmail, sendSms } = filteredBody || {};
-        await MessagingService.sendBookingConfirmation(
-          lead.id,
-          leadData.booker,
-          leadData.date_booked,
-          { sendEmail, sendSms }
-        );
-        console.log(`📧 Booking confirmation triggered for new lead ${lead.id}`);
-      }
-    } catch (msgErr) {
-      console.error('❌ Failed to send booking confirmation for new lead:', msgErr);
+    // Trigger booking confirmation (email/SMS) for newly created booked leads - ASYNC (non-blocking)
+    if (leadData.status === 'Booked' && leadData.date_booked) {
+      const { sendEmail, sendSms } = filteredBody || {};
+      MessagingService.sendBookingConfirmation(
+        lead.id,
+        leadData.booker,
+        leadData.date_booked,
+        { sendEmail, sendSms }
+      ).then(() => {
+        console.log(`📧 Booking confirmation sent for new lead ${lead.id}`);
+      }).catch(msgErr => {
+        console.error('❌ Failed to send booking confirmation for new lead:', msgErr.message);
+      });
     }
 
     // Enhanced real-time update for lead creation
@@ -1778,20 +1781,20 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         createLeadSnapshot(updatedLead)
       );
 
-      // Trigger booking confirmation (email + optional SMS per template)
-      try {
-        if (req.body.date_booked) {
-          const { sendEmail, sendSms } = req.body;
-          await MessagingService.sendBookingConfirmation(
-            req.params.id,
-            currentUser.id,
-            req.body.date_booked,
-            { sendEmail, sendSms }
-          );
-          console.log(`📧 Booking confirmation triggered for lead ${req.params.id}`);
-        }
-      } catch (msgErr) {
-        console.error('❌ Failed to send booking confirmation notification:', msgErr);
+      // Trigger booking confirmation (email + optional SMS per template) - ASYNC (non-blocking)
+      if (req.body.date_booked) {
+        const { sendEmail, sendSms } = req.body;
+        // Fire and forget - don't block calendar update
+        MessagingService.sendBookingConfirmation(
+          req.params.id,
+          currentUser.id,
+          req.body.date_booked,
+          { sendEmail, sendSms }
+        ).then(() => {
+          console.log(`📧 Booking confirmation sent for lead ${req.params.id}`);
+        }).catch(msgErr => {
+          console.error('❌ Failed to send booking confirmation:', msgErr.message);
+        });
       }
     } else if (isReschedule || isDateChange) {
       console.log(`📅 Adding RESCHEDULE for lead ${lead.name} (oldDate: ${oldDateBooked}, newDate: ${req.body.date_booked})`);
@@ -1813,20 +1816,20 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         createLeadSnapshot(updatedLead)
       );
 
-      // Also send updated booking confirmation on reschedule
-      try {
-        if (req.body.date_booked) {
-          const { sendEmail, sendSms } = req.body;
-          await MessagingService.sendBookingConfirmation(
-            req.params.id,
-            currentUser.id,
-            req.body.date_booked,
-            { sendEmail, sendSms }
-          );
+      // Also send updated booking confirmation on reschedule - ASYNC (non-blocking)
+      if (req.body.date_booked) {
+        const { sendEmail, sendSms } = req.body;
+        // Fire and forget - don't block calendar update
+        MessagingService.sendBookingConfirmation(
+          req.params.id,
+          currentUser.id,
+          req.body.date_booked,
+          { sendEmail, sendSms }
+        ).then(() => {
           console.log(`📧 Reschedule confirmation sent for lead ${req.params.id}`);
-        }
-      } catch (msgErr) {
-        console.error('❌ Failed to send reschedule confirmation notification:', msgErr);
+        }).catch(msgErr => {
+          console.error('❌ Failed to send reschedule confirmation:', msgErr.message);
+        });
       }
     } else if (isCancellation) {
       console.log(`📅 Adding CANCELLATION for lead ${lead.name} - moving to Cancelled`);

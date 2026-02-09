@@ -3,6 +3,7 @@ const path = require('path');
 const { sendEmail: sendActualEmail } = require('./emailService');
 const { sendSMS: sendActualSMS } = require('./smsService');
 const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid'); // Use uuid package for reliable ID generation
 
 // Supabase configuration
 const supabaseUrl = 'https://tnltvfzltdeilanxhlvy.supabase.co';
@@ -14,17 +15,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // }; // Removed - using Supabase only
 
 // Helper function to add booking history entry using Supabase
+const MAX_HISTORY_ENTRIES = 50; // Limit history to prevent database bloat
 async function addBookingHistoryEntry(leadId, action, performedById, performedByName, details, leadSnapshot) {
   try {
     console.log(`📝 Adding booking history entry for lead ${leadId}, action: ${action}`);
 
-    // Add entry to lead's booking_history array
+    // Add entry to lead's booking_history array (without leadSnapshot to reduce size)
     const historyEntry = {
       action,
       performed_by: performedById,
       performed_by_name: performedByName,
       details: details || {},
-      lead_snapshot: leadSnapshot,
       timestamp: new Date().toISOString()
     };
 
@@ -40,7 +41,13 @@ async function addBookingHistoryEntry(leadId, action, performedById, performedBy
       return null;
     }
 
-    const currentHistory = currentLead.booking_history || [];
+    let currentHistory = currentLead.booking_history || [];
+
+    // Limit history size to prevent database bloat
+    if (currentHistory.length >= MAX_HISTORY_ENTRIES) {
+      currentHistory = currentHistory.slice(-MAX_HISTORY_ENTRIES + 1); // Keep last N-1 entries
+    }
+
     const updatedHistory = [...currentHistory, historyEntry];
 
     // Update the lead with new booking history
@@ -58,16 +65,8 @@ async function addBookingHistoryEntry(leadId, action, performedById, performedBy
     return updatedHistory.length - 1; // Return index of new entry
   } catch (error) {
     console.error('❌ Error adding booking history entry:', error);
-    console.error('❌ Error details:', {
-      message: error.message,
-      details: error.details || error.error?.details || 'No details available',
-      hint: error.hint || error.error?.hint || '',
-      code: error.code || error.error?.code || ''
-    });
-
-    // Don't throw the error - this should not break the booking confirmation flow
-    // Just log the error and return null to indicate failure
-    console.warn('⚠️ Continuing without booking history entry to prevent booking confirmation failure');
+    // Don't throw - continue without history to prevent booking failure
+    console.warn('⚠️ Continuing without booking history entry');
     return null;
   }
 }
@@ -269,9 +268,12 @@ class MessagingService {
       }
 
       // Create message record using Supabase
+      const messageId = uuidv4();
+      console.log(`📝 Generated message ID: ${messageId}`);
       const { data: messageResult, error: messageError } = await supabase
         .from('messages')
         .insert({
+          id: messageId,
           lead_id: leadId,
           type: (effectiveSendEmail && effectiveSendSms) ? 'both' : (effectiveSendEmail ? 'email' : 'sms'),
           content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
@@ -501,16 +503,24 @@ class MessagingService {
         }
       }
 
-      // Get user using Supabase
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Get user using Supabase - fall back to a system user if userId is null/invalid
+      let user = null;
+      if (userId) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-      if (userError || !user) {
-        console.error('Error fetching user for reminder:', userError);
-        throw new Error('User not found');
+        if (!userError && userData) {
+          user = userData;
+        }
+      }
+
+      // If user not found (e.g. booker_id was null), create a system placeholder
+      if (!user) {
+        console.log(`⚠️ User not found for ID "${userId}", using system placeholder for reminder`);
+        user = { id: null, name: 'System', email: '' };
       }
 
       // Get appointment reminder template using Supabase
@@ -532,24 +542,37 @@ class MessagingService {
       }
 
       const template = templates[0];
+      const effectiveSendEmail = !!template.send_email;
+      const effectiveSendSms = !!template.send_sms;
+      const emailAccount = template.email_account || 'primary';
+
+      // If neither channel selected, do nothing
+      if (!effectiveSendEmail && !effectiveSendSms) {
+        console.log('ℹ️ Appointment reminder suppressed (both email and SMS unchecked)');
+        return null;
+      }
+
       const processedTemplate = this.processTemplate(template, lead, user, bookingDate, bookerInfo);
 
       // Create message record using Supabase
+      const reminderMessageId = uuidv4();
+      console.log(`📝 Generated reminder message ID: ${reminderMessageId}`);
       const { data: messageResult, error: messageError } = await supabase
         .from('messages')
         .insert({
+          id: reminderMessageId,
           lead_id: leadId,
-          type: template.send_email && template.send_sms ? 'both' :
-                template.send_email ? 'email' : 'sms',
-          content: template.send_email ? processedTemplate.email_body : processedTemplate.sms_body,
+          type: (effectiveSendEmail && effectiveSendSms) ? 'both' :
+                effectiveSendEmail ? 'email' : 'sms',
+          content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
           status: 'sent',
-          email_status: template.send_email ? 'sent' : null,
-          subject: template.send_email ? processedTemplate.subject : null,
-          recipient_email: template.send_email ? lead.email : null,
-          recipient_phone: template.send_sms ? lead.phone : null,
-          sent_by: userId && userId !== 'system' ? userId : null,
-          sent_by_name: user?.name || 'System',
-          template_id: template?.id || null,
+          email_status: effectiveSendEmail ? 'sent' : null,
+          subject: effectiveSendEmail ? processedTemplate.subject : null,
+          recipient_email: effectiveSendEmail ? lead.email : null,
+          recipient_phone: effectiveSendSms ? lead.phone : null,
+          sent_by: user.id || null,
+          sent_by_name: user.name || 'System',
+          template_id: template.id || null,
           sent_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -565,21 +588,61 @@ class MessagingService {
       const message = {
         id: messageResult?.id,
         lead_id: leadId,
-        type: template.send_email && template.send_sms ? 'both' :
-              template.send_email ? 'email' : 'sms',
+        type: (effectiveSendEmail && effectiveSendSms) ? 'both' :
+              effectiveSendEmail ? 'email' : 'sms',
         subject: processedTemplate.subject,
         email_body: processedTemplate.email_body,
         sms_body: processedTemplate.sms_body,
         recipient_email: lead.email,
         recipient_phone: lead.phone,
-        sent_by: userId,
+        sent_by: user.id || null,
+        sent_by_name: user.name || 'System',
         booking_date: bookingDate,
-        reminder_days: reminderDays
+        reminder_days: reminderDays,
+        attachments: []
       };
 
-      // Send actual messages (placeholder for now)
-      await this.sendEmail(message);
-      if (template.send_sms) {
+      // Load template attachments if present
+      try {
+        if (template.attachments) {
+          const arr = typeof template.attachments === 'string'
+            ? JSON.parse(template.attachments)
+            : template.attachments;
+
+          if (Array.isArray(arr) && arr.length > 0) {
+            const fs = require('fs');
+            const supabaseStorage = require('./supabaseStorage');
+
+            for (const a of arr) {
+              if (a.url && a.url.includes('supabase.co/storage/v1/object/public/template-attachments/')) {
+                const urlParts = a.url.split('/');
+                const filename = urlParts[urlParts.length - 1];
+                try {
+                  const downloadResult = await supabaseStorage.downloadFile(filename);
+                  if (downloadResult.success && downloadResult.buffer) {
+                    const tempDir = path.join(__dirname, '..', 'uploads', 'temp_email_attachments');
+                    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+                    const tempFilePath = path.join(tempDir, filename);
+                    fs.writeFileSync(tempFilePath, downloadResult.buffer);
+                    message.attachments.push({ filename: a.originalName || a.filename || filename, path: tempFilePath });
+                    console.log(`📎 Reminder attachment loaded: ${a.originalName || filename}`);
+                  }
+                } catch (dlErr) {
+                  console.error(`📎 Failed to download reminder attachment: ${dlErr.message}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (attErr) {
+        console.error('📎 Error loading reminder attachments:', attErr.message);
+      }
+
+      // Send actual messages based on template channel settings
+      if (effectiveSendEmail) {
+        await this.sendEmail(message, emailAccount);
+      }
+      if (effectiveSendSms) {
         await this.sendSMS(message);
       }
 

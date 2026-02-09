@@ -142,6 +142,7 @@ router.get('/', auth, async (req, res) => {
       sendSMS: template.send_sms || false,
       isActive: template.is_active || false,
       reminderDays: template.reminder_days || 5,
+      reminderTime: template.reminder_time || '09:00',
       emailAccount: template.email_account || 'primary'
     }));
 
@@ -181,6 +182,7 @@ router.get('/:id', auth, async (req, res) => {
       sendSMS: template.send_sms || false,
       isActive: template.is_active || false,
       reminderDays: template.reminder_days || 5,
+      reminderTime: template.reminder_time || '09:00',
       emailAccount: template.email_account || 'primary'
     };
 
@@ -204,6 +206,7 @@ router.post('/', auth, async (req, res) => {
       smsBody,
       variables,
       reminderDays,
+      reminderTime,
       sendEmail,
       sendSMS,
       isActive,
@@ -251,6 +254,7 @@ router.post('/', auth, async (req, res) => {
       send_email: sendEmail !== undefined ? sendEmail : true,
       send_sms: sendSMS !== undefined ? sendSMS : false,
       reminder_days: reminderDays || 5,
+      reminder_time: reminderTime || '09:00',
       email_account: emailAccount || 'primary', // Default to primary account
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -291,6 +295,7 @@ router.post('/', auth, async (req, res) => {
       sendSMS: createdTemplate.send_sms,
       isActive: createdTemplate.is_active,
       reminderDays: createdTemplate.reminder_days,
+      reminderTime: createdTemplate.reminder_time || '09:00',
       emailAccount: createdTemplate.email_account || 'primary'
     };
 
@@ -314,6 +319,7 @@ router.put('/:id', auth, async (req, res) => {
       smsBody,
       variables,
       reminderDays,
+      reminderTime,
       sendEmail,
       sendSMS,
       isActive,
@@ -375,6 +381,7 @@ router.put('/:id', auth, async (req, res) => {
     if (sendEmail !== undefined) updateData.send_email = sendEmail;
     if (sendSMS !== undefined) updateData.send_sms = sendSMS;
     if (reminderDays !== undefined) updateData.reminder_days = reminderDays;
+    if (reminderTime !== undefined) updateData.reminder_time = reminderTime;
     if (emailAccount !== undefined) updateData.email_account = emailAccount;
 
     // Update content field - prioritize SMS body for shorter messages
@@ -412,6 +419,7 @@ router.put('/:id', auth, async (req, res) => {
       sendSMS: updatedTemplate.send_sms,
       isActive: updatedTemplate.is_active,
       reminderDays: updatedTemplate.reminder_days,
+      reminderTime: updatedTemplate.reminder_time || '09:00',
       emailAccount: updatedTemplate.email_account || 'primary'
     };
 

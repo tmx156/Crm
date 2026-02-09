@@ -1,11 +1,16 @@
 const MessagingService = require('./messagingService');
-const Database = require('better-sqlite3');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+const config = require('../config');
+
+// Use centralized config for Supabase
+const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
 class Scheduler {
   constructor() {
     this.reminderInterval = null;
     this.isRunning = false;
+    this.lastRun = null;
+    this.nextRun = null;
   }
 
   // Start the scheduler
@@ -15,17 +20,21 @@ class Scheduler {
       return;
     }
 
-    console.log('🕐 Starting message scheduler...');
+    console.log('🕐 Starting appointment reminder scheduler...');
     this.isRunning = true;
 
     // Run appointment reminders every hour
+    const intervalMs = 60 * 60 * 1000; // 1 hour
     this.reminderInterval = setInterval(async () => {
       try {
         await this.processAppointmentReminders();
       } catch (error) {
         console.error('Error processing appointment reminders:', error);
       }
-    }, 60 * 60 * 1000); // Every hour
+    }, intervalMs);
+
+    // Calculate next run time
+    this.nextRun = new Date(Date.now() + intervalMs).toISOString();
 
     // Run immediately on startup
     this.processAppointmentReminders();
@@ -38,100 +47,142 @@ class Scheduler {
       this.reminderInterval = null;
     }
     this.isRunning = false;
-    console.log('🛑 Message scheduler stopped');
+    this.nextRun = null;
+    console.log('🛑 Appointment reminder scheduler stopped');
   }
 
   // Process appointment reminders
   async processAppointmentReminders() {
     try {
+      this.lastRun = new Date().toISOString();
       console.log('🔔 Processing appointment reminders...');
 
-      // Use SQLite for consistency
-      const dbPath = path.join(__dirname, '../local-crm.db');
-      const db = new Database(dbPath);
+      // Get active appointment reminder template from Supabase
+      const { data: templates, error: templateError } = await supabase
+        .from('templates')
+        .select('*')
+        .eq('type', 'appointment_reminder')
+        .eq('is_active', true)
+        .limit(1);
 
-      // Get appointment reminder template
-      const template = db.prepare(`
-        SELECT * FROM templates 
-        WHERE type = ? AND is_active = ? 
-        LIMIT 1
-      `).get('appointment_reminder', 1);
-
-      if (!template) {
-        console.log('No appointment reminder template found');
-        db.close();
+      if (templateError) {
+        console.error('Error fetching appointment reminder template:', templateError);
         return;
       }
 
-      // Calculate the target date for reminders
-      const reminderDate = new Date();
-      reminderDate.setDate(reminderDate.getDate() + (template.reminder_days || 1));
+      if (!templates || templates.length === 0) {
+        console.log('No active appointment reminder template found');
+        return;
+      }
 
-      // Find leads with appointments on the reminder date
+      const template = templates[0];
+      const reminderDays = template.reminder_days || 1;
+      const reminderTime = template.reminder_time || '09:00';
+
+      // Check if it's the right time to send
+      const [sendHour, sendMinute] = reminderTime.split(':').map(Number);
+      const now = new Date();
+      const currentHour = now.getHours();
+
+      // Only send during the configured hour (scheduler runs hourly)
+      if (currentHour !== sendHour) {
+        console.log(`⏳ Not time to send yet. Configured: ${reminderTime}, Current hour: ${currentHour}:00. Skipping.`);
+        this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        return;
+      }
+
+      console.log(`📋 Using template: "${template.name}" (remind ${reminderDays} day(s) before, at ${reminderTime})`);
+
+      // Calculate the target date for reminders
+      // If reminderDays = 1, we look for appointments tomorrow
+      const reminderDate = new Date();
+      reminderDate.setDate(reminderDate.getDate() + reminderDays);
+
       const startOfDay = new Date(reminderDate);
       startOfDay.setHours(0, 0, 0, 0);
-      
+
       const endOfDay = new Date(reminderDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Validate dates before converting to ISO string
       if (isNaN(startOfDay.getTime()) || isNaN(endOfDay.getTime())) {
         console.error('Invalid date calculated for reminders');
-        db.close();
         return;
       }
 
-      // Use safe date formatting
       const startOfDayISO = startOfDay.toISOString();
       const endOfDayISO = endOfDay.toISOString();
 
-      const leads = db.prepare(`
-        SELECT l.*, u.name as booker_name
-        FROM leads l
-        LEFT JOIN users u ON l.booker_id = u.id
-        WHERE l.status IN (?, ?) 
-          AND l.date_booked >= ? 
-          AND l.date_booked <= ?
-          AND l.deleted_at IS NULL
-      `).all('Booked', 'Confirmed', startOfDayISO, endOfDayISO);
+      // Find leads with appointments on the reminder date from Supabase
+      const { data: leads, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, name, status, date_booked, booker_id, email, phone, deleted_at')
+        .in('status', ['Booked', 'Confirmed'])
+        .gte('date_booked', startOfDayISO)
+        .lte('date_booked', endOfDayISO)
+        .is('deleted_at', null);
+
+      if (leadsError) {
+        console.error('Error fetching leads for reminders:', leadsError);
+        return;
+      }
+
+      if (!leads || leads.length === 0) {
+        console.log(`No leads with appointments on ${reminderDate.toDateString()}`);
+        this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        return;
+      }
 
       console.log(`Found ${leads.length} leads with appointments on ${reminderDate.toDateString()}`);
 
+      let sentCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
       for (const lead of leads) {
         try {
-          // Check if reminder already sent today
+          // Check if reminder already sent today (prevent duplicates)
           const startOfToday = new Date();
           startOfToday.setHours(0, 0, 0, 0);
+          const startOfTodayISO = startOfToday.toISOString();
 
-          // Validate date before converting to ISO string
-          const startOfTodayISO = isNaN(startOfToday.getTime()) ? new Date().toISOString() : startOfToday.toISOString();
+          const { data: existingReminders, error: reminderCheckError } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('lead_id', lead.id)
+            .eq('template_id', template.id)
+            .gte('sent_at', startOfTodayISO)
+            .limit(1);
 
-          const existingReminders = db.prepare(`
-            SELECT * FROM messages 
-            WHERE lead_id = ? 
-              AND template_id = ? 
-              AND sent_at >= ?
-            LIMIT 1
-          `).all(lead.id, template.id, startOfTodayISO);
-
-          if (existingReminders.length === 0) {
-            await MessagingService.sendAppointmentReminder(
-              lead.id,
-              lead.booker_id,
-              lead.date_booked,
-              template.reminder_days
-            );
-            console.log(`📧 Appointment reminder sent for ${lead.name}`);
-          } else {
-            console.log(`📧 Reminder already sent today for ${lead.name}`);
+          if (reminderCheckError) {
+            console.error(`Error checking existing reminders for ${lead.name}:`, reminderCheckError);
+            errorCount++;
+            continue;
           }
+
+          if (existingReminders && existingReminders.length > 0) {
+            console.log(`⏭️  Reminder already sent today for ${lead.name}`);
+            skippedCount++;
+            continue;
+          }
+
+          // Send the reminder via MessagingService (which uses Supabase)
+          await MessagingService.sendAppointmentReminder(
+            lead.id,
+            lead.booker_id,
+            lead.date_booked,
+            reminderDays
+          );
+
+          console.log(`📧 Appointment reminder sent for ${lead.name}`);
+          sentCount++;
         } catch (error) {
-          console.error(`Error sending reminder for ${lead.name}:`, error);
+          console.error(`Error sending reminder for ${lead.name}:`, error.message);
+          errorCount++;
         }
       }
 
-      db.close();
-      console.log('✅ Appointment reminders processing completed');
+      this.nextRun = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      console.log(`✅ Appointment reminders completed: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
     } catch (error) {
       console.error('Error processing appointment reminders:', error);
     }
@@ -140,17 +191,15 @@ class Scheduler {
   // Send immediate reminder for a specific lead
   async sendImmediateReminder(leadId, userId) {
     try {
-      const dbPath = path.join(__dirname, '../local-crm.db');
-      const db = new Database(dbPath);
+      // Get lead from Supabase
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', leadId)
+        .is('deleted_at', null)
+        .single();
 
-      const lead = db.prepare(`
-        SELECT l.*, u.name as booker_name
-        FROM leads l
-        LEFT JOIN users u ON l.booker_id = u.id
-        WHERE l.id = ? AND l.deleted_at IS NULL
-      `).get(leadId);
-
-      if (!lead) {
+      if (leadError || !lead) {
         throw new Error('Lead not found');
       }
 
@@ -161,7 +210,6 @@ class Scheduler {
         0 // Immediate reminder
       );
 
-      db.close();
       console.log(`📧 Immediate reminder sent for ${lead.name}`);
       return true;
     } catch (error) {
@@ -183,4 +231,4 @@ class Scheduler {
 // Create singleton instance
 const scheduler = new Scheduler();
 
-module.exports = scheduler; 
+module.exports = scheduler;
