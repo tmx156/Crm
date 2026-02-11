@@ -569,6 +569,8 @@ app.get('/c/:id', async (req, res) => {
 
 // Serve static files from React build
 app.use(express.static(path.join(__dirname, '../client/build')));
+// Also serve at /leads prefix so relative asset paths resolve correctly
+app.use('/leads', express.static(path.join(__dirname, '../client/build')));
 
 // Handle React routing - serve index.html for all non-API routes
 app.get('*', (req, res) => {
