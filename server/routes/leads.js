@@ -670,120 +670,9 @@ router.get('/calendar', auth, async (req, res) => {
       }
     }
 
-    // Fetch messages from messages table and merge with booking_history
-    if (leads && leads.length > 0) {
-      try {
-        console.log(`📨 Calendar API: Fetching messages for ${leads.length} leads...`);
-        console.log(`📨 Calendar API: Lead IDs: ${leads.map(l => l.id).join(', ')}`);
-        
-        const leadIds = leads.map(lead => lead.id);
-        const { data: messages, error: messagesError } = await supabase
-          .from('messages')
-          .select('*')
-          .in('lead_id', leadIds)
-          .order('created_at', { ascending: false });
-        
-        if (!messagesError && messages) {
-          console.log(`📨 Calendar API: Found ${messages.length} messages`);
-          
-          // Group messages by lead_id
-          const messagesByLead = {};
-          messages.forEach(message => {
-            if (!messagesByLead[message.lead_id]) {
-              messagesByLead[message.lead_id] = [];
-            }
-            messagesByLead[message.lead_id].push(message);
-          });
-          
-          // Merge messages with booking_history for each lead
-          leads.forEach(lead => {
-            const leadMessages = messagesByLead[lead.id] || [];
-            
-            // Parse existing booking_history
-            let bookingHistory = [];
-            try {
-              if (lead.booking_history) {
-                bookingHistory = typeof lead.booking_history === 'string' 
-                  ? JSON.parse(lead.booking_history) 
-                  : lead.booking_history;
-                if (!Array.isArray(bookingHistory)) {
-                  bookingHistory = [];
-                }
-              }
-            } catch (e) {
-              console.warn(`⚠️ Invalid booking_history for lead ${lead.id}:`, e.message);
-              bookingHistory = [];
-            }
-            
-            // Convert messages to booking_history format
-            const messageHistory = leadMessages.map(msg => {
-              // Properly determine if message is sent or received based on status
-              const isReceived = msg.status === 'received';
-              const isSent = msg.status === 'sent';
-              
-              return {
-                action: msg.type === 'sms' ? (isReceived ? 'SMS_RECEIVED' : 'SMS_SENT') : 
-                        (isReceived ? 'EMAIL_RECEIVED' : 'EMAIL_SENT'),
-                timestamp: msg.created_at || msg.sent_at || new Date().toISOString(),
-                performed_by: msg.sent_by || null,
-                performed_by_name: msg.sent_by_name || null,
-                details: {
-                  body: msg.sms_body || msg.content || msg.subject || '',
-                  message: msg.sms_body || msg.content || msg.subject || '',
-                  subject: msg.subject || '',
-                  read: isReceived ? false : true, // Received messages are unread, sent messages are read
-                  replied: false,
-                  status: msg.status,
-                  direction: isReceived ? 'received' : 'sent'
-                }
-              };
-            });
-            
-            // Merge and deduplicate with improved logic
-            const allHistory = [...bookingHistory, ...messageHistory];
-            const seenKeys = new Set();
-            let duplicateCount = 0;
-            const uniqueHistory = allHistory.filter(entry => {
-              // Create a more robust deduplication key
-              const timestamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : '';
-              const action = entry.action || '';
-              const body = entry.details?.body || entry.details?.message || '';
-              const subject = entry.details?.subject || '';
-              const performedBy = entry.performed_by || '';
-              
-              // Use a combination of action, timestamp (rounded to nearest minute), performer, and body content
-              // This handles cases where the same email appears in both booking_history and messages
-              const timeKey = timestamp ? new Date(timestamp).setSeconds(0, 0) : 0;
-              const bodyContent = body.substring(0, 200).trim().toLowerCase();
-              const key = `${action}_${timeKey}_${performedBy}_${subject.substring(0, 50)}_${bodyContent}`;
-              
-              if (seenKeys.has(key)) {
-                duplicateCount++;
-                return false;
-              }
-              seenKeys.add(key);
-              return true;
-            });
-            
-            if (duplicateCount > 0) {
-              console.log(`🧹 Removed ${duplicateCount} duplicate entries from lead history`);
-            }
-            
-            // Sort by timestamp (most recent first)
-            uniqueHistory.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-            
-            // Update the lead's booking_history
-            lead.booking_history = JSON.stringify(uniqueHistory);
-          });
-          
-          console.log(`✅ Calendar API: Successfully merged messages with booking_history`);
-        } else {
-          console.warn('⚠️ Calendar API: Failed to fetch messages:', messagesError?.message);
-        }
-      } catch (messagesError) {
-        console.error('❌ Calendar API: Error fetching messages:', messagesError);
-      }
-    }
+    // NOTE: Messages are fetched from the messages table via the messages-list API.
+    // We no longer merge messages into booking_history here to avoid processing
+    // tens of thousands of duplicate entries on every calendar load.
 
     if (error) {
       console.error('❌ Calendar API error after retries:', error);
@@ -2734,6 +2623,97 @@ router.get('/calendar-public', async (req, res) => {
   } catch (error) {
     console.error('Get public lead events error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   POST /api/leads/cleanup-booking-history
+// @desc    One-time cleanup: strip message entries from booking_history (they live in the messages table)
+//          and cap history at 50 entries to fix bloated records
+// @access  Admin only
+router.post('/cleanup-booking-history', auth, adminAuth, async (req, res) => {
+  try {
+    console.log('🧹 Starting booking_history cleanup...');
+
+    const MESSAGE_ACTIONS = new Set([
+      'SMS_SENT', 'SMS_RECEIVED', 'EMAIL_SENT', 'EMAIL_RECEIVED'
+    ]);
+    const MAX_HISTORY = 50;
+
+    // Fetch all leads with booking_history
+    let allLeads = [];
+    let page = 0;
+    const PAGE_SIZE = 500;
+
+    while (true) {
+      const { data: batch, error } = await supabase
+        .from('leads')
+        .select('id, booking_history')
+        .not('booking_history', 'is', null)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (error) {
+        console.error('❌ Error fetching leads for cleanup:', error);
+        return res.status(500).json({ message: 'Failed to fetch leads', error: error.message });
+      }
+
+      if (!batch || batch.length === 0) break;
+      allLeads = allLeads.concat(batch);
+      if (batch.length < PAGE_SIZE) break;
+      page++;
+    }
+
+    console.log(`🧹 Found ${allLeads.length} leads with booking_history`);
+
+    let cleaned = 0;
+    let entriesRemoved = 0;
+
+    for (const lead of allLeads) {
+      try {
+        let history = [];
+        if (typeof lead.booking_history === 'string') {
+          history = JSON.parse(lead.booking_history);
+        } else if (Array.isArray(lead.booking_history)) {
+          history = lead.booking_history;
+        }
+
+        if (!Array.isArray(history)) continue;
+
+        const originalLength = history.length;
+
+        // Remove message entries (they're in the messages table)
+        let filtered = history.filter(entry => !MESSAGE_ACTIONS.has(entry?.action));
+
+        // Cap at MAX_HISTORY entries (keep most recent)
+        if (filtered.length > MAX_HISTORY) {
+          filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+          filtered = filtered.slice(0, MAX_HISTORY);
+        }
+
+        const removed = originalLength - filtered.length;
+        if (removed > 0) {
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update({ booking_history: JSON.stringify(filtered) })
+            .eq('id', lead.id);
+
+          if (!updateError) {
+            cleaned++;
+            entriesRemoved += removed;
+            if (removed > 1000) {
+              console.log(`🧹 Lead ${lead.id}: removed ${removed} entries (${originalLength} → ${filtered.length})`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`⚠️ Error cleaning lead ${lead.id}:`, e.message);
+      }
+    }
+
+    console.log(`✅ Cleanup complete: ${cleaned} leads cleaned, ${entriesRemoved} total entries removed`);
+    res.json({ success: true, leadsCleaned: cleaned, entriesRemoved });
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+    res.status(500).json({ message: 'Cleanup failed', error: error.message });
   }
 });
 

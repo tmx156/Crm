@@ -736,37 +736,8 @@ class MessagingService {
         console.log(`✅ Message ${messageId} updated successfully`);
       }
 
-      // Add booking history entry for email sent
-      console.log(`📩 [MSG-${messageId}] Adding booking history entry...`);
-
-      try {
-        const historyEntry = await addBookingHistoryEntry(
-          message.lead_id,
-          'EMAIL_SENT',
-          message.sent_by,
-          message.sent_by_name,
-          {
-            subject: message.subject,
-            body: message.email_body,
-            direction: 'sent',
-            channel: 'email',
-            status: status,
-            error: errorMessage,
-            messageId: messageId,
-            emailResult: emailResult.success ? 'success' : 'failed'
-          },
-          message // Pass the full message as leadSnapshot for better history tracking
-        );
-
-        if (historyEntry !== null) {
-          console.log(`✅ [MSG-${messageId}] Booking history entry added successfully`);
-        } else {
-          console.warn(`⚠️ [MSG-${messageId}] Booking history entry failed but continuing...`);
-        }
-      } catch (historyError) {
-        console.error(`❌ [MSG-${messageId}] Unexpected error in booking history:`, historyError);
-        // Continue processing - don't let history errors break email confirmation
-      }
+      // Email is already stored in the messages table - no need to duplicate in booking_history
+      console.log(`📩 [MSG-${messageId}] Email stored in messages table, skipping booking_history`);
       
       console.log(`✅ [MSG-${messageId}] Email processing completed. Status: ${status}`);
       console.log(`   - Email sent: ${emailResult.success ? '✅ Yes' : '❌ No'}`);
@@ -912,29 +883,8 @@ class MessagingService {
         console.log(`✅ SMS message ${messageId} updated successfully`);
       }
 
-      // Add booking history entry for SMS sent/failed
-      console.log(`📨 [MSG-${messageId}] Adding booking history entry...`);
-      try {
-        await addBookingHistoryEntry(
-          message.lead_id,
-          wasSuccessful ? 'SMS_SENT' : 'SMS_FAILED',
-          message.sent_by,
-          message.sent_by_name || 'System',
-          {
-            body: message.sms_body,
-            direction: 'sent',
-            channel: 'sms',
-            status: status,
-            error: errorMessage,
-            provider: smsResult ? smsResult.provider : 'bulksms',
-            messageId: smsResult ? smsResult.messageId : null
-          },
-          message
-        );
-      } catch (historyError) {
-        console.error(`❌ [MSG-${messageId}] Error adding SMS to booking history:`, historyError);
-        // Continue - don't let history errors break the process
-      }
+      // SMS is already stored in the messages table - no need to duplicate in booking_history
+      console.log(`📨 [MSG-${messageId}] SMS stored in messages table, skipping booking_history`);
 
       // Real-time event for SMS send attempts (no notification bell)
       if (global.io) {

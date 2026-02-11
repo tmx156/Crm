@@ -39,7 +39,14 @@ const addBookingHistoryEntry = async (leadId, action, userId, userName, details,
       return null;
     }
 
-    const currentHistory = currentLead.booking_history || [];
+    let currentHistory = currentLead.booking_history || [];
+
+    // Cap history size to prevent database bloat
+    const MAX_HISTORY_ENTRIES = 50;
+    if (currentHistory.length >= MAX_HISTORY_ENTRIES) {
+      currentHistory = currentHistory.slice(-MAX_HISTORY_ENTRIES + 1);
+    }
+
     const updatedHistory = [...currentHistory, historyEntry];
 
     // Update the lead with new booking history

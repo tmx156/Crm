@@ -289,9 +289,11 @@ function buildDeterministicId(sender, text, timestampIso) {
 }
 
 // @route   POST /api/sms/webhook
-// @desc    Webhook to receive SMS replies from provider (idempotent)
+// @desc    DISABLED - Webhook to receive SMS replies from provider
 // @access  Public (called by provider)
 router.post('/webhook', async (req, res) => {
+  console.log('⚠️ SMS webhook is disabled');
+  return res.status(200).json({ status: 'disabled' });
   try {
     // Initialize in-memory deduplication cache if not exists
     // Restore from persistent storage if available
@@ -502,73 +504,9 @@ router.post('/webhook', async (req, res) => {
         console.error('❌ Failed to insert SMS into messages table:', e.message);
       }
 
-      // Update lead booking_history with dedup by body within a 10-minute window
-      if (lead) {
-        // Fetch current booking_history from database
-        const { data: leadWithHistory, error: historyError } = await supabase
-          .from('leads')
-          .select('booking_history')
-          .eq('id', lead.id)
-          .single();
-
-        // Safely parse booking_history with fallback
-        let currentHistory = [];
-        if (!historyError && leadWithHistory && leadWithHistory.booking_history) {
-          try {
-            // Check if it's already parsed (object/array) or needs parsing (string)
-            if (typeof leadWithHistory.booking_history === 'string') {
-              currentHistory = JSON.parse(leadWithHistory.booking_history);
-            } else if (Array.isArray(leadWithHistory.booking_history)) {
-              currentHistory = leadWithHistory.booking_history;
-            } else {
-              console.warn(`⚠️ Unexpected booking_history type for lead ${lead.id}:`, typeof leadWithHistory.booking_history);
-              currentHistory = [];
-            }
-
-            // Ensure it's an array
-            if (!Array.isArray(currentHistory)) {
-              currentHistory = [];
-            }
-          } catch (jsonError) {
-            console.warn(`⚠️ Invalid JSON in booking_history for lead ${lead.id} during SMS processing:`, typeof leadWithHistory.booking_history === 'string' ? leadWithHistory.booking_history?.substring(0, 100) : String(leadWithHistory.booking_history));
-            currentHistory = [];
-          }
-        }
-        const exists = currentHistory.some((h) => {
-          if (!h || h.action !== 'SMS_RECEIVED' || !h.details) return false;
-          if ((h.details.body || h.details.message) !== text) return false;
-          try {
-            const t1 = new Date(h.timestamp).getTime();
-            const t2 = new Date(tsIso).getTime();
-            return Math.abs(t1 - t2) < 10 * 60 * 1000; // within 10 minutes
-          } catch { return false; }
-        });
-        if (!exists) {
-          currentHistory.unshift({
-            action: 'SMS_RECEIVED',
-            timestamp: tsIso,
-            details: {
-              body: text,
-              sender,
-              direction: 'received',
-              channel: 'sms',
-              status: 'received',
-              read: false
-            }
-          });
-          const { error: updateError } = await supabase
-            .from('leads')
-            .update({ 
-              booking_history: JSON.stringify(currentHistory),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', lead.id);
-            
-          if (updateError) {
-            console.error('❌ Failed to update lead booking_history:', updateError);
-          }
-        }
-      }
+      // SMS is already stored in the messages table above.
+      // No longer duplicating into booking_history to prevent bloat.
+      // Messages are served via the messages-list API.
 
       // Realtime notify only for received SMS (consolidated to prevent duplication)
       const eventsEnabled = (process.env.SMS_EVENTS_ENABLED || 'true').toLowerCase() === 'true';
