@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -50,6 +51,8 @@ const smsRoutes = require('./routes/sms');
 const legacyRoutes = require('./routes/legacy');
 const bookerAnalyticsRoutes = require('./routes/booker-analytics');
 const emailTestRoutes = require('./routes/email-test');
+const gmailAuthRoutes = require('./routes/gmail-auth');
+const webhookRoutes = require('./routes/webhook');
 const usersPublicRoutes = require('./routes/usersPublic');
 const scheduler = require('./utils/scheduler');
 const { startEmailPoller } = require('./utils/emailPoller');
@@ -295,6 +298,9 @@ io.on('connection', (socket) => {
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
 
+// Gzip compression — reduces large JSON responses by ~70%
+app.use(compression());
+
 // Security middleware with relaxed CSP for API connections
 app.use(helmet({
   contentSecurityPolicy: {
@@ -429,6 +435,8 @@ app.use('/api/sms', smsRoutes);
 app.use('/api/legacy', legacyRoutes);
 app.use('/api/booker-analytics', bookerAnalyticsRoutes);
 app.use('/api/email-test', emailTestRoutes);
+app.use('/api/gmail', gmailAuthRoutes);
+app.use('/api/webhook', webhookRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
 // Scheduler API - manual trigger + status

@@ -28,12 +28,12 @@ const Calendar = () => {
   // Toggle to expand additional quick status actions
   const [showMoreStatuses, setShowMoreStatuses] = useState(false);
   
-  // PERFORMANCE: Cache for loaded date ranges - Track which date ranges have been loaded
-  const [loadedRanges, setLoadedRanges] = useState(new Set());
+  // PERFORMANCE: Cache for loaded date ranges - use ref to avoid re-render loops
+  const loadedRangesRef = useRef(new Set());
 
   const [showLeadFormModal, setShowLeadFormModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const lastUpdatedRef = useRef(new Date());
   const calendarRef = useRef(null);
   const { socket, subscribeToCalendarUpdates, subscribeToLeadUpdates, isConnected, emitCalendarUpdate } = useSocket();
   const [leadForm, setLeadForm] = useState({
@@ -72,7 +72,7 @@ const Calendar = () => {
 
   // Memoize fetchEvents to prevent unnecessary re-renders
   const [isFetching, setIsFetching] = useState(false);
-  const [lastFetchTime, setLastFetchTime] = useState(0);
+  const lastFetchTimeRef = useRef(0);
   const fetchTimeoutRef = useRef(null);
   
   const getEventColor = useCallback((status, hasSale, isConfirmed = false) => {
@@ -133,7 +133,7 @@ const Calendar = () => {
     // If force refresh, clear the cache
     if (force) {
       console.log('📅 Force refresh: Clearing calendar cache');
-      setLoadedRanges(new Set());
+      loadedRangesRef.current = new Set();
       setEvents([]);
     }
     
@@ -143,9 +143,9 @@ const Calendar = () => {
       return;
     }
     
-    // Increased debounce for better performance (minimum 2 seconds between fetches - faster response)
+    // Increased debounce for better performance (minimum 2 seconds between fetches)
     const now = Date.now();
-    if (!force && now - lastFetchTime < 2000) {
+    if (!force && now - lastFetchTimeRef.current < 2000) {
       console.log('📅 Calendar: Fetch debounced, too soon since last fetch');
       return;
     }
@@ -158,46 +158,39 @@ const Calendar = () => {
     
     // Set fetching state
     setIsFetching(true);
-    setLastFetchTime(now);
+    lastFetchTimeRef.current = now;
     
     try {
-      console.log(`📅 Fetching calendar events...`);
-      
-      // PERFORMANCE: Get visible date range from calendar to only fetch relevant events
-      const calendarApi = calendarRef.current?.getApi();
-      let dateParams = '';
-      let rangeKey = null;
-      let startDate = null;
-      let endDate = null;
-      
-      if (calendarApi && calendarApi.view) {
-        const view = calendarApi.view;
-        // Only fetch visible calendar dates (no buffer needed for month navigation)
-        startDate = new Date(view.activeStart);
-        endDate = new Date(view.activeEnd);
+      console.log(`📅 Fetching ALL calendar events (10-year range)...`);
 
-        // Create range key for tracking
-        rangeKey = `${startDate.toISOString()}_${endDate.toISOString()}`;
-        
-        // Check if this range was already loaded (unless force refresh)
-        if (!force && loadedRanges.has(rangeKey)) {
-          console.log('📅 Range already loaded, skipping fetch:', rangeKey);
-          setIsFetching(false);
-          return;
-        }
+      // Fetch ALL bookings with a wide 10-year date range (5 years back, 5 years forward)
+      const nowDate = new Date();
+      const startDate = new Date(nowDate);
+      startDate.setFullYear(startDate.getFullYear() - 5);
+      startDate.setMonth(0, 1);
+      startDate.setHours(0, 0, 0, 0);
 
-        dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
-        console.log(`📅 Fetching events for range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+      const endDate = new Date(nowDate);
+      endDate.setFullYear(endDate.getFullYear() + 5);
+      endDate.setMonth(11, 31);
+      endDate.setHours(23, 59, 59, 999);
+
+      const rangeKey = 'ALL_BOOKINGS';
+
+      // Skip if already loaded (unless force refresh)
+      if (!force && loadedRangesRef.current.has(rangeKey)) {
+        console.log('📅 All bookings already loaded, skipping fetch');
+        setIsFetching(false);
+        return;
       }
 
-      // Use the new calendar endpoint with date filtering
-      // Add cache busting and date range
-      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=500`;
+      const dateParams = `&start=${startDate.toISOString()}&end=${endDate.toISOString()}`;
+      const cacheBuster = `?t=${Date.now()}${dateParams}&limit=10000`;
       const response = await axios.get(`/api/leads/calendar${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        timeout: 8000 // Add timeout to prevent hanging
+        timeout: 15000 // 15s timeout for large fetch
       });
 
       const leads = response.data.leads || [];
@@ -355,20 +348,13 @@ const Calendar = () => {
 
       console.log(`📅 Calendar: Final events array has ${finalEvents.length} unique events`);
 
-      // Mark this range as loaded if we have a rangeKey
-      if (rangeKey) {
-        setLoadedRanges(prev => new Set([...prev, rangeKey]));
-        console.log(`📅 Marked range as loaded: ${rangeKey}`);
-      }
+      // Mark as loaded
+      loadedRangesRef.current.add(rangeKey);
+      console.log(`📅 Marked ALL_BOOKINGS as loaded`);
 
-      // DIARY-STYLE LOADING: Merge new events with existing ones (no duplicates)
-      setEvents(prevEvents => {
-        const existingIds = new Set(prevEvents.map(e => e.id));
-        const newUniqueEvents = finalEvents.filter(e => !existingIds.has(e.id));
-        const mergedEvents = [...prevEvents, ...newUniqueEvents];
-        console.log(`📅 Merging ${newUniqueEvents.length} new events with ${prevEvents.length} existing events = ${mergedEvents.length} total events`);
-        return mergedEvents;
-      });
+      // Replace all events (we fetched everything, no need to merge)
+      console.log(`📅 Setting ${finalEvents.length} total events`);
+      setEvents(finalEvents);
 
       // Check for highlighting after events are set (reduced timeout for performance)
       setTimeout(() => {
@@ -506,7 +492,7 @@ const Calendar = () => {
     if (subscribeToCalendarUpdates) {
       unsubscribeCalendar = subscribeToCalendarUpdates((update) => {
         console.log('📅 Calendar: Real-time calendar update received', update);
-        setLastUpdated(new Date());
+        lastUpdatedRef.current = new Date();
         debouncedFetch(); // Use debounced fetch
       });
     }
@@ -514,7 +500,7 @@ const Calendar = () => {
     if (subscribeToLeadUpdates) {
       unsubscribeLeads = subscribeToLeadUpdates((update) => {
         console.log('📅 Calendar: Real-time lead update received', update);
-        setLastUpdated(new Date());
+        lastUpdatedRef.current = new Date();
         
         // Update calendar events when leads change - but be smarter about it
         switch (update.type) {
@@ -581,6 +567,26 @@ const Calendar = () => {
       fetchEvents();
     }, 3000); // Increased to 3 seconds for better performance
   }, [fetchEvents]);
+
+  // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
+  const renderEventContent = useCallback((arg) => {
+    const isNewBooking = arg.event.extendedProps?.status === 'New';
+    return (
+      <div className="fc-event-main p-1 flex items-center justify-between">
+        <div className="fc-event-title-container flex-1 overflow-hidden">
+          <div className="fc-event-title text-xs truncate">
+            {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
+            <span className="inline-flex items-center gap-1">
+              {!isNewBooking && (
+                <span className="bg-gray-500 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">A</span>
+              )}
+              {arg.event.title}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }, []);
 
   // Realtime: update open calendar modal conversation instantly on inbound SMS
   useEffect(() => {
@@ -1768,7 +1774,7 @@ const Calendar = () => {
               </div>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              {events.length} events • Updated {lastUpdated.toLocaleTimeString()}
+              {events.length} events • Updated {lastUpdatedRef.current.toLocaleTimeString()}
             </p>
           </div>
         </div>
@@ -1928,30 +1934,7 @@ const Calendar = () => {
               height: 'auto'
             }
           }}
-          eventContent={(arg) => {
-            // PERFORMANCE: Skip SMS message processing entirely - too slow
-            // This was causing 23+ function calls on every render
-
-            // Don't show "A" tag for brand new bookings (status = "New")
-            // Show it for all other bookings (Booked, Confirmed, etc.)
-            const isNewBooking = arg.event.extendedProps?.status === 'New';
-
-            return (
-              <div className="fc-event-main p-1 flex items-center justify-between">
-                <div className="fc-event-title-container flex-1 overflow-hidden">
-                  <div className="fc-event-title text-xs truncate">
-                    {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
-                    <span className="inline-flex items-center gap-1">
-                      {!isNewBooking && (
-                        <span className="bg-gray-500 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">A</span>
-                      )}
-                      {arg.event.title}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          }}
+          eventContent={renderEventContent}
         />
       </div>
 

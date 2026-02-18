@@ -532,8 +532,8 @@ router.get('/calendar', auth, async (req, res) => {
     // PERFORMANCE: Get pagination and date range from query params
     const { start, end, page = 1, limit = 200, offset = 0 } = req.query;
 
-    // Validate and cap limit to prevent performance issues - increased for diary-style loading
-    const validatedLimit = Math.min(parseInt(limit) || 1000, 2000);
+    // Validate and cap limit - high cap to allow fetching ALL bookings in one request
+    const validatedLimit = Math.min(parseInt(limit) || 10000, 10000);
     const pageInt = Math.max(parseInt(page) || 1, 1);
     const offsetInt = parseInt(offset) || ((pageInt - 1) * validatedLimit);
     
@@ -543,39 +543,9 @@ router.get('/calendar', auth, async (req, res) => {
     const startTime = Date.now();
     console.log(`📅 Calendar API: Starting database query at ${new Date().toISOString()}`);
 
-    // Get paginated booked leads using Supabase with date filtering for performance
     let leads, error, totalCount;
-    
-    // PERFORMANCE: Optimize the query structure
-    let query = supabase
-      .from('leads')
-      .select(`
-        id, name, phone, email, age, status, date_booked, booker_id,
-        is_confirmed, booking_status, booking_history, has_sale,
-        created_at, updated_at, postcode, notes, image_url
-      `)
-      .or('date_booked.not.is.null,status.eq.Booked')
-      .is('deleted_at', null) // Ensure we don't fetch deleted leads
-      .not('status', 'in', '(Cancelled,Rejected)'); // ✅ Exclude cancelled/rejected bookings from calendar
-    
-    // PERFORMANCE: Apply date range filter if provided
-    if (start && end) {
-      // Filter to only events within the date range (with some buffer)
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      
-      // Add 3 days buffer on each side for faster loading
-      startDate.setDate(startDate.getDate() - 3);
-      endDate.setDate(endDate.getDate() + 3);
-      
-      query = query
-        .gte('date_booked', startDate.toISOString())
-        .lte('date_booked', endDate.toISOString());
-      
-      console.log(`📅 Calendar API: Date range filter applied: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-    }
-    
-    // First get total count for pagination
+
+    // Get total count for response metadata
     const countQuery = supabase
       .from('leads')
       .select('id', { count: 'exact', head: true })
@@ -584,56 +554,79 @@ router.get('/calendar', auth, async (req, res) => {
       .not('status', 'in', '(Cancelled,Rejected)'); // ✅ Exclude cancelled/rejected from count
 
     if (start && end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      startDate.setDate(startDate.getDate() - 3);
-      endDate.setDate(endDate.getDate() + 3);
-
       countQuery
-        .gte('date_booked', startDate.toISOString())
-        .lte('date_booked', endDate.toISOString());
+        .gte('date_booked', start)
+        .lte('date_booked', end);
     }
 
-    // Apply pagination, limit and ordering
-    query = query
-      .order('date_booked', { ascending: true, nullsLast: true })
-      .range(offsetInt, offsetInt + validatedLimit - 1);
-    
-    // Retry logic with improved error handling and timeouts
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // Fetch ALL results by paginating in batches of 1000 (Supabase row limit per request)
+    const BATCH_SIZE = 1000;
+    leads = [];
+    let batchOffset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
       try {
-        console.log(`📅 Calendar API: Database query attempt ${attempt}...`);
-        
-        // Add timeout to prevent hanging
-        const queryPromise = query;
+        console.log(`📅 Calendar API: Fetching batch at offset ${batchOffset}...`);
+
+        // Clone the base query for each batch
+        let batchQuery = supabase
+          .from('leads')
+          .select(`
+            id, name, phone, email, age, status, date_booked, booker_id,
+            is_confirmed, booking_status, has_sale,
+            created_at, updated_at, postcode, notes, image_url
+          `)
+          .or('date_booked.not.is.null,status.eq.Booked')
+          .is('deleted_at', null)
+          .not('status', 'in', '(Cancelled,Rejected)')
+          .order('date_booked', { ascending: true, nullsLast: true })
+          .range(batchOffset, batchOffset + BATCH_SIZE - 1);
+
+        // Apply date range filter if provided
+        if (start && end) {
+          batchQuery = batchQuery
+            .gte('date_booked', start)
+            .lte('date_booked', end);
+        }
+
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Database query timeout after 10 seconds')), 10000);
+          setTimeout(() => reject(new Error('Database query timeout after 15 seconds')), 15000);
         });
-        
-        const result = await Promise.race([queryPromise, timeoutPromise]);
-        
-        leads = result.data;
-        error = result.error;
-        
-        const queryTime = Date.now() - startTime;
-        
-        if (!error && leads) {
-          console.log(`📅 Calendar API: Successfully fetched ${leads.length} leads on attempt ${attempt} in ${queryTime}ms`);
+
+        const result = await Promise.race([batchQuery, timeoutPromise]);
+
+        if (result.error) {
+          console.error(`❌ Calendar API: Batch error at offset ${batchOffset}:`, result.error.message);
+          error = result.error;
           break;
-        } else if (attempt < 3) {
-          console.log(`📅 Calendar API: Attempt ${attempt} failed in ${queryTime}ms, retrying... Error:`, error?.message);
-          await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempt, 3000))); // Exponential backoff
+        }
+
+        const batchData = result.data || [];
+        leads = leads.concat(batchData);
+        console.log(`📅 Calendar API: Batch returned ${batchData.length} rows (total so far: ${leads.length})`);
+
+        // If we got fewer than BATCH_SIZE rows, we've reached the end
+        if (batchData.length < BATCH_SIZE) {
+          hasMore = false;
+        } else {
+          batchOffset += BATCH_SIZE;
+        }
+
+        // Safety cap to prevent infinite loops
+        if (leads.length >= validatedLimit) {
+          console.log(`📅 Calendar API: Reached limit of ${validatedLimit}, stopping pagination`);
+          hasMore = false;
         }
       } catch (timeoutError) {
-        const queryTime = Date.now() - startTime;
-        console.error(`❌ Calendar API: Query timed out on attempt ${attempt} after ${queryTime}ms:`, timeoutError.message);
+        console.error(`❌ Calendar API: Batch timed out at offset ${batchOffset}:`, timeoutError.message);
         error = timeoutError;
-        
-        if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempt, 3000)));
-        }
+        break;
       }
     }
+
+    const queryTime = Date.now() - startTime;
+    console.log(`📅 Calendar API: Fetched ${leads.length} total leads in ${queryTime}ms`);
 
     // PERFORMANCE: Sorting is now done in the database query for better performance
 
@@ -685,7 +678,7 @@ router.get('/calendar', auth, async (req, res) => {
           .from('leads')
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
-            is_confirmed, booking_status, booking_history, has_sale,
+            is_confirmed, booking_status, has_sale,
             created_at, updated_at, postcode, notes, image_url
           `)
           .not('date_booked', 'is', null)
@@ -2576,7 +2569,7 @@ router.get('/calendar-public', async (req, res) => {
       .from('leads')
       .select(`
         id, name, phone, email, status, date_booked, booker_id,
-        is_confirmed, booking_status, booking_history, has_sale,
+        is_confirmed, booking_status, has_sale,
         created_at, updated_at, postcode, notes, image_url
       `)
       .or('date_booked.not.is.null,status.eq.Booked')
