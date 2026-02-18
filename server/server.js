@@ -1,5 +1,6 @@
 const express = require('express');
-const compression = require('compression');
+let compression;
+try { compression = require('compression'); } catch (e) { console.warn('⚠️ compression module not available, skipping gzip'); }
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -299,7 +300,7 @@ io.on('connection', (socket) => {
 app.set('trust proxy', 1);
 
 // Gzip compression — reduces large JSON responses by ~70%
-app.use(compression());
+if (compression) app.use(compression());
 
 // Security middleware with relaxed CSP for API connections
 app.use(helmet({
@@ -649,12 +650,16 @@ process.on('SIGTERM', async () => {
 // Start server
 const PORT = process.env.PORT || 5000;
 
-testDatabaseConnection().then(() => {
+// Ensure server starts within 15s even if Supabase connection test hangs
+Promise.race([
+  testDatabaseConnection(),
+  new Promise((_, reject) => setTimeout(() => reject(new Error('DB connection test timed out after 15s')), 15000))
+]).then(() => {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🔌 WebSocket server ready for real-time sync`);
     console.log(`🗄️  Connected to Supabase database`);
-    
+
     // Start the appointment reminder scheduler
     scheduler.start();
 
@@ -690,10 +695,12 @@ testDatabaseConnection().then(() => {
       console.error('❌ Failed to start finance reminder service:', e?.message || e);
     }
   });
-}).catch(() => {
-  // Start server even if Supabase connection fails
+}).catch((err) => {
+  // Start server even if Supabase connection fails or times out
+  console.warn(`⚠️ DB test failed: ${err?.message || err}`);
+  isDbConnected = false;
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT} (demo mode)`);
+    console.log(`🚀 Server running on port ${PORT} (limited mode)`);
     console.log(`🔌 WebSocket server ready for real-time sync`);
     console.log('⚠️  Database features will not work until Supabase is connected');
   });
