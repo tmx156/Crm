@@ -713,31 +713,8 @@ router.get('/calendar', auth, async (req, res) => {
 
     console.log(`📅 Calendar API: Found ${leads?.length || 0} calendar events`);
     
-    // Debug logging
-    if (leads && leads.length > 0) {
-      console.log('📅 Calendar events details:');
-      leads.forEach((lead, index) => {
-        console.log(`  ${index + 1}. ${lead.name} - Status: ${lead.status} - Date: ${lead.date_booked}`);
-      });
-    } else {
-      console.log('📅 No calendar events found. Checking database...');
-      
-      // Additional debug query
-      const { data: debugLeads, error: debugError } = await supabase
-        .from('leads')
-        .select('id, name, status, date_booked')
-        .limit(5);
-      
-      if (debugError) {
-        console.error('📅 Debug query error:', debugError);
-      } else {
-        console.log(`📅 Debug: Found ${debugLeads?.length || 0} total leads in database`);
-        if (debugLeads && debugLeads.length > 0) {
-          debugLeads.forEach(lead => {
-            console.log(`  - ${lead.name} - Status: ${lead.status} - Date: ${lead.date_booked || 'None'}`);
-          });
-        }
-      }
+    if (!leads || leads.length === 0) {
+      console.log('📅 No calendar events found for this query');
     }
     
     // Get total count for pagination
