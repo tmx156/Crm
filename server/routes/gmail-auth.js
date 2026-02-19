@@ -14,13 +14,27 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googl
  * Returns the Google OAuth consent URL. Open it in a browser to authorise.
  */
 router.get('/auth-url', (req, res) => {
-  const oauth2 = makeOAuth2Client();
-  const url = oauth2.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: SCOPES
-  });
-  res.json({ url });
+  try {
+    console.log('[Gmail] Generating auth URL...');
+    console.log('[Gmail] Config check:', {
+      clientId: config.google.clientId ? 'Set' : 'Not set',
+      clientSecret: config.google.clientSecret ? 'Set' : 'Not set',
+      redirectUri: config.google.redirectUri
+    });
+    
+    const oauth2 = makeOAuth2Client();
+    const url = oauth2.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: SCOPES
+    });
+    
+    console.log('[Gmail] Auth URL generated successfully');
+    res.json({ url });
+  } catch (err) {
+    console.error('[Gmail] Error generating auth URL:', err.message);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
 });
 
 /**
