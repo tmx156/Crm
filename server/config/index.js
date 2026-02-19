@@ -39,6 +39,18 @@ const config = {
     gmailPass: process.env.GMAIL_PASS || null
   },
 
+  // Google OAuth / Gmail API
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || null,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
+  },
+
+  // Webhook Configuration (for external lead sources like landing pages)
+  webhook: {
+    apiKey: process.env.WEBHOOK_API_KEY || 'a861c0da361d0723faeac04f0d39fa01129152a7b006dd1885e41eb2d8ceb558'
+  },
+
   // Client Configuration
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
 
