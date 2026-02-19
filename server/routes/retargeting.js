@@ -157,22 +157,26 @@ router.post('/campaign/start', auth, adminAuth, async (req, res) => {
         // Replace template variables
         const personalizedSubject = template.subject
           .replace(/{leadName}/g, lead.name)
-          .replace(/{companyName}/g, 'Avensis Models');
+          .replace(/{companyName}/g, 'The Editorial Co');
 
         const personalizedBody = (template.email_body || template.content || '')
           .replace(/{leadName}/g, lead.name)
           .replace(/{leadEmail}/g, lead.email)
           .replace(/{leadPhone}/g, lead.phone)
-          .replace(/{companyName}/g, 'Avensis Models')
+          .replace(/{companyName}/g, 'The Editorial Co')
           .replace(/{originalContactDate}/g, new Date(lead.created_at).toLocaleDateString());
 
         // Send email using messaging service
-        await MessagingService.sendEmail(
-          lead.email,
-          personalizedSubject,
-          personalizedBody,
-          template.id
-        );
+        const message = {
+          lead_id: lead.id,
+          recipient_email: lead.email,
+          subject: personalizedSubject,
+          email_body: personalizedBody,
+          template_id: template.id,
+          type: 'email',
+          status: 'pending'
+        };
+        await MessagingService.sendEmail(message);
 
         // Update lead's campaign history
         const currentRetargeting = lead.retargeting || {};

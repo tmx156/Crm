@@ -1,5 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../utils/emailService');
 
 class FinanceReminderService {
   constructor() {
@@ -8,31 +8,7 @@ class FinanceReminderService {
     const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc';
 
     this.supabase = createClient(supabaseUrl, supabaseKey);
-    this.emailTransporter = null;
-    this.initializeEmail();
-  }
-
-  initializeEmail() {
-    try {
-      this.emailTransporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASSWORD
-        },
-        connectionTimeout: 60000, // 60 seconds - increased for Gmail
-        greetingTimeout: 30000,   // 30 seconds - increased for Gmail
-        socketTimeout: 60000,    // 60 seconds - increased for Gmail
-        pool: true, // Use connection pooling
-        maxConnections: 5, // Maximum number of connections
-        maxMessages: 100, // Maximum messages per connection
-        rateDelta: 20000, // Rate limiting
-        rateLimit: 5 // Maximum messages per rateDelta
-      });
-      console.log('✅ Finance reminder email service initialized');
-    } catch (error) {
-      console.error('❌ Failed to initialize finance reminder email service:', error.message);
-    }
+    console.log('✅ Finance reminder service initialized (using centralized Gmail API)');
   }
 
   async sendPaymentReminder(agreement, reminderType = 'email') {
@@ -84,11 +60,6 @@ class FinanceReminderService {
   }
 
   async sendEmailReminder(agreement) {
-    if (!this.emailTransporter) {
-      console.log('📧 Email transporter not available, skipping email reminder');
-      return;
-    }
-
     try {
       const dueDate = new Date(agreement.next_payment_date || agreement.due_date);
       const today = new Date();
@@ -97,29 +68,22 @@ class FinanceReminderService {
       let subject, body;
 
       if (daysUntilDue < 0) {
-        // Overdue
         subject = `URGENT: Payment Overdue - ${agreement.agreement_number || 'Finance Agreement'}`;
         body = this.generateOverdueEmailBody(agreement, Math.abs(daysUntilDue));
       } else if (daysUntilDue <= 3) {
-        // Due soon
         subject = `Payment Due Soon - ${agreement.agreement_number || 'Finance Agreement'}`;
         body = this.generateDueSoonEmailBody(agreement, daysUntilDue);
       } else {
-        // Upcoming
         subject = `Upcoming Payment Reminder - ${agreement.agreement_number || 'Finance Agreement'}`;
         body = this.generateUpcomingEmailBody(agreement, daysUntilDue);
       }
 
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: agreement.lead_email,
-        subject: subject,
-        html: body
-      };
-
-      const result = await this.emailTransporter.sendMail(mailOptions);
-      console.log(`📧 Email reminder sent to ${agreement.lead_email}: ${result.messageId}`);
-
+      const result = await sendEmail(agreement.lead_email, subject, body);
+      if (result.success) {
+        console.log(`📧 Email reminder sent to ${agreement.lead_email}: ${result.messageId}`);
+      } else {
+        console.error(`❌ Email reminder failed for ${agreement.lead_email}: ${result.error}`);
+      }
     } catch (error) {
       console.error('❌ Error sending email reminder:', error.message);
     }

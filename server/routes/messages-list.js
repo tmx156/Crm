@@ -1337,7 +1337,6 @@ router.post('/reply', auth, async (req, res) => {
       result = await sendEmail(
         leadData.email,
         `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
-        reply,
         reply
       );
 

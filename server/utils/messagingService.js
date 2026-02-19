@@ -685,7 +685,7 @@ class MessagingService {
         throw new Error(errorMsg);
       }
       
-      console.log('📤 Sending email via Gmail SMTP...');
+      console.log('📤 Sending email via Gmail API...');
       
       // Actually send the email using the email service
       const startTime = Date.now();

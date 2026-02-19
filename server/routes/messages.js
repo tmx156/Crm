@@ -233,6 +233,8 @@ router.post('/send', auth, async (req, res) => {
       email_body: processedTemplate.emailBody,
       sms_body: processedTemplate.smsBody,
       content: processedTemplate.emailBody || processedTemplate.smsBody || processedTemplate.subject,
+      recipient_email: lead.email || null,
+      recipient_phone: lead.phone || null,
       status: 'pending',
       sent_by: req.user.id,
       sent_by_name: req.user.name,
@@ -266,8 +268,7 @@ router.post('/send', auth, async (req, res) => {
       if (adaptedTemplate.sendEmail && lead.email) {
         await MessagingService.sendEmail({
           ...newMessage,
-          to: lead.email,
-          leadName: lead.name
+          recipient_email: lead.email
         });
       }
       if (adaptedTemplate.sendSMS && lead.phone) {
@@ -367,15 +368,13 @@ router.post('/:id/resend', auth, async (req, res) => {
         if (adaptedTemplate.sendEmail && message.leads?.email) {
           await MessagingService.sendEmail({
             ...message,
-            to: message.leads.email,
-            leadName: message.leads.name
+            recipient_email: message.leads.email
           });
         }
         if (adaptedTemplate.sendSMS && message.leads?.phone) {
           await MessagingService.sendSMS({
             ...message,
-            to: message.leads.phone,
-            leadName: message.leads.name
+            recipient_phone: message.leads.phone
           });
         }
       }

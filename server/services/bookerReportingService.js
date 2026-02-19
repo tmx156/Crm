@@ -1,34 +1,10 @@
 const dbManager = require('../database-connection-manager');
-const nodemailer = require('nodemailer');
 const config = require('../config');
+const { sendEmail } = require('../utils/emailService');
 
 class BookerReportingService {
   constructor() {
-    this.emailTransporter = null;
-    this.initializeEmailTransporter();
-  }
-
-  initializeEmailTransporter() {
-    try {
-      this.emailTransporter = nodemailer.createTransporter({
-        service: 'gmail',
-        auth: {
-          user: config.email.gmailUser,
-          pass: config.email.gmailPass
-        },
-        connectionTimeout: 60000, // 60 seconds - increased for Gmail
-        greetingTimeout: 30000,   // 30 seconds - increased for Gmail
-        socketTimeout: 60000,    // 60 seconds - increased for Gmail
-        pool: true, // Use connection pooling
-        maxConnections: 5, // Maximum number of connections
-        maxMessages: 100, // Maximum messages per connection
-        rateDelta: 20000, // Rate limiting
-        rateLimit: 5 // Maximum messages per rateDelta
-      });
-      console.log('✅ Booker Reporting Service: Email transporter initialized');
-    } catch (error) {
-      console.error('❌ Failed to initialize email transporter:', error);
-    }
+    console.log('✅ Booker Reporting Service initialized (using centralized Gmail API)');
   }
 
   // Generate daily performance report for all bookers
@@ -326,23 +302,20 @@ class BookerReportingService {
 
   // Send daily report email to admin
   async sendDailyReportEmail(reportData, adminEmails = []) {
-    if (!this.emailTransporter || adminEmails.length === 0) {
-      console.log('📧 Skipping daily report email - no transporter or admin emails');
+    if (adminEmails.length === 0) {
+      console.log('📧 Skipping daily report email - no admin emails');
       return;
     }
 
     try {
       const emailHtml = this.generateDailyReportHtml(reportData);
-
-      const mailOptions = {
-        from: config.email.gmailUser,
-        to: adminEmails.join(','),
-        subject: `Daily Booker Performance Report - ${reportData.date}`,
-        html: emailHtml
-      };
-
-      await this.emailTransporter.sendMail(mailOptions);
-      console.log(`✅ Daily report email sent to ${adminEmails.length} admin(s)`);
+      const subject = `Daily Booker Performance Report - ${reportData.date}`;
+      const result = await sendEmail(adminEmails.join(','), subject, emailHtml);
+      if (result.success) {
+        console.log(`✅ Daily report email sent to ${adminEmails.length} admin(s)`);
+      } else {
+        console.error(`❌ Daily report email failed: ${result.error}`);
+      }
     } catch (error) {
       console.error('❌ Failed to send daily report email:', error);
     }
@@ -350,23 +323,20 @@ class BookerReportingService {
 
   // Send monthly report email to admin
   async sendMonthlyReportEmail(reportData, adminEmails = []) {
-    if (!this.emailTransporter || adminEmails.length === 0) {
-      console.log('📧 Skipping monthly report email - no transporter or admin emails');
+    if (adminEmails.length === 0) {
+      console.log('📧 Skipping monthly report email - no admin emails');
       return;
     }
 
     try {
       const emailHtml = this.generateMonthlyReportHtml(reportData);
-
-      const mailOptions = {
-        from: config.email.gmailUser,
-        to: adminEmails.join(','),
-        subject: `Monthly Booker Performance Report - ${reportData.month}`,
-        html: emailHtml
-      };
-
-      await this.emailTransporter.sendMail(mailOptions);
-      console.log(`✅ Monthly report email sent to ${adminEmails.length} admin(s)`);
+      const subject = `Monthly Booker Performance Report - ${reportData.month}`;
+      const result = await sendEmail(adminEmails.join(','), subject, emailHtml);
+      if (result.success) {
+        console.log(`✅ Monthly report email sent to ${adminEmails.length} admin(s)`);
+      } else {
+        console.error(`❌ Monthly report email failed: ${result.error}`);
+      }
     } catch (error) {
       console.error('❌ Failed to send monthly report email:', error);
     }

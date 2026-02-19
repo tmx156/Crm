@@ -3,8 +3,8 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
-const nodemailer = require('nodemailer');
 const { sendCustomMessage } = require('../utils/smsService');
+const { sendEmail: sendCentralEmail } = require('../utils/emailService');
 const dbManager = require('../database-connection-manager');
 
 // Import Supabase client for direct operations
@@ -166,23 +166,6 @@ const upload = multer({
       cb(new Error('Only image files are allowed!'));
     }
   }
-});
-
-// Email configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 60000, // 60 seconds - increased for Gmail
-  greetingTimeout: 30000,   // 30 seconds - increased for Gmail
-  socketTimeout: 60000,    // 60 seconds - increased for Gmail
-  pool: true, // Use connection pooling
-  maxConnections: 5, // Maximum number of connections
-  maxMessages: 100, // Maximum messages per connection
-  rateDelta: 20000, // Rate limiting
-  rateLimit: 5 // Maximum messages per rateDelta
 });
 
 // SMS sending is handled via BulkSMS in utils/smsService
@@ -708,14 +691,8 @@ router.post('/:saleId/send-receipt/email', auth, async (req, res) => {
       `;
     }
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email || '',
-      subject: emailSubject,
-      html: emailBody
-    };
-
-    await transporter.sendMail(mailOptions);
+    const result = await sendCentralEmail(email || '', emailSubject, emailBody);
+    if (!result.success) throw new Error(result.error || 'Email send failed');
 
     res.json({ success: true, message: 'Receipt sent successfully' });
   } catch (error) {

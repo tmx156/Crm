@@ -17,20 +17,20 @@ router.post('/send', auth, async (req, res) => {
       });
     }
     
-    // Check if email credentials are configured
+    // Check if Gmail OAuth credentials are configured
     const emailUser = process.env.EMAIL_USER || process.env.GMAIL_USER;
-    const emailPass = process.env.EMAIL_PASSWORD || process.env.GMAIL_PASS;
-    
-    if (!emailUser || !emailPass) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+
+    if (!emailUser || !clientId) {
       return res.status(500).json({
-        message: 'Email credentials not configured',
+        message: 'Gmail OAuth credentials not configured',
         details: {
-          EMAIL_USER: emailUser ? '✅ Set' : '❌ Not set',
-          EMAIL_PASSWORD: emailPass ? '✅ Set' : '❌ Not set',
-          GMAIL_USER: process.env.GMAIL_USER ? '✅ Set' : '❌ Not set',
-          GMAIL_PASS: process.env.GMAIL_PASS ? '✅ Set' : '❌ Not set'
+          GMAIL_USER: emailUser ? '✅ Set' : '❌ Not set',
+          GOOGLE_CLIENT_ID: clientId ? '✅ Set' : '❌ Not set',
+          GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '✅ Set' : '❌ Not set',
+          GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI ? '✅ Set' : '❌ Not set'
         },
-        solution: 'Set EMAIL_USER and EMAIL_PASSWORD environment variables in Railway'
+        solution: 'Set GMAIL_USER, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in Railway. Then authenticate via /api/gmail/auth-url'
       });
     }
     
@@ -82,32 +82,27 @@ router.get('/config', auth, async (req, res) => {
   try {
     const config = {
       environment: process.env.NODE_ENV || 'development',
-      emailCredentials: {
-        EMAIL_USER: process.env.EMAIL_USER ? '✅ Set' : '❌ Not set',
-        EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Not set',
-        GMAIL_USER: process.env.GMAIL_USER ? '✅ Set' : '❌ Not set',
-        GMAIL_PASS: process.env.GMAIL_PASS ? '✅ Set' : '❌ Not set'
+      gmailOAuth: {
+        GMAIL_USER: process.env.GMAIL_USER || process.env.EMAIL_USER ? '✅ Set' : '❌ Not set',
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? '✅ Set' : '❌ Not set',
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '✅ Set' : '❌ Not set',
+        GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI ? '✅ Set' : '❌ Not set'
       },
-      smtpConfig: {
-        host: 'smtp.gmail.com',
-        ports: [465, 587],
-        security: ['SSL', 'STARTTLS']
-      },
+      method: 'Gmail API (OAuth2)',
       railwayInfo: {
         platform: 'Railway',
         nodeVersion: process.version,
         port: process.env.PORT || 5000
       }
     };
-    
+
     res.json({
       success: true,
       config,
       recommendations: [
-        'Ensure EMAIL_USER and EMAIL_PASSWORD are set in Railway environment variables',
-        'Use Gmail App Password (16 characters) for EMAIL_PASSWORD',
-        'Enable 2-Factor Authentication on Gmail account',
-        'Check Railway Pro plan for SMTP outbound connections'
+        'Ensure GMAIL_USER, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI are set',
+        'Authenticate via /api/gmail/auth-url to connect the Gmail account',
+        'Gmail OAuth tokens are stored in Supabase gmail_accounts table'
       ]
     });
     
