@@ -289,7 +289,7 @@ const Templates = () => {
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        alert('Appointment reminders sent successfully!');
+        alert(`Done! ${data.sent || 0} sent, ${data.skipped || 0} skipped, ${data.errors || 0} errors`);
       } else {
         alert(data.message || 'Error running scheduler');
       }

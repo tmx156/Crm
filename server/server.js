@@ -449,11 +449,16 @@ app.get('/api/scheduler/status', schedulerAuth, (req, res) => {
 app.post('/api/scheduler/run-now', schedulerAuth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
-    console.log('🔔 Manual scheduler trigger by admin');
-    await scheduler.processAppointmentReminders(true); // true = skip time check
-    res.json({ success: true, message: 'Appointment reminders processed', lastRun: scheduler.lastRun });
+    console.log('[SCHEDULER] Manual trigger by admin:', req.user.name || req.user.email);
+    const result = await scheduler.processAppointmentReminders();
+    res.json({
+      success: true,
+      message: `Reminders processed: ${result?.sent || 0} sent, ${result?.skipped || 0} skipped, ${result?.errors || 0} errors`,
+      ...result,
+      lastRun: scheduler.lastRun
+    });
   } catch (error) {
-    console.error('Manual scheduler run failed:', error);
+    console.error('[SCHEDULER] Manual trigger failed:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

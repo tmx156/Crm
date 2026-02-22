@@ -3,7 +3,6 @@ const MessagingService = require('./messagingService');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 
-// Use centralized config for Supabase
 const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
 class Scheduler {
@@ -11,33 +10,51 @@ class Scheduler {
     this.cronJob = null;
     this.isRunning = false;
     this.lastRun = null;
+    this.lastTick = null;
     this.nextRun = null;
     this.scheduledTime = null;
+    this.tickCount = 0;
+    this.lastError = null;
   }
 
-  // Start the scheduler - checks every minute for an exact time match
   start() {
     if (this.isRunning) {
-      console.log('Scheduler is already running');
+      console.log('[SCHEDULER] Already running');
       return;
     }
 
-    console.log('🕐 Starting appointment reminder scheduler (cron)...');
+    const now = new Date();
+    console.log('[SCHEDULER] =============================================');
+    console.log('[SCHEDULER] Starting appointment reminder scheduler');
+    console.log(`[SCHEDULER] Server time: ${now.toISOString()}`);
+    console.log(`[SCHEDULER] Server hour: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`);
+    console.log(`[SCHEDULER] Timezone offset: UTC${now.getTimezoneOffset() === 0 ? '' : (now.getTimezoneOffset() > 0 ? '-' : '+') + Math.abs(now.getTimezoneOffset() / 60)}`);
+    console.log('[SCHEDULER] Cron: every minute (* * * * *)');
+    console.log('[SCHEDULER] =============================================');
+
     this.isRunning = true;
 
-    // Run every minute, check if current HH:MM matches the template's reminder_time
     this.cronJob = cron.schedule('* * * * *', async () => {
       try {
         await this.tick();
       } catch (error) {
-        console.error('Scheduler tick error:', error);
+        this.lastError = { time: new Date().toISOString(), message: error.message };
+        console.error('[SCHEDULER] Tick crashed:', error.message);
       }
     });
 
-    console.log('✅ Scheduler running - checks every minute for exact time match');
+    // Verify cron is running with a one-time check after 65 seconds
+    setTimeout(() => {
+      if (this.tickCount === 0) {
+        console.error('[SCHEDULER] WARNING: Cron has not ticked after 65 seconds!');
+      } else {
+        console.log(`[SCHEDULER] Cron verified working (${this.tickCount} ticks so far)`);
+      }
+    }, 65000);
+
+    console.log('[SCHEDULER] Started successfully');
   }
 
-  // Stop the scheduler
   stop() {
     if (this.cronJob) {
       this.cronJob.stop();
@@ -46,15 +63,22 @@ class Scheduler {
     this.isRunning = false;
     this.nextRun = null;
     this.scheduledTime = null;
-    console.log('🛑 Appointment reminder scheduler stopped');
+    console.log('[SCHEDULER] Stopped');
   }
 
-  // Lightweight tick - runs every minute, only does work when time matches exactly
   async tick() {
+    this.tickCount++;
+    this.lastTick = new Date().toISOString();
+
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Fetch the template's configured time (quick query)
+    // Log a heartbeat every 15 minutes (on :00, :15, :30, :45)
+    if (now.getMinutes() % 15 === 0) {
+      console.log(`[SCHEDULER] Heartbeat ${currentTime} | ticks: ${this.tickCount} | scheduled: ${this.scheduledTime || 'unknown'} | next: ${this.nextRun || 'unknown'}`);
+    }
+
+    // Fetch the template's configured time
     const { data: templates, error } = await supabase
       .from('templates')
       .select('reminder_time')
@@ -62,7 +86,19 @@ class Scheduler {
       .eq('is_active', true)
       .limit(1);
 
-    if (error || !templates || templates.length === 0) return;
+    if (error) {
+      console.error(`[SCHEDULER] DB error fetching template: ${error.message}`);
+      this.lastError = { time: now.toISOString(), message: `DB error: ${error.message}` };
+      return;
+    }
+
+    if (!templates || templates.length === 0) {
+      // Only log this once per hour to avoid spam
+      if (now.getMinutes() === 0) {
+        console.log('[SCHEDULER] No active appointment_reminder template found');
+      }
+      return;
+    }
 
     const reminderTime = templates[0].reminder_time || '09:00';
     this.scheduledTime = reminderTime;
@@ -70,34 +106,29 @@ class Scheduler {
 
     // Exact match: HH:MM === HH:MM
     if (currentTime === reminderTime) {
-      console.log(`🔔 Time match! ${currentTime} === ${reminderTime} - sending reminders...`);
-      await this.processAppointmentReminders(true);
+      console.log(`[SCHEDULER] TIME MATCH! ${currentTime} === ${reminderTime} - processing reminders...`);
+      await this.processAppointmentReminders();
     }
   }
 
-  // Calculate when the next run will be
   calculateNextRun(reminderTime) {
     const [h, m] = reminderTime.split(':').map(Number);
     const now = new Date();
     const next = new Date(now);
     next.setHours(h, m, 0, 0);
-
-    // If the time already passed today, schedule for tomorrow
     if (next <= now) {
       next.setDate(next.getDate() + 1);
     }
-
     return next.toISOString();
   }
 
-  // Process appointment reminders
-  // skipTimeCheck = true for both cron match and manual triggers
-  async processAppointmentReminders(skipTimeCheck = false) {
+  // Process appointment reminders - called on time match or manual trigger
+  async processAppointmentReminders() {
     try {
       this.lastRun = new Date().toISOString();
-      console.log('🔔 Processing appointment reminders...');
+      console.log('[SCHEDULER] Processing appointment reminders...');
 
-      // Get active appointment reminder template from Supabase
+      // Get active appointment reminder template
       const { data: templates, error: templateError } = await supabase
         .from('templates')
         .select('*')
@@ -106,41 +137,39 @@ class Scheduler {
         .limit(1);
 
       if (templateError) {
-        console.error('Error fetching appointment reminder template:', templateError);
-        return;
+        console.error('[SCHEDULER] Error fetching template:', templateError.message);
+        return { sent: 0, skipped: 0, errors: 0, error: templateError.message };
       }
 
       if (!templates || templates.length === 0) {
-        console.log('No active appointment reminder template found');
-        return;
+        console.log('[SCHEDULER] No active appointment_reminder template found');
+        return { sent: 0, skipped: 0, errors: 0, error: 'No template' };
       }
 
       const template = templates[0];
       const reminderDays = template.reminder_days || 1;
       const reminderTime = template.reminder_time || '09:00';
 
-      console.log(`📋 Using template: "${template.name}" (remind ${reminderDays} day(s) before, at ${reminderTime})`);
+      console.log(`[SCHEDULER] Template: "${template.name}"`);
+      console.log(`[SCHEDULER] Config: ${reminderDays} day(s) before, send at ${reminderTime}`);
+      console.log(`[SCHEDULER] Channels: email=${template.send_email}, sms=${template.send_sms}`);
 
-      // Calculate the target date for reminders
-      // If reminderDays = 1, we look for appointments tomorrow
+      // Calculate target appointment date
       const reminderDate = new Date();
       reminderDate.setDate(reminderDate.getDate() + reminderDays);
 
       const startOfDay = new Date(reminderDate);
       startOfDay.setHours(0, 0, 0, 0);
-
       const endOfDay = new Date(reminderDate);
       endOfDay.setHours(23, 59, 59, 999);
-
-      if (isNaN(startOfDay.getTime()) || isNaN(endOfDay.getTime())) {
-        console.error('Invalid date calculated for reminders');
-        return;
-      }
 
       const startOfDayISO = startOfDay.toISOString();
       const endOfDayISO = endOfDay.toISOString();
 
-      // Find leads with appointments on the reminder date from Supabase
+      console.log(`[SCHEDULER] Looking for appointments on: ${reminderDate.toDateString()}`);
+      console.log(`[SCHEDULER] Query range: ${startOfDayISO} to ${endOfDayISO}`);
+
+      // Find leads with appointments on that date
       const { data: leads, error: leadsError } = await supabase
         .from('leads')
         .select('id, name, status, date_booked, booker_id, email, phone, deleted_at')
@@ -150,16 +179,16 @@ class Scheduler {
         .is('deleted_at', null);
 
       if (leadsError) {
-        console.error('Error fetching leads for reminders:', leadsError);
-        return;
+        console.error('[SCHEDULER] Error fetching leads:', leadsError.message);
+        return { sent: 0, skipped: 0, errors: 0, error: leadsError.message };
       }
 
       if (!leads || leads.length === 0) {
-        console.log(`No leads with appointments on ${reminderDate.toDateString()}`);
-        return;
+        console.log(`[SCHEDULER] No leads with appointments on ${reminderDate.toDateString()}`);
+        return { sent: 0, skipped: 0, errors: 0 };
       }
 
-      console.log(`Found ${leads.length} leads with appointments on ${reminderDate.toDateString()}`);
+      console.log(`[SCHEDULER] Found ${leads.length} leads to process`);
 
       let sentCount = 0;
       let skippedCount = 0;
@@ -167,32 +196,31 @@ class Scheduler {
 
       for (const lead of leads) {
         try {
-          // Check if reminder already sent today (prevent duplicates)
+          // Duplicate check - already sent today?
           const startOfToday = new Date();
           startOfToday.setHours(0, 0, 0, 0);
-          const startOfTodayISO = startOfToday.toISOString();
 
-          const { data: existingReminders, error: reminderCheckError } = await supabase
+          const { data: existing, error: dupError } = await supabase
             .from('messages')
             .select('id')
             .eq('lead_id', lead.id)
             .eq('template_id', template.id)
-            .gte('sent_at', startOfTodayISO)
+            .gte('sent_at', startOfToday.toISOString())
             .limit(1);
 
-          if (reminderCheckError) {
-            console.error(`Error checking existing reminders for ${lead.name}:`, reminderCheckError);
+          if (dupError) {
+            console.error(`[SCHEDULER] Duplicate check error for ${lead.name}: ${dupError.message}`);
             errorCount++;
             continue;
           }
 
-          if (existingReminders && existingReminders.length > 0) {
-            console.log(`⏭️  Reminder already sent today for ${lead.name}`);
+          if (existing && existing.length > 0) {
             skippedCount++;
             continue;
           }
 
-          // Send the reminder via MessagingService (which uses Supabase)
+          // Send the reminder
+          console.log(`[SCHEDULER] Sending to: ${lead.name} (${lead.email || 'no email'})`);
           await MessagingService.sendAppointmentReminder(
             lead.id,
             lead.booker_id,
@@ -200,26 +228,32 @@ class Scheduler {
             reminderDays
           );
 
-          console.log(`📧 Appointment reminder sent for ${lead.name}`);
+          console.log(`[SCHEDULER] Sent OK: ${lead.name}`);
           sentCount++;
         } catch (error) {
-          console.error(`Error sending reminder for ${lead.name}:`, error.message);
+          console.error(`[SCHEDULER] FAILED for ${lead.name}: ${error.message}`);
           errorCount++;
         }
       }
 
       this.nextRun = this.calculateNextRun(reminderTime);
-      console.log(`✅ Appointment reminders completed: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
-      console.log(`📅 Next run scheduled for: ${this.nextRun}`);
+      console.log('[SCHEDULER] =============================================');
+      console.log(`[SCHEDULER] COMPLETE: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
+      console.log(`[SCHEDULER] Next run: ${this.nextRun}`);
+      console.log('[SCHEDULER] =============================================');
+
+      return { sent: sentCount, skipped: skippedCount, errors: errorCount };
     } catch (error) {
-      console.error('Error processing appointment reminders:', error);
+      console.error('[SCHEDULER] processAppointmentReminders crashed:', error.message);
+      console.error('[SCHEDULER] Stack:', error.stack);
+      this.lastError = { time: new Date().toISOString(), message: error.message };
+      return { sent: 0, skipped: 0, errors: 0, error: error.message };
     }
   }
 
   // Send immediate reminder for a specific lead
   async sendImmediateReminder(leadId, userId) {
     try {
-      // Get lead from Supabase
       const { data: lead, error: leadError } = await supabase
         .from('leads')
         .select('*')
@@ -231,33 +265,27 @@ class Scheduler {
         throw new Error('Lead not found');
       }
 
-      await MessagingService.sendAppointmentReminder(
-        leadId,
-        userId,
-        lead.date_booked,
-        0 // Immediate reminder
-      );
-
-      console.log(`📧 Immediate reminder sent for ${lead.name}`);
+      await MessagingService.sendAppointmentReminder(leadId, userId, lead.date_booked, 0);
+      console.log(`[SCHEDULER] Immediate reminder sent for ${lead.name}`);
       return true;
     } catch (error) {
-      console.error('Error sending immediate reminder:', error);
+      console.error('[SCHEDULER] Immediate reminder error:', error.message);
       return false;
     }
   }
 
-  // Get scheduler status
   getStatus() {
     return {
       isRunning: this.isRunning,
       lastRun: this.lastRun,
+      lastTick: this.lastTick,
       nextRun: this.nextRun,
-      scheduledTime: this.scheduledTime
+      scheduledTime: this.scheduledTime,
+      tickCount: this.tickCount,
+      lastError: this.lastError
     };
   }
 }
 
-// Create singleton instance
 const scheduler = new Scheduler();
-
 module.exports = scheduler;
