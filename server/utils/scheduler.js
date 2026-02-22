@@ -5,6 +5,21 @@ const config = require('../config');
 
 const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
+// Get current time in UK (handles GMT/BST automatically)
+function getUKTime() {
+  const now = new Date();
+  const ukString = now.toLocaleString('en-GB', { timeZone: 'Europe/London' });
+  // ukString = "09/02/2026, 09:00:00"
+  const [datePart, timePart] = ukString.split(', ');
+  const [hours, minutes] = timePart.split(':');
+  return {
+    hours: parseInt(hours),
+    minutes: parseInt(minutes),
+    time: `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`,
+    full: ukString
+  };
+}
+
 class Scheduler {
   constructor() {
     this.cronJob = null;
@@ -24,11 +39,12 @@ class Scheduler {
     }
 
     const now = new Date();
+    const uk = getUKTime();
     console.log('[SCHEDULER] =============================================');
     console.log('[SCHEDULER] Starting appointment reminder scheduler');
-    console.log(`[SCHEDULER] Server time: ${now.toISOString()}`);
-    console.log(`[SCHEDULER] Server hour: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`);
-    console.log(`[SCHEDULER] Timezone offset: UTC${now.getTimezoneOffset() === 0 ? '' : (now.getTimezoneOffset() > 0 ? '-' : '+') + Math.abs(now.getTimezoneOffset() / 60)}`);
+    console.log(`[SCHEDULER] Server UTC: ${now.toISOString()}`);
+    console.log(`[SCHEDULER] UK time:    ${uk.full}`);
+    console.log('[SCHEDULER] All times use Europe/London (GMT/BST auto)');
     console.log('[SCHEDULER] Cron: every minute (* * * * *)');
     console.log('[SCHEDULER] =============================================');
 
@@ -70,12 +86,12 @@ class Scheduler {
     this.tickCount++;
     this.lastTick = new Date().toISOString();
 
-    const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const uk = getUKTime();
+    const currentTime = uk.time;
 
     // Log a heartbeat every 15 minutes (on :00, :15, :30, :45)
-    if (now.getMinutes() % 15 === 0) {
-      console.log(`[SCHEDULER] Heartbeat ${currentTime} | ticks: ${this.tickCount} | scheduled: ${this.scheduledTime || 'unknown'} | next: ${this.nextRun || 'unknown'}`);
+    if (uk.minutes % 15 === 0) {
+      console.log(`[SCHEDULER] Heartbeat ${currentTime} UK | ticks: ${this.tickCount} | scheduled: ${this.scheduledTime || 'unknown'} | next: ${this.nextRun || 'unknown'}`);
     }
 
     // Fetch the template's configured time
@@ -112,14 +128,17 @@ class Scheduler {
   }
 
   calculateNextRun(reminderTime) {
-    const [h, m] = reminderTime.split(':').map(Number);
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(h, m, 0, 0);
-    if (next <= now) {
-      next.setDate(next.getDate() + 1);
+    // Return a human-readable UK time string for the next run
+    const uk = getUKTime();
+    const [targetH, targetM] = reminderTime.split(':').map(Number);
+    const currentMinutes = uk.hours * 60 + uk.minutes;
+    const targetMinutes = targetH * 60 + targetM;
+
+    if (targetMinutes > currentMinutes) {
+      return `Today at ${reminderTime} UK`;
+    } else {
+      return `Tomorrow at ${reminderTime} UK`;
     }
-    return next.toISOString();
   }
 
   // Process appointment reminders - called on time match or manual trigger
