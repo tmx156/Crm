@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const dbManager = require('../database-connection-manager');
+const fbCapi = require('../utils/facebookConversions');
 
 // API key auth middleware for webhooks
 const webhookAuth = (req, res, next) => {
@@ -111,6 +112,9 @@ router.post('/leads', webhookAuth, async (req, res) => {
     }
 
     console.log(`✅ Webhook: Created lead "${lead.name}" (${lead.id}) from ${source || 'website'}`);
+
+    // Send Lead event to Facebook Conversions API
+    fbCapi.trackLead(lead).catch(() => {});
 
     res.status(201).json({
       success: true,

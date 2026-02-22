@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const dbManager = require('../database-connection-manager');
 const MessagingService = require('../utils/messagingService');
+const fbCapi = require('../utils/facebookConversions');
 
 // Function to send sale receipt via email and SMS
 const sendSaleReceipt = async (sale, lead, customEmail, customPhone, sendEmail = true, sendSMS = true) => {
@@ -225,6 +226,9 @@ router.post('/', auth, async (req, res) => {
     // Note: Receipt sending is now handled by individual endpoints
     // This allows for more granular control over email vs SMS receipts
     console.log(`💡 Sale created successfully. Receipt sending will be handled by individual endpoints if requested.`);
+
+    // Send Purchase event to Facebook Conversions API
+    fbCapi.trackPurchase(lead, createdSale).catch(() => {});
 
     // Emit sale created event
     if (req.app.locals.io) {

@@ -51,6 +51,13 @@ const config = {
     apiKey: process.env.WEBHOOK_API_KEY || 'a861c0da361d0723faeac04f0d39fa01129152a7b006dd1885e41eb2d8ceb558'
   },
 
+  // Facebook Conversions API
+  facebook: {
+    pixelId: process.env.FB_PIXEL_ID || null,
+    accessToken: process.env.FB_ACCESS_TOKEN || null,
+    testEventCode: process.env.FB_TEST_EVENT_CODE || null
+  },
+
   // Client Configuration
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
 

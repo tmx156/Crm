@@ -10,6 +10,7 @@ const { analyseLeads, fetchLegacyLeads } = require('../utils/leadAnalysis');
 const MessagingService = require('../utils/messagingService');
 const { sendSMS, sendAppointmentReminder, sendStatusUpdate, sendCustomMessage } = require('../utils/smsService');
 const { v4: uuidv4 } = require('uuid'); // Added for UUID generation
+const fbCapi = require('../utils/facebookConversions');
 const { createClient } = require('@supabase/supabase-js');
 
 // Supabase configuration
@@ -1344,6 +1345,12 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
+    // Send events to Facebook Conversions API
+    fbCapi.trackLead(lead).catch(() => {});
+    if (lead.status === 'Booked' && lead.date_booked) {
+      fbCapi.trackBooking(lead, lead.date_booked).catch(() => {});
+    }
+
     // Enhanced real-time update for lead creation
     if (global.io) {
       const createPayload = {
@@ -1625,6 +1632,11 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         console.error('Failed to update daily performance:', perfError.message);
       }
     }
+    // Send Schedule event to Facebook when a lead gets booked
+    if (isNewBooking && updatedLead.date_booked) {
+      fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(() => {});
+    }
+
     // Add booking history entries based on the type of change
     if (isNewBooking) {
       console.log(`📅 Adding INITIAL_BOOKING for lead ${lead.name} (oldStatus: ${oldStatus}, oldDateBooked: ${oldDateBooked})`);
