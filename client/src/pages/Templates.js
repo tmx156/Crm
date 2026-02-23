@@ -278,17 +278,91 @@ const Templates = () => {
   };
 
   const handleManualSend = async () => {
-    if (!window.confirm('This will send appointment reminders NOW to all leads with matching bookings. Continue?')) return;
     setSendingReminders(true);
     try {
-      const response = await fetch('/api/scheduler/run-now', {
+      // Step 1: Preview — check for duplicates without sending
+      const previewRes = await fetch('/api/scheduler/run-now?preview=true', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const preview = await previewRes.json();
+
+      if (!previewRes.ok || !preview.success) {
+        alert(preview.error || preview.message || 'Error checking reminders');
+        return;
+      }
+
+      if (preview.total === 0) {
+        alert(preview.targetDate
+          ? `No leads with appointments on ${preview.targetDate}.`
+          : 'No leads found to send reminders to.');
+        return;
+      }
+
+      // Step 2: Show appropriate confirmation
+      let force = false;
+
+      if (preview.alreadySent > 0 && preview.pending === 0) {
+        // ALL leads already received reminders — only option is resend or abort
+        const sentNames = preview.alreadySentLeads.map(l => l.name).join(', ');
+        const message = [
+          `All ${preview.total} lead(s) for ${preview.targetDate} already received reminders today:`,
+          '',
+          sentNames,
+          '',
+          'Click OK to RESEND to all, or Cancel to abort.',
+        ].join('\n');
+
+        if (window.confirm(message)) {
+          force = true;
+        } else {
+          return;
+        }
+      } else if (preview.alreadySent > 0) {
+        // Some duplicates, some pending — give options
+        const sentNames = preview.alreadySentLeads.map(l => l.name).join(', ');
+        const pendingNames = preview.pendingLeads.map(l => l.name).join(', ');
+
+        const message = [
+          `${preview.total} lead(s) found for ${preview.targetDate}:`,
+          '',
+          `Already sent today (${preview.alreadySent}): ${sentNames}`,
+          `Not yet sent (${preview.pending}): ${pendingNames}`,
+          '',
+          'Click OK to send only to unsent leads.',
+          'Click Cancel for more options.',
+        ].join('\n');
+
+        if (!window.confirm(message)) {
+          // They cancelled the "send unsent" option — offer resend all
+          const resendMessage = `Would you like to RESEND to ALL ${preview.total} leads (including those already sent today)?`;
+          if (window.confirm(resendMessage)) {
+            force = true;
+          } else {
+            return; // User cancelled both options
+          }
+        }
+        // If they clicked OK on the first confirm, force stays false (skip duplicates)
+      } else {
+        // No duplicates — simple confirmation
+        if (!window.confirm(`Send reminders to ${preview.total} lead(s) with appointments on ${preview.targetDate}?`)) {
+          return;
+        }
+      }
+
+      // Step 3: Actually send
+      const sendRes = await fetch('/api/scheduler/run-now', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ force })
+      });
+      const data = await sendRes.json();
+      if (sendRes.ok && data.success) {
         alert(`Done! ${data.sent || 0} sent, ${data.skipped || 0} skipped, ${data.errors || 0} errors`);
       } else {
         alert(data.message || 'Error running scheduler');

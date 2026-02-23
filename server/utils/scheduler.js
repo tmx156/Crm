@@ -11,12 +11,29 @@ function getUKTime() {
   const ukString = now.toLocaleString('en-GB', { timeZone: 'Europe/London' });
   // ukString = "09/02/2026, 09:00:00"
   const [datePart, timePart] = ukString.split(', ');
+  const [day, month, year] = datePart.split('/').map(Number);
   const [hours, minutes] = timePart.split(':');
   return {
     hours: parseInt(hours),
     minutes: parseInt(minutes),
+    day,
+    month,
+    year,
     time: `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`,
     full: ukString
+  };
+}
+
+// Get start/end of a UK date as UTC ISO strings for database queries
+function getUKDateRange(ukYear, ukMonth, ukDay, offsetDays = 0) {
+  const target = new Date(Date.UTC(ukYear, ukMonth - 1, ukDay + offsetDays));
+  const y = target.getUTCFullYear();
+  const m = String(target.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(target.getUTCDate()).padStart(2, '0');
+  return {
+    startISO: `${y}-${m}-${d}T00:00:00.000Z`,
+    endISO: `${y}-${m}-${d}T23:59:59.999Z`,
+    dateStr: `${y}-${m}-${d}`
   };
 }
 
@@ -104,13 +121,13 @@ class Scheduler {
 
     if (error) {
       console.error(`[SCHEDULER] DB error fetching template: ${error.message}`);
-      this.lastError = { time: now.toISOString(), message: `DB error: ${error.message}` };
+      this.lastError = { time: new Date().toISOString(), message: `DB error: ${error.message}` };
       return;
     }
 
     if (!templates || templates.length === 0) {
       // Only log this once per hour to avoid spam
-      if (now.getMinutes() === 0) {
+      if (uk.minutes === 0) {
         console.log('[SCHEDULER] No active appointment_reminder template found');
       }
       return;
@@ -141,11 +158,84 @@ class Scheduler {
     }
   }
 
+  // Preview appointment reminders - returns lead counts without sending
+  async previewAppointmentReminders() {
+    try {
+      const { data: templates, error: templateError } = await supabase
+        .from('templates')
+        .select('*')
+        .eq('type', 'appointment_reminder')
+        .eq('is_active', true)
+        .limit(1);
+
+      if (templateError) {
+        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: templateError.message };
+      }
+      if (!templates || templates.length === 0) {
+        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: 'No active template' };
+      }
+
+      const template = templates[0];
+      const reminderDays = template.reminder_days || 1;
+      const ukNow = getUKTime();
+      const { startISO: startOfDayISO, endISO: endOfDayISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
+
+      const { data: leads, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, name, status, date_booked, booker_id, email, phone, deleted_at')
+        .in('status', ['Booked', 'Confirmed'])
+        .gte('date_booked', startOfDayISO)
+        .lte('date_booked', endOfDayISO)
+        .is('deleted_at', null);
+
+      if (leadsError) {
+        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: leadsError.message };
+      }
+      if (!leads || leads.length === 0) {
+        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], targetDate: targetDateStr };
+      }
+
+      const { startISO: todayStartISO } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day);
+      const alreadySentLeads = [];
+      const pendingLeads = [];
+
+      for (const lead of leads) {
+        const { data: existing } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('lead_id', lead.id)
+          .eq('template_id', template.id)
+          .gte('sent_at', todayStartISO)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          alreadySentLeads.push({ id: lead.id, name: lead.name });
+        } else {
+          pendingLeads.push({ id: lead.id, name: lead.name });
+        }
+      }
+
+      return {
+        total: leads.length,
+        alreadySent: alreadySentLeads.length,
+        pending: pendingLeads.length,
+        alreadySentLeads,
+        pendingLeads,
+        targetDate: targetDateStr
+      };
+    } catch (error) {
+      console.error('[SCHEDULER] previewAppointmentReminders error:', error.message);
+      return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: error.message };
+    }
+  }
+
   // Process appointment reminders - called on time match or manual trigger
-  async processAppointmentReminders() {
+  // options.force = true skips duplicate check and sends to all leads
+  async processAppointmentReminders(options = {}) {
+    const { force = false } = options;
     try {
       this.lastRun = new Date().toISOString();
-      console.log('[SCHEDULER] Processing appointment reminders...');
+      console.log(`[SCHEDULER] Processing appointment reminders...${force ? ' (FORCE mode - resending to all)' : ''}`);
 
       // Get active appointment reminder template
       const { data: templates, error: templateError } = await supabase
@@ -157,12 +247,12 @@ class Scheduler {
 
       if (templateError) {
         console.error('[SCHEDULER] Error fetching template:', templateError.message);
-        return { sent: 0, skipped: 0, errors: 0, error: templateError.message };
+        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: templateError.message };
       }
 
       if (!templates || templates.length === 0) {
         console.log('[SCHEDULER] No active appointment_reminder template found');
-        return { sent: 0, skipped: 0, errors: 0, error: 'No template' };
+        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: 'No template' };
       }
 
       const template = templates[0];
@@ -173,19 +263,12 @@ class Scheduler {
       console.log(`[SCHEDULER] Config: ${reminderDays} day(s) before, send at ${reminderTime}`);
       console.log(`[SCHEDULER] Channels: email=${template.send_email}, sms=${template.send_sms}`);
 
-      // Calculate target appointment date
-      const reminderDate = new Date();
-      reminderDate.setDate(reminderDate.getDate() + reminderDays);
+      // Calculate target appointment date using UK date (not UTC)
+      const ukNow = getUKTime();
+      const { startISO: startOfDayISO, endISO: endOfDayISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
 
-      const startOfDay = new Date(reminderDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(reminderDate);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const startOfDayISO = startOfDay.toISOString();
-      const endOfDayISO = endOfDay.toISOString();
-
-      console.log(`[SCHEDULER] Looking for appointments on: ${reminderDate.toDateString()}`);
+      console.log(`[SCHEDULER] UK date today: ${ukNow.day}/${ukNow.month}/${ukNow.year}`);
+      console.log(`[SCHEDULER] Looking for appointments on: ${targetDateStr} (${reminderDays} day(s) ahead)`);
       console.log(`[SCHEDULER] Query range: ${startOfDayISO} to ${endOfDayISO}`);
 
       // Find leads with appointments on that date
@@ -199,12 +282,12 @@ class Scheduler {
 
       if (leadsError) {
         console.error('[SCHEDULER] Error fetching leads:', leadsError.message);
-        return { sent: 0, skipped: 0, errors: 0, error: leadsError.message };
+        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: leadsError.message };
       }
 
       if (!leads || leads.length === 0) {
-        console.log(`[SCHEDULER] No leads with appointments on ${reminderDate.toDateString()}`);
-        return { sent: 0, skipped: 0, errors: 0 };
+        console.log(`[SCHEDULER] No leads with appointments on ${targetDateStr}`);
+        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [] };
       }
 
       console.log(`[SCHEDULER] Found ${leads.length} leads to process`);
@@ -212,30 +295,33 @@ class Scheduler {
       let sentCount = 0;
       let skippedCount = 0;
       let errorCount = 0;
+      const skippedLeads = [];
 
       for (const lead of leads) {
         try {
-          // Duplicate check - already sent today?
-          const startOfToday = new Date();
-          startOfToday.setHours(0, 0, 0, 0);
+          // Duplicate check - skip if force mode is on
+          if (!force) {
+            const { startISO: todayStartISO } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day);
 
-          const { data: existing, error: dupError } = await supabase
-            .from('messages')
-            .select('id')
-            .eq('lead_id', lead.id)
-            .eq('template_id', template.id)
-            .gte('sent_at', startOfToday.toISOString())
-            .limit(1);
+            const { data: existing, error: dupError } = await supabase
+              .from('messages')
+              .select('id')
+              .eq('lead_id', lead.id)
+              .eq('template_id', template.id)
+              .gte('sent_at', todayStartISO)
+              .limit(1);
 
-          if (dupError) {
-            console.error(`[SCHEDULER] Duplicate check error for ${lead.name}: ${dupError.message}`);
-            errorCount++;
-            continue;
-          }
+            if (dupError) {
+              console.error(`[SCHEDULER] Duplicate check error for ${lead.name}: ${dupError.message}`);
+              errorCount++;
+              continue;
+            }
 
-          if (existing && existing.length > 0) {
-            skippedCount++;
-            continue;
+            if (existing && existing.length > 0) {
+              skippedCount++;
+              skippedLeads.push({ id: lead.id, name: lead.name });
+              continue;
+            }
           }
 
           // Send the reminder
@@ -261,12 +347,12 @@ class Scheduler {
       console.log(`[SCHEDULER] Next run: ${this.nextRun}`);
       console.log('[SCHEDULER] =============================================');
 
-      return { sent: sentCount, skipped: skippedCount, errors: errorCount };
+      return { sent: sentCount, skipped: skippedCount, errors: errorCount, skippedLeads };
     } catch (error) {
       console.error('[SCHEDULER] processAppointmentReminders crashed:', error.message);
       console.error('[SCHEDULER] Stack:', error.stack);
       this.lastError = { time: new Date().toISOString(), message: error.message };
-      return { sent: 0, skipped: 0, errors: 0, error: error.message };
+      return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: error.message };
     }
   }
 

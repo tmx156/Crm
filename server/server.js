@@ -449,8 +449,16 @@ app.get('/api/scheduler/status', schedulerAuth, (req, res) => {
 app.post('/api/scheduler/run-now', schedulerAuth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
-    console.log('[SCHEDULER] Manual trigger by admin:', req.user.name || req.user.email);
-    const result = await scheduler.processAppointmentReminders();
+    // Preview mode: return lead counts without sending anything
+    if (req.query.preview === 'true') {
+      console.log('[SCHEDULER] Preview requested by admin:', req.user.name || req.user.email);
+      const preview = await scheduler.previewAppointmentReminders();
+      return res.json({ success: true, preview: true, ...preview });
+    }
+
+    const force = req.body?.force === true;
+    console.log(`[SCHEDULER] Manual trigger by admin: ${req.user.name || req.user.email}${force ? ' (FORCE)' : ''}`);
+    const result = await scheduler.processAppointmentReminders({ force });
     res.json({
       success: true,
       message: `Reminders processed: ${result?.sent || 0} sent, ${result?.skipped || 0} skipped, ${result?.errors || 0} errors`,
