@@ -4476,8 +4476,15 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
 
     const oldStatus = lead.status;
 
+    // Use service role client to bypass RLS and allow activity logging trigger
+    const config = require('../config');
+    const serviceRoleClient = createClient(
+      config.supabase.url,
+      config.supabase.serviceRoleKey || config.supabase.anonKey
+    );
+
     // Update lead status to Wrong Number
-    const { data: updatedLead, error: updateError } = await supabase
+    const { data: updatedLead, error: updateError } = await serviceRoleClient
       .from('leads')
       .update({
         status: 'Wrong Number',
@@ -4760,8 +4767,15 @@ router.post('/:id/no-answer', auth, async (req, res) => {
 
     const oldStatus = lead.status;
 
+    // Use service role client to bypass RLS and allow activity logging trigger
+    const config = require('../config');
+    const serviceRoleClient = createClient(
+      config.supabase.url,
+      config.supabase.serviceRoleKey || config.supabase.anonKey
+    );
+
     // Update lead status to No Answer
-    const { data: updatedLead, error: updateError } = await supabase
+    const { data: updatedLead, error: updateError } = await serviceRoleClient
       .from('leads')
       .update({
         status: 'No Answer',
