@@ -4469,6 +4469,11 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
       return res.status(404).json({ message: 'Lead not found' });
     }
 
+    // ROLE-BASED ACCESS CONTROL - bookers can only update their assigned leads
+    if (req.user.role !== 'admin' && lead.booker_id !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied. You can only update leads assigned to you.' });
+    }
+
     const oldStatus = lead.status;
 
     // Update lead status to Wrong Number
@@ -4746,6 +4751,11 @@ router.post('/:id/no-answer', auth, async (req, res) => {
     if (leadError || !lead) {
       console.error('Lead not found:', leadError);
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // ROLE-BASED ACCESS CONTROL - bookers can only update their assigned leads
+    if (req.user.role !== 'admin' && lead.booker_id !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied. You can only update leads assigned to you.' });
     }
 
     const oldStatus = lead.status;
