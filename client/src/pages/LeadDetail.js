@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiEdit, FiSave, FiPhone, FiMail, FiMapPin, FiCalendar, FiMessageSquare, FiSend, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiActivity, FiCheckCircle, FiX, FiRefreshCw, FiClock, FiUser, FiCheck, FiSettings } from 'react-icons/fi';
+import { FiArrowLeft, FiEdit, FiSave, FiPhone, FiMail, FiMapPin, FiCalendar, FiMessageSquare, FiSend, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiActivity, FiCheckCircle, FiX, FiRefreshCw, FiClock, FiUser, FiCheck, FiSettings, FiAlertCircle } from 'react-icons/fi';
 import axios from 'axios';
 import TagSystem from '../components/TagSystem';
 import PhotoModal from '../components/PhotoModal';
@@ -75,6 +75,16 @@ const LeadDetail = () => {
   const [rejectReason, setRejectReason] = useState('Duplicate');
   const [rejecting, setRejecting] = useState(false);
 
+  // Wrong Number status state
+  const [showWrongNumberModal, setShowWrongNumberModal] = useState(false);
+  const [wrongNumberLoading, setWrongNumberLoading] = useState(false);
+  const [wrongNumberTemplate, setWrongNumberTemplate] = useState(null);
+
+  // No Answer status state
+  const [showNoAnswerModal, setShowNoAnswerModal] = useState(false);
+  const [noAnswerLoading, setNoAnswerLoading] = useState(false);
+  const [noAnswerTemplate, setNoAnswerTemplate] = useState(null);
+
   // Fallback templates for when API is unavailable
   const fallbackSmsTemplates = [
     { _id: 'welcome', name: 'Welcome Message', message: "Hi [NAME], thanks for your interest! We'll contact you shortly to confirm your photoshoot booking." },
@@ -134,6 +144,8 @@ const LeadDetail = () => {
   const isLeadTemplate = (t) => [
     'booking_confirmation',
     'appointment_reminder',
+    'wrong_number',
+    'no_answer',
     'custom'
   ].includes(t.type);
 
@@ -629,6 +641,34 @@ const LeadDetail = () => {
   };
 
   const handleQuickStatusChange = async (newStatus) => {
+    // Special handling for Wrong Number status
+    if (newStatus === 'Wrong Number') {
+      setShowWrongNumberModal(true);
+      // Check if user has a template configured
+      try {
+        const response = await axios.get(`/api/leads/${lead.id}/wrong-number/template-check`);
+        setWrongNumberTemplate(response.data);
+      } catch (error) {
+        console.error('Error checking wrong number template:', error);
+        setWrongNumberTemplate({ hasTemplate: false });
+      }
+      return;
+    }
+
+    // Special handling for No Answer status
+    if (newStatus === 'No Answer') {
+      setShowNoAnswerModal(true);
+      // Check if user has a template configured
+      try {
+        const response = await axios.get(`/api/leads/${lead.id}/no-answer/template-check`);
+        setNoAnswerTemplate(response.data);
+      } catch (error) {
+        console.error('Error checking no answer template:', error);
+        setNoAnswerTemplate({ hasTemplate: false });
+      }
+      return;
+    }
+
     if (!window.confirm(`Are you sure you want to change ${lead.name}'s status to "${newStatus}"?`)) {
       return;
     }
@@ -803,6 +843,10 @@ const LeadDetail = () => {
       case 'cancelled':
         return 'status-badge status-cancelled';
       case 'reschedule':
+        return 'status-badge status-reschedule';
+      case 'wrong number':
+        return 'status-badge status-rejected';
+      case 'no answer':
         return 'status-badge status-reschedule';
       default:
         return 'status-badge status-new';
@@ -1693,15 +1737,40 @@ const LeadDetail = () => {
                   </div>
                 </div>
               </div>
-              {/* Add Reject button in the details card (after notes section) */}
-              {!editing && lead.status !== 'Rejected' && (
-                <button
-                  className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                  onClick={() => setShowRejectModal(true)}
-                >
-                  Reject Lead
-                </button>
-              )}
+              {/* Status Action Buttons */}
+              <div className="space-y-3 mt-4">
+                {/* No Answer Button */}
+                {!editing && lead.status !== 'No Answer' && (
+                  <button
+                    className="w-full px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 flex items-center justify-center space-x-2"
+                    onClick={() => handleQuickStatusChange('No Answer')}
+                  >
+                    <FiPhone className="h-4 w-4" />
+                    <span>Mark as No Answer</span>
+                  </button>
+                )}
+
+                {/* Wrong Number Button */}
+                {!editing && lead.status !== 'Wrong Number' && (
+                  <button
+                    className="w-full px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 flex items-center justify-center space-x-2"
+                    onClick={() => handleQuickStatusChange('Wrong Number')}
+                  >
+                    <FiPhone className="h-4 w-4" />
+                    <span>Mark as Wrong Number</span>
+                  </button>
+                )}
+
+                {/* Add Reject button in the details card (after notes section) */}
+                {!editing && lead.status !== 'Rejected' && (
+                  <button
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                    onClick={() => setShowRejectModal(true)}
+                  >
+                    Reject Lead
+                  </button>
+                )}
+              </div>
               
               {/* Add Send Booking Confirmation button */}
               {!editing && lead.phone && lead.status === 'Booked' && (
@@ -1783,6 +1852,292 @@ const LeadDetail = () => {
                 }}
               >
                 Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wrong Number Modal */}
+      {showWrongNumberModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[450px] max-w-[90vw]">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                <FiPhone className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Mark as Wrong Number</h2>
+                <p className="text-sm text-gray-500">{lead.name}</p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-gray-700 mb-3">
+                Are you sure you want to mark this lead as having a wrong phone number?
+              </p>
+              
+              {wrongNumberTemplate === null ? (
+                <div className="flex items-center space-x-2 text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
+                  <span className="text-sm">Checking for auto-trigger template...</span>
+                </div>
+              ) : wrongNumberTemplate.hasTemplate ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <FiCheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Auto-trigger template found!
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        Template: <strong>{wrongNumberTemplate.template.name}</strong>
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {wrongNumberTemplate.template.send_sms && '📱 SMS will be sent'}
+                        {wrongNumberTemplate.template.send_sms && wrongNumberTemplate.template.send_email && ' + '}
+                        {wrongNumberTemplate.template.send_email && '📧 Email will be sent'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <FiAlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        No auto-trigger template configured
+                      </p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        The status will be changed but no message will be sent.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setShowWrongNumberModal(false);
+                          navigate('/bookers-templates');
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline mt-2"
+                      >
+                        Create a template →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+              <p className="text-xs text-gray-600">
+                <strong>This will:</strong>
+              </p>
+              <ul className="text-xs text-gray-600 mt-1 space-y-1 list-disc list-inside">
+                <li>Change the lead status to &quot;Wrong Number&quot;</li>
+                <li>Add an entry to the booking history</li>
+                {wrongNumberTemplate?.hasTemplate && <li>Send the configured template automatically</li>}
+              </ul>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                onClick={() => {
+                  setShowWrongNumberModal(false);
+                  setWrongNumberTemplate(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={wrongNumberLoading || wrongNumberTemplate === null}
+                onClick={async () => {
+                  setWrongNumberLoading(true);
+                  try {
+                    const response = await axios.post(`/api/leads/${lead.id}/wrong-number`, {
+                      sendMessage: wrongNumberTemplate?.hasTemplate
+                    });
+                    
+                    if (response.data.success) {
+                      setLead(response.data.lead);
+                      setFormData(response.data.lead);
+                      
+                      // Show success message
+                      const msgResult = response.data.message;
+                      let successMsg = `✅ ${lead.name} marked as Wrong Number`;
+                      if (msgResult?.success) {
+                        successMsg += '\n\n📨 Template sent successfully!';
+                        if (msgResult.emailSent) successMsg += '\n✉️ Email sent';
+                        if (msgResult.smsSent) successMsg += '\n📱 SMS sent';
+                      } else if (msgResult?.reason === 'No template configured') {
+                        successMsg += '\n\nℹ️ No template configured - status changed only';
+                      }
+                      alert(successMsg);
+                      
+                      setShowWrongNumberModal(false);
+                      setWrongNumberTemplate(null);
+                      
+                      // Refresh lead data
+                      fetchLead();
+                    }
+                  } catch (err) {
+                    console.error('Error marking wrong number:', err);
+                    alert('Failed to mark as wrong number: ' + (err.response?.data?.message || err.message));
+                  }
+                  setWrongNumberLoading(false);
+                }}
+              >
+                {wrongNumberLoading ? (
+                  <span className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Processing...</span>
+                  </span>
+                ) : (
+                  'Confirm Wrong Number'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Answer Modal */}
+      {showNoAnswerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[450px] max-w-[90vw]">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <FiPhone className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Mark as No Answer</h2>
+                <p className="text-sm text-gray-500">{lead.name}</p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-gray-700 mb-3">
+                The lead did not answer the call. Marking as &quot;No Answer&quot; will trigger a follow-up email.
+              </p>
+              
+              {noAnswerTemplate === null ? (
+                <div className="flex items-center space-x-2 text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500"></div>
+                  <span className="text-sm">Checking for auto-trigger template...</span>
+                </div>
+              ) : noAnswerTemplate.hasTemplate ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <FiCheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">
+                        Auto-trigger template found!
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        Template: <strong>{noAnswerTemplate.template.name}</strong>
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {noAnswerTemplate.template.send_sms && '📱 SMS will be sent'}
+                        {noAnswerTemplate.template.send_sms && noAnswerTemplate.template.send_email && ' + '}
+                        {noAnswerTemplate.template.send_email && '📧 Email will be sent'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <FiAlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        No auto-trigger template configured
+                      </p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        The status will be changed but no message will be sent.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setShowNoAnswerModal(false);
+                          navigate('/bookers-templates');
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline mt-2"
+                      >
+                        Create a template →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+              <p className="text-xs text-gray-600">
+                <strong>This will:</strong>
+              </p>
+              <ul className="text-xs text-gray-600 mt-1 space-y-1 list-disc list-inside">
+                <li>Change the lead status to &quot;No Answer&quot;</li>
+                <li>Add an entry to the booking history</li>
+                {noAnswerTemplate?.hasTemplate && <li>Send the configured template automatically</li>}
+              </ul>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                onClick={() => {
+                  setShowNoAnswerModal(false);
+                  setNoAnswerTemplate(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={noAnswerLoading || noAnswerTemplate === null}
+                onClick={async () => {
+                  setNoAnswerLoading(true);
+                  try {
+                    const response = await axios.post(`/api/leads/${lead.id}/no-answer`, {
+                      sendMessage: noAnswerTemplate?.hasTemplate
+                    });
+                    
+                    if (response.data.success) {
+                      setLead(response.data.lead);
+                      setFormData(response.data.lead);
+                      
+                      // Show success message
+                      const msgResult = response.data.message;
+                      let successMsg = `✅ ${lead.name} marked as No Answer`;
+                      if (msgResult?.success) {
+                        successMsg += '\n\n📨 Template sent successfully!';
+                        if (msgResult.emailSent) successMsg += '\n✉️ Email sent';
+                        if (msgResult.smsSent) successMsg += '\n📱 SMS sent';
+                      } else if (msgResult?.reason === 'No template configured') {
+                        successMsg += '\n\nℹ️ No template configured - status changed only';
+                      }
+                      alert(successMsg);
+                      
+                      setShowNoAnswerModal(false);
+                      setNoAnswerTemplate(null);
+                      
+                      // Refresh lead data
+                      fetchLead();
+                    }
+                  } catch (err) {
+                    console.error('Error marking no answer:', err);
+                    alert('Failed to mark as no answer: ' + (err.response?.data?.message || err.message));
+                  }
+                  setNoAnswerLoading(false);
+                }}
+              >
+                {noAnswerLoading ? (
+                  <span className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Processing...</span>
+                  </span>
+                ) : (
+                  'Confirm No Answer'
+                )}
               </button>
             </div>
           </div>

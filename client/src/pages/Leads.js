@@ -652,6 +652,10 @@ const Leads = () => {
         return 'status-badge status-assigned';
       case 'reschedule':
         return 'status-badge status-reschedule';
+      case 'wrong number':
+        return 'status-badge status-rejected';
+      case 'no answer':
+        return 'status-badge status-reschedule';
       default:
         return 'status-badge status-new';
     }
@@ -1257,6 +1261,8 @@ const Leads = () => {
               <option value="Booked">📅 Booked</option>
               <option value="Attended">✅ Attended</option>
               <option value="Cancelled">❌ Cancelled</option>
+              <option value="Wrong Number">📞 Wrong Number</option>
+              <option value="No Answer">📵 No Answer</option>
               <option value="Assigned">👤 Assigned</option>
               <option value="sales">💰 Sales</option>
             </select>
@@ -1869,6 +1875,8 @@ const Leads = () => {
                     <option value="Booked">Booked</option>
                     <option value="Attended">Attended</option>
                     <option value="Cancelled">Cancelled</option>
+                    <option value="Wrong Number">Wrong Number</option>
+                    <option value="No Answer">No Answer</option>
                   </select>
                 </div>
                 <div>

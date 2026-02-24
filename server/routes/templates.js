@@ -707,35 +707,43 @@ router.post('/:id/test/:leadId', auth, async (req, res) => {
       return res.status(404).json({ message: 'Lead not found' });
     }
 
-    // Adapt template format for MessagingService
-    const adaptedTemplate = {
-      ...template,
-      emailBody: template.email_body || template.content,
-      smsBody: template.sms_body || template.content,
-      sendEmail: true, // Default values since we don't have these columns yet
-      sendSMS: true
-    };
-
     // Process template with actual lead data
     const processedTemplate = MessagingService.processTemplate(
-      adaptedTemplate, 
-      lead, 
-      req.user, 
+      template,
+      lead,
+      req.user,
       lead.date_booked
     );
 
-    // Create test message record
-    const messageData = {
-      lead_id: lead.id,
-      type: adaptedTemplate.sendEmail && adaptedTemplate.sendSMS ? 'both' : 
-            adaptedTemplate.sendEmail ? 'email' : 'sms',
-      content: processedTemplate.emailBody || processedTemplate.smsBody,
-      status: 'pending'
-    };
+    const effectiveSendEmail = !!template.send_email;
+    const effectiveSendSms = !!template.send_sms;
+    const emailAccount = template.email_account || 'primary';
 
-    const { data: message, error: messageError } = await supabase
+    if (!effectiveSendEmail && !effectiveSendSms) {
+      return res.status(400).json({ message: 'Template has both email and SMS disabled' });
+    }
+
+    // Create message record with all required fields
+    const { v4: uuidv4 } = require('uuid');
+    const messageId = uuidv4();
+    const { data: messageRecord, error: messageError } = await supabase
       .from('messages')
-      .insert([messageData])
+      .insert({
+        id: messageId,
+        lead_id: lead.id,
+        type: (effectiveSendEmail && effectiveSendSms) ? 'both' : (effectiveSendEmail ? 'email' : 'sms'),
+        content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
+        subject: processedTemplate.subject,
+        recipient_email: effectiveSendEmail ? lead.email : null,
+        recipient_phone: effectiveSendSms ? lead.phone : null,
+        status: 'pending',
+        sent_by: req.user.id,
+        sent_by_name: req.user.name || 'Admin',
+        template_id: template.id,
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .select()
       .single();
 
@@ -744,17 +752,31 @@ router.post('/:id/test/:leadId', auth, async (req, res) => {
       return res.status(500).json({ message: 'Error creating test message' });
     }
 
+    // Build message object with all fields sendEmail/sendSMS expect
+    const message = {
+      id: messageRecord.id,
+      lead_id: lead.id,
+      subject: processedTemplate.subject,
+      email_body: processedTemplate.email_body,
+      sms_body: processedTemplate.sms_body,
+      recipient_email: lead.email,
+      recipient_phone: lead.phone,
+      sent_by: req.user.id,
+      sent_by_name: req.user.name || 'Admin',
+      attachments: []
+    };
+
     // Send test messages
-    if (adaptedTemplate.sendEmail) {
-      await MessagingService.sendEmail(message);
+    if (effectiveSendEmail) {
+      await MessagingService.sendEmail(message, emailAccount);
     }
-    if (adaptedTemplate.sendSMS) {
+    if (effectiveSendSms) {
       await MessagingService.sendSMS(message);
     }
 
-    res.json({ 
+    res.json({
       message: 'Test message sent successfully',
-      messageId: message.id
+      messageId: messageRecord.id
     });
   } catch (error) {
     console.error('Error testing template:', error);

@@ -74,7 +74,9 @@ router.get('/leads-public', async (req, res) => {
       attended: statusData.filter(lead => lead.status === 'Attended').length,
       cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
       assigned: statusData.filter(lead => lead.status === 'Assigned').length,
-      rejected: statusData.filter(lead => lead.status === 'Rejected').length
+      rejected: statusData.filter(lead => lead.status === 'Rejected').length,
+      wrongNumber: statusData.filter(lead => lead.status === 'Wrong Number').length,
+      noAnswer: statusData.filter(lead => lead.status === 'No Answer').length
     };
 
     const result = {
@@ -84,7 +86,9 @@ router.get('/leads-public', async (req, res) => {
       attended: statusCounts.attended || 0,
       cancelled: statusCounts.cancelled || 0,
       assigned: statusCounts.assigned || 0,
-      rejected: statusCounts.rejected || 0
+      rejected: statusCounts.rejected || 0,
+      wrongNumber: statusCounts.wrongNumber || 0,
+      noAnswer: statusCounts.noAnswer || 0
     };
 
     console.log(`📊 PUBLIC STATS RESULT: Found ${totalCount} total bookings`);
@@ -206,7 +210,9 @@ router.get('/leads', auth, async (req, res) => {
       attended: statusData.filter(lead => lead.status === 'Attended').length,
       cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
       assigned: statusData.filter(lead => lead.status === 'Assigned').length,
-      rejected: statusData.filter(lead => lead.status === 'Rejected').length
+      rejected: statusData.filter(lead => lead.status === 'Rejected').length,
+      wrongNumber: statusData.filter(lead => lead.status === 'Wrong Number').length,
+      noAnswer: statusData.filter(lead => lead.status === 'No Answer').length
     };
 
     const result = {
@@ -216,7 +222,9 @@ router.get('/leads', auth, async (req, res) => {
       attended: statusCounts.attended || 0,
       cancelled: statusCounts.cancelled || 0,
       assigned: statusCounts.assigned || 0,
-      rejected: statusCounts.rejected || 0
+      rejected: statusCounts.rejected || 0,
+      wrongNumber: statusCounts.wrongNumber || 0,
+      noAnswer: statusCounts.noAnswer || 0
     };
 
     console.log(`📊 Lead stats for user ${req.user.name} (${req.user.role}):`, result);

@@ -346,7 +346,7 @@ const sendSMS = async (to, message) => {
 const sendBookingConfirmation = async (lead, appointmentDate) => {
   try {
     // Get booking confirmation template
-    const template = getTemplate('booking_confirmation');
+    const template = await getTemplate('booking_confirmation');
     
     if (!template) {
       console.warn('No booking confirmation template found, using default message');
@@ -393,7 +393,7 @@ Bring: 3 outfits, ID, ready hair/makeup. Full details: `;
 const sendAppointmentReminder = async (lead, appointmentDate) => {
   try {
     // Get appointment reminder template
-    const template = getTemplate('appointment_reminder');
+    const template = await getTemplate('appointment_reminder');
     
     if (!template) {
       console.warn('No appointment reminder template found, using default message');

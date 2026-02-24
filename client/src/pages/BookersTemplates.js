@@ -40,10 +40,12 @@ const BookersTemplates = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        // Filter for bookers template types
+        // Filter for bookers template types (including wrong_number and no_answer)
         setTemplates(data.filter(t => [
           'booking_confirmation',
           'appointment_reminder',
+          'wrong_number',
+          'no_answer',
           'custom'
         ].includes(t.type)));
       }
@@ -81,6 +83,8 @@ const BookersTemplates = () => {
       const validType = formData.type && [
         'booking_confirmation',
         'appointment_reminder',
+        'wrong_number',
+        'no_answer',
         'custom'
       ].includes(formData.type) ? formData.type : 'booking_confirmation';
       const response = await fetch(url, {
@@ -297,18 +301,28 @@ const BookersTemplates = () => {
                       />
                     </div>
 
-                    {/* Template Type - Removed as per edit hint */}
-                    {/* <div>
+                    {/* Template Type Selection */}
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Template Type
                       </label>
-                      <input
-                        type="text"
-                        value="booker"
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
-                      />
-                    </div> */}
+                      <select
+                        value={formData.type}
+                        onChange={(e) => setFormData({...formData, type: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="booking_confirmation">Booking Confirmation</option>
+                        <option value="appointment_reminder">Appointment Reminder</option>
+                        <option value="wrong_number">Wrong Number (Auto-Trigger)</option>
+                        <option value="no_answer">No Answer (Auto-Trigger)</option>
+                        <option value="custom">Custom Template</option>
+                      </select>
+                      {(formData.type === 'wrong_number' || formData.type === 'no_answer') && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          ⚠️ This template will be automatically sent when you mark a lead as &quot;{formData.type === 'wrong_number' ? 'Wrong Number' : 'No Answer'}&quot;
+                        </p>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-4">
                       <label className="flex items-center">

@@ -645,7 +645,9 @@ const Layout = ({ children }) => {
         { name: 'New Leads', status: 'New', icon: '🆕' },
         { name: 'Booked', status: 'Booked', icon: '📅' },
         { name: 'Attended', status: 'Attended', icon: '✅' },
-        { name: 'Cancelled', status: 'Cancelled', icon: '❌' }
+        { name: 'Cancelled', status: 'Cancelled', icon: '❌' },
+        { name: 'Wrong Number', status: 'Wrong Number', icon: '📞' },
+        { name: 'No Answer', status: 'No Answer', icon: '📵' }
       ]
     },
     { name: 'Calendar', href: '/calendar', icon: FiCalendar },
@@ -668,6 +670,8 @@ const Layout = ({ children }) => {
     { name: 'Booked', status: 'Booked', icon: '📅', color: 'text-blue-600' },
     { name: 'Attended', status: 'Attended', icon: '✅', color: 'text-green-600' },
     { name: 'Cancelled', status: 'Cancelled', icon: '❌', color: 'text-red-600' },
+    { name: 'Wrong Number', status: 'Wrong Number', icon: '📞', color: 'text-gray-500' },
+    { name: 'No Answer', status: 'No Answer', icon: '📵', color: 'text-amber-600' },
   ];
 
   const filteredNavigation = navigation.filter(item => {

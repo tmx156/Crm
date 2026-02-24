@@ -4,11 +4,10 @@ const { sendEmail: sendActualEmail } = require('./emailService');
 const { sendSMS: sendActualSMS } = require('./smsService');
 const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid'); // Use uuid package for reliable ID generation
+const config = require('../config');
 
-// Supabase configuration
-const supabaseUrl = 'https://tnltvfzltdeilanxhlvy.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Supabase configuration - use service role key to bypass RLS for server-side operations
+const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
 
 // const getDb = () => {
 //   return new Database(path.join(__dirname, '..', 'local-crm.db'));

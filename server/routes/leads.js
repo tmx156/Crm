@@ -1791,100 +1791,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
   }
 });
 
-// @route   POST /api/leads/:id/no-answer
-// @desc    Increment no answer count for retargeting
-// @access  Private
-router.post('/:id/no-answer', auth, async (req, res) => {
-  try {
-    if (!req.params.id) {
-      return res.status(400).json({ message: 'Invalid lead ID format' });
-    }
-
-    const lead = await dbManager.query('leads', {
-      select: '*',
-      eq: { id: req.params.id },
-      is: { deleted_at: null }
-    });
-
-    if (!lead || lead.length === 0) {
-      console.error('No answer increment error: Lead not found or deleted');
-      return res.status(404).json({ message: 'Lead not found' });
-    }
-
-    const leadData = lead[0];
-
-    // Check if user can update this lead
-    if (req.user.role !== 'admin' && leadData.booker_id && leadData.booker_id.toString() !== req.user.id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Initialize retargeting object if it doesn't exist
-    let retargeting = {};
-    if (leadData.retargeting) {
-      try {
-        retargeting = JSON.parse(leadData.retargeting);
-      } catch (e) {
-        retargeting = {};
-      }
-    }
-
-    if (!retargeting.no_answer_count) {
-      retargeting = {
-        no_answer_count: 0,
-        is_eligible: false,
-        status: 'ACTIVE',
-        exclude_from_retargeting: false,
-        campaigns_sent: []
-      };
-    }
-
-    // Increment no answer count (max 10)
-    const currentCount = retargeting.no_answer_count || 0;
-    if (currentCount >= 10) {
-      return res.status(400).json({ message: 'Maximum no answer count reached' });
-    }
-
-    retargeting.no_answer_count = currentCount + 1;
-    retargeting.last_contact_attempt = new Date().toISOString();
-
-    // Update the lead
-    await dbManager.update('leads', { retargeting: JSON.stringify(retargeting) }, { id: req.params.id });
-
-    // Check if lead becomes eligible for retargeting (3+ no answers, 3+ weeks old, not booked/converted)
-    const threeWeeksAgo = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
-    const isOldEnough = new Date(lead.created_at) <= threeWeeksAgo;
-    const hasEnoughNoAnswers = retargeting.no_answer_count >= 3;
-    const isEligibleStatus = !['Booked', 'Attended'].includes(lead.status);
-    
-    if (isOldEnough && hasEnoughNoAnswers && isEligibleStatus && !retargeting.exclude_from_retargeting) {
-      retargeting.is_eligible = true;
-      retargeting.eligible_since = retargeting.eligible_since || new Date().toISOString();
-      
-      await dbManager.update('leads', { retargeting: JSON.stringify(retargeting) }, { id: req.params.id });
-    }
-
-    // Get the updated lead
-    const updatedLeads = await dbManager.query('leads', {
-      select: '*',
-      eq: { id: req.params.id }
-    });
-    const updatedLead = updatedLeads[0];
-
-    // Emit real-time update
-    if (global.io) {
-      global.io.emit('lead_updated', {
-        lead: updatedLead,
-        action: 'no_answer_update',
-        timestamp: new Date()
-      });
-    }
-
-    res.json(updatedLead);
-  } catch (error) {
-    console.error('No answer increment error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+// Old no-answer retargeting route removed - replaced by new Supabase route with auto-trigger template support (see below)
 
 // @route   PUT /api/leads/:id/assign
 // @desc    Assign lead to a different user
@@ -4537,6 +4444,562 @@ router.get('/public', async (req, res) => {
   } catch (error) {
     console.error('❌ Public leads error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// @route   POST /api/leads/:id/wrong-number
+// @desc    Mark lead as wrong number and send auto-trigger template
+// @access  Private
+router.post('/:id/wrong-number', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sendMessage = true } = req.body;
+    
+    console.log(`📞 Wrong Number status update for lead ${id} by user ${req.user.id}`);
+
+    // Get the lead
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (leadError || !lead) {
+      console.error('Lead not found:', leadError);
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    const oldStatus = lead.status;
+
+    // Update lead status to Wrong Number
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        status: 'Wrong Number',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateError) {
+      console.error('Error updating lead status:', updateError);
+      return res.status(500).json({ message: 'Failed to update lead status' });
+    }
+
+    // Add to booking history
+    try {
+      const historyEntry = {
+        action: 'STATUS_CHANGED',
+        performed_by: req.user.id,
+        performed_by_name: req.user.name || 'System',
+        details: {
+          oldStatus: oldStatus,
+          newStatus: 'Wrong Number',
+          reason: 'Wrong number - auto-trigger',
+          messageSent: sendMessage
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      let currentHistory = lead.booking_history || [];
+      if (typeof currentHistory === 'string') {
+        currentHistory = JSON.parse(currentHistory);
+      }
+      
+      currentHistory.push(historyEntry);
+      
+      await supabase
+        .from('leads')
+        .update({ booking_history: currentHistory })
+        .eq('id', id);
+    } catch (historyError) {
+      console.warn('Failed to add booking history:', historyError);
+    }
+
+    let messageResult = null;
+
+    // Send auto-trigger template if enabled
+    if (sendMessage) {
+      try {
+        // Look for a wrong_number template for this user, fallback to admin templates
+        let { data: templates, error: templateError } = await supabase
+          .from('templates')
+          .select('*')
+          .eq('type', 'wrong_number')
+          .eq('user_id', req.user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        // Fallback: if no user-specific template, look for admin-created templates
+        if ((!templates || templates.length === 0) && !templateError) {
+          console.log('ℹ️ No user-specific wrong number template, checking admin templates...');
+          const { data: adminUsers } = await supabase
+            .from('users')
+            .select('id')
+            .eq('role', 'admin');
+
+          if (adminUsers && adminUsers.length > 0) {
+            const adminIds = adminUsers.map(u => u.id);
+            const { data: adminTemplates, error: adminError } = await supabase
+              .from('templates')
+              .select('*')
+              .eq('type', 'wrong_number')
+              .in('user_id', adminIds)
+              .eq('is_active', true)
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            if (!adminError && adminTemplates && adminTemplates.length > 0) {
+              templates = adminTemplates;
+              console.log('✅ Found admin wrong number template as fallback');
+            }
+          }
+        }
+
+        if (!templateError && templates && templates.length > 0) {
+          const template = templates[0];
+          console.log(`✅ Found wrong number template: ${template.name}`);
+
+          // Process template with lead data
+          const processedTemplate = MessagingService.processTemplate(
+            template,
+            lead,
+            req.user,
+            null // no booking date
+          );
+
+          const effectiveSendEmail = !!template.send_email;
+          const effectiveSendSms = !!template.send_sms;
+          const emailAccount = template.email_account || 'primary';
+
+          if (effectiveSendEmail || effectiveSendSms) {
+            // Create message record
+            const messageId = uuidv4();
+            const { data: messageRecord, error: messageError } = await supabase
+              .from('messages')
+              .insert({
+                id: messageId,
+                lead_id: id,
+                type: (effectiveSendEmail && effectiveSendSms) ? 'both' : (effectiveSendEmail ? 'email' : 'sms'),
+                content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
+                status: 'pending',
+                email_status: effectiveSendEmail ? 'pending' : null,
+                subject: effectiveSendEmail ? processedTemplate.subject : null,
+                recipient_email: effectiveSendEmail ? lead.email : null,
+                recipient_phone: effectiveSendSms ? lead.phone : null,
+                sent_by: req.user.id,
+                sent_by_name: req.user.name || 'System',
+                template_id: template.id,
+                sent_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (messageError) {
+              console.error('Error creating message record:', messageError);
+            }
+
+            // Build message object
+            const message = {
+              id: messageRecord?.id || messageId,
+              lead_id: id,
+              subject: processedTemplate.subject,
+              email_body: processedTemplate.email_body,
+              sms_body: processedTemplate.sms_body,
+              recipient_email: lead.email,
+              recipient_phone: lead.phone,
+              sent_by: req.user.id,
+              sent_by_name: req.user.name || 'System',
+              attachments: []
+            };
+
+            // Send messages
+            let emailSent = false;
+            let smsSent = false;
+
+            if (effectiveSendEmail) {
+              emailSent = await MessagingService.sendEmail(message, emailAccount);
+            }
+            if (effectiveSendSms) {
+              smsSent = await MessagingService.sendSMS(message);
+            }
+
+            messageResult = {
+              success: true,
+              emailSent,
+              smsSent,
+              templateName: template.name
+            };
+
+            console.log(`✅ Wrong number template sent: Email=${emailSent}, SMS=${smsSent}`);
+          }
+        } else {
+          console.log('ℹ️ No wrong number template found for user, skipping auto-trigger');
+          messageResult = {
+            success: false,
+            reason: 'No template configured'
+          };
+        }
+      } catch (templateError) {
+        console.error('Error sending wrong number template:', templateError);
+        messageResult = {
+          success: false,
+          error: templateError.message
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      lead: updatedLead,
+      message: messageResult,
+      status: 'Wrong Number'
+    });
+
+  } catch (error) {
+    console.error('Wrong number status update error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/leads/:id/wrong-number/template-check
+// @desc    Check if user has a wrong number template configured
+// @access  Private
+router.get('/:id/wrong-number/template-check', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if wrong number template exists for this user, fallback to admin templates
+    let { data: templates, error } = await supabase
+      .from('templates')
+      .select('id, name, send_email, send_sms')
+      .eq('type', 'wrong_number')
+      .eq('user_id', req.user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error checking wrong number template:', error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    // Fallback: if no user-specific template, check admin-created templates
+    if (!templates || templates.length === 0) {
+      const { data: adminUsers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin');
+
+      if (adminUsers && adminUsers.length > 0) {
+        const adminIds = adminUsers.map(u => u.id);
+        const { data: adminTemplates, error: adminError } = await supabase
+          .from('templates')
+          .select('id, name, send_email, send_sms')
+          .eq('type', 'wrong_number')
+          .in('user_id', adminIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!adminError && adminTemplates && adminTemplates.length > 0) {
+          templates = adminTemplates;
+        }
+      }
+    }
+
+    const hasTemplate = templates && templates.length > 0;
+
+    res.json({
+      hasTemplate,
+      template: hasTemplate ? templates[0] : null
+    });
+
+  } catch (error) {
+    console.error('Template check error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   POST /api/leads/:id/no-answer
+// @desc    Mark lead as no answer and send auto-trigger template
+// @access  Private
+router.post('/:id/no-answer', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sendMessage = true } = req.body;
+    
+    console.log(`📞 No Answer status update for lead ${id} by user ${req.user.id}`);
+
+    // Get the lead
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (leadError || !lead) {
+      console.error('Lead not found:', leadError);
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    const oldStatus = lead.status;
+
+    // Update lead status to No Answer
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        status: 'No Answer',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateError) {
+      console.error('Error updating lead status:', updateError);
+      return res.status(500).json({ message: 'Failed to update lead status' });
+    }
+
+    // Add to booking history
+    try {
+      const historyEntry = {
+        action: 'STATUS_CHANGED',
+        performed_by: req.user.id,
+        performed_by_name: req.user.name || 'System',
+        details: {
+          oldStatus: oldStatus,
+          newStatus: 'No Answer',
+          reason: 'No answer - auto-trigger',
+          messageSent: sendMessage
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      let currentHistory = lead.booking_history || [];
+      if (typeof currentHistory === 'string') {
+        currentHistory = JSON.parse(currentHistory);
+      }
+      
+      currentHistory.push(historyEntry);
+      
+      await supabase
+        .from('leads')
+        .update({ booking_history: currentHistory })
+        .eq('id', id);
+    } catch (historyError) {
+      console.warn('Failed to add booking history:', historyError);
+    }
+
+    let messageResult = null;
+
+    // Send auto-trigger template if enabled
+    if (sendMessage) {
+      try {
+        // Look for a no_answer template for this user, fallback to admin templates
+        let { data: templates, error: templateError } = await supabase
+          .from('templates')
+          .select('*')
+          .eq('type', 'no_answer')
+          .eq('user_id', req.user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        // Fallback: if no user-specific template, look for admin-created templates
+        if ((!templates || templates.length === 0) && !templateError) {
+          console.log('ℹ️ No user-specific no answer template, checking admin templates...');
+          const { data: adminUsers } = await supabase
+            .from('users')
+            .select('id')
+            .eq('role', 'admin');
+
+          if (adminUsers && adminUsers.length > 0) {
+            const adminIds = adminUsers.map(u => u.id);
+            const { data: adminTemplates, error: adminError } = await supabase
+              .from('templates')
+              .select('*')
+              .eq('type', 'no_answer')
+              .in('user_id', adminIds)
+              .eq('is_active', true)
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            if (!adminError && adminTemplates && adminTemplates.length > 0) {
+              templates = adminTemplates;
+              console.log('✅ Found admin no answer template as fallback');
+            }
+          }
+        }
+
+        if (!templateError && templates && templates.length > 0) {
+          const template = templates[0];
+          console.log(`✅ Found no answer template: ${template.name}`);
+
+          // Process template with lead data
+          const processedTemplate = MessagingService.processTemplate(
+            template,
+            lead,
+            req.user,
+            null // no booking date
+          );
+
+          const effectiveSendEmail = !!template.send_email;
+          const effectiveSendSms = !!template.send_sms;
+          const emailAccount = template.email_account || 'primary';
+
+          if (effectiveSendEmail || effectiveSendSms) {
+            // Create message record
+            const messageId = uuidv4();
+            const { data: messageRecord, error: messageError } = await supabase
+              .from('messages')
+              .insert({
+                id: messageId,
+                lead_id: id,
+                type: (effectiveSendEmail && effectiveSendSms) ? 'both' : (effectiveSendEmail ? 'email' : 'sms'),
+                content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
+                status: 'pending',
+                email_status: effectiveSendEmail ? 'pending' : null,
+                subject: effectiveSendEmail ? processedTemplate.subject : null,
+                recipient_email: effectiveSendEmail ? lead.email : null,
+                recipient_phone: effectiveSendSms ? lead.phone : null,
+                sent_by: req.user.id,
+                sent_by_name: req.user.name || 'System',
+                template_id: template.id,
+                sent_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (messageError) {
+              console.error('Error creating message record:', messageError);
+            }
+
+            // Build message object
+            const message = {
+              id: messageRecord?.id || messageId,
+              lead_id: id,
+              subject: processedTemplate.subject,
+              email_body: processedTemplate.email_body,
+              sms_body: processedTemplate.sms_body,
+              recipient_email: lead.email,
+              recipient_phone: lead.phone,
+              sent_by: req.user.id,
+              sent_by_name: req.user.name || 'System',
+              attachments: []
+            };
+
+            // Send messages
+            let emailSent = false;
+            let smsSent = false;
+
+            if (effectiveSendEmail) {
+              emailSent = await MessagingService.sendEmail(message, emailAccount);
+            }
+            if (effectiveSendSms) {
+              smsSent = await MessagingService.sendSMS(message);
+            }
+
+            messageResult = {
+              success: true,
+              emailSent,
+              smsSent,
+              templateName: template.name
+            };
+
+            console.log(`✅ No answer template sent: Email=${emailSent}, SMS=${smsSent}`);
+          }
+        } else {
+          console.log('ℹ️ No no answer template found for user, skipping auto-trigger');
+          messageResult = {
+            success: false,
+            reason: 'No template configured'
+          };
+        }
+      } catch (templateError) {
+        console.error('Error sending no answer template:', templateError);
+        messageResult = {
+          success: false,
+          error: templateError.message
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      lead: updatedLead,
+      message: messageResult,
+      status: 'No Answer'
+    });
+
+  } catch (error) {
+    console.error('No answer status update error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/leads/:id/no-answer/template-check
+// @desc    Check if user has a no answer template configured
+// @access  Private
+router.get('/:id/no-answer/template-check', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if no answer template exists for this user, fallback to admin templates
+    let { data: templates, error } = await supabase
+      .from('templates')
+      .select('id, name, send_email, send_sms')
+      .eq('type', 'no_answer')
+      .eq('user_id', req.user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error checking no answer template:', error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    // Fallback: if no user-specific template, check admin-created templates
+    if (!templates || templates.length === 0) {
+      const { data: adminUsers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin');
+
+      if (adminUsers && adminUsers.length > 0) {
+        const adminIds = adminUsers.map(u => u.id);
+        const { data: adminTemplates, error: adminError } = await supabase
+          .from('templates')
+          .select('id, name, send_email, send_sms')
+          .eq('type', 'no_answer')
+          .in('user_id', adminIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!adminError && adminTemplates && adminTemplates.length > 0) {
+          templates = adminTemplates;
+        }
+      }
+    }
+
+    const hasTemplate = templates && templates.length > 0;
+
+    res.json({
+      hasTemplate,
+      template: hasTemplate ? templates[0] : null
+    });
+
+  } catch (error) {
+    console.error('Template check error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

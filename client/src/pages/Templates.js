@@ -42,7 +42,7 @@ const Templates = () => {
       'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
       'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
       'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
-      'Lead Details Templates': ['custom', 'booker']
+      'Lead Details Templates': ['custom', 'booker', 'wrong_number', 'no_answer']
     };
     const grouped = { 'Diary Templates': [], 'Retargeting Templates': [], 'Sale Templates': [], 'Lead Details Templates': [] };
     templates.forEach(t => {
@@ -232,23 +232,20 @@ const Templates = () => {
     }
   };
 
-  const handlePreview = async (template) => {
-    try {
-      const response = await fetch(`/api/templates/${template._id}/preview`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPreviewData(data);
-        setShowPreview(true);
+  const handlePreview = (template) => {
+    // Directly use template data for preview - no API call needed
+    setPreviewData({
+      template: {
+        name: template.name,
+        type: template.type,
+        subject: template.subject,
+        emailBody: template.emailBody || template.email_body,
+        smsBody: template.smsBody || template.sms_body,
+        sendEmail: template.sendEmail !== false,
+        sendSMS: template.sendSMS !== false
       }
-    } catch (error) {
-      console.error('Error previewing template:', error);
-    }
+    });
+    setShowPreview(true);
   };
 
   const handleTest = async (template) => {
@@ -481,7 +478,7 @@ const Templates = () => {
                 'Diary Templates': ['booking_confirmation', 'appointment_reminder', 'no_show', 'reschedule', 'cancellation'],
                 'Retargeting Templates': ['retargeting_gentle', 'retargeting_urgent', 'retargeting_final', 'retargeting'],
                 'Sale Templates': ['sale_confirmation', 'sale_followup', 'sale', 'sale_notification', 'sale_paid_in_full', 'sale_followup_paid', 'sale_finance_agreement', 'sale_followup_finance'],
-                'Lead Details Templates': ['custom', 'booker']
+                'Lead Details Templates': ['custom', 'booker', 'wrong_number', 'no_answer']
               }).find(([cat, types]) => types.includes(t.type));
               return cat ? cat[0] === categoryFilter : categoryFilter === 'Diary Templates';
             });
@@ -591,10 +588,10 @@ const Templates = () => {
                                 className="px-2 py-1 border border-gray-300 rounded text-xs max-w-xs w-48 focus:ring-1 focus:ring-purple-400"
                                 style={{ minWidth: 0 }}
                               >
-                                <option key="select-lead-placeholder" value="">Select lead to test...</option>
-                                {(leads || []).map((lead) => (
-                                  <option key={`lead-${lead._id}`} value={lead._id}>
-                                    {lead.name} ({lead.email})
+                                <option value="">Select lead to test...</option>
+                                {(leads || []).filter(lead => lead._id || lead.id).map((lead, index) => (
+                                  <option key={`lead-${lead._id || lead.id || index}`} value={lead._id || lead.id}>
+                                    {lead.name} ({lead.email || 'no email'})
                                   </option>
                                 ))}
                               </select>
@@ -705,7 +702,15 @@ const Templates = () => {
                             <option key="sale_followup_paid" value="sale_followup_paid">✅ Paid in Full - Follow-up</option>
                             <option key="sale_finance_agreement" value="sale_finance_agreement">📋 Finance Agreement - Welcome</option>
                             <option key="sale_followup_finance" value="sale_followup_finance">💳 Finance Agreement - Follow-up</option>
+                            <option key="wrong_number" value="wrong_number">📞 Wrong Number (Auto-Trigger)</option>
+                            <option key="no_answer" value="no_answer">📵 No Answer (Auto-Trigger)</option>
+                            <option key="custom" value="custom">📝 Custom Template</option>
                           </select>
+                          {(formData.type === 'wrong_number' || formData.type === 'no_answer') && (
+                            <p className="text-xs text-amber-600 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                              ⚠️ This template will be <strong>automatically sent</strong> when a lead is marked as &quot;{formData.type === 'wrong_number' ? 'Wrong Number' : 'No Answer'}&quot; from the Lead Details page.
+                            </p>
+                          )}
                         </div>
 
                         {formData.type === 'appointment_reminder' && (
@@ -1134,59 +1139,101 @@ const Templates = () => {
 
         {/* Preview Modal */}
         {showPreview && previewData && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b">
+          <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-bold">Template Preview</h2>
+                  <div>
+                    <h2 className="text-2xl font-bold">Template Preview</h2>
+                    <p className="text-blue-100 mt-1">{previewData.template.name} - {previewData.template.type?.replace('_', ' ')}</p>
+                  </div>
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="p-2 hover:bg-gray-100 rounded"
+                    className="text-white hover:text-blue-200 p-2 rounded-full hover:bg-white hover:bg-opacity-20 transition-all"
                   >
-                    <FiX />
+                    <FiX className="w-6 h-6" />
                   </button>
                 </div>
               </div>
 
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 100px)' }}>
                 <div className="space-y-6">
                   {/* Email Preview */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                      <FiMail /> Email Preview
-                    </h3>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="mb-2">
-                        <strong>Subject:</strong> {typeof previewData.template.subject === 'string' ? previewData.template.subject : 'No subject'}
+                  {(previewData.template.sendEmail !== false && previewData.template.emailBody) && (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 border-b flex items-center gap-2">
+                        <FiMail className="text-blue-600" />
+                        <span className="font-semibold text-gray-700">Email Preview</span>
                       </div>
-                      <div className="whitespace-pre-wrap text-sm">
-                        {typeof previewData.template.emailBody === 'string' ? previewData.template.emailBody : 'No email content'}
+
+                      {/* Subject */}
+                      <div className="px-4 py-3 bg-gray-50 border-b">
+                        <span className="text-sm text-gray-500">Subject:</span>
+                        <span className="ml-2 font-medium">{previewData.template.subject || '(No subject)'}</span>
+                      </div>
+
+                      {/* Email Body - Rendered HTML */}
+                      <div className="p-4 bg-white">
+                        {previewData.template.emailBody?.includes('<') && previewData.template.emailBody?.includes('>') ? (
+                          <iframe
+                            title="Email Preview"
+                            srcDoc={previewData.template.emailBody}
+                            className="w-full border border-gray-200 rounded-lg"
+                            style={{ minHeight: '400px', maxHeight: '500px' }}
+                            sandbox="allow-same-origin"
+                          />
+                        ) : (
+                          <div className="whitespace-pre-wrap text-sm text-gray-800 p-4 bg-gray-50 rounded-lg">
+                            {previewData.template.emailBody || '(No email content)'}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* SMS Preview */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                      <FiPhone /> SMS Preview
-                    </h3>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="whitespace-pre-wrap text-sm">
-                        {typeof previewData.template.smsBody === 'string' ? previewData.template.smsBody : 'No SMS content'}
+                  {(previewData.template.sendSMS !== false && previewData.template.smsBody) && (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 border-b flex items-center gap-2">
+                        <FiPhone className="text-green-600" />
+                        <span className="font-semibold text-gray-700">SMS Preview</span>
+                        <span className="ml-auto text-xs text-gray-400">
+                          {previewData.template.smsBody?.length || 0} characters
+                        </span>
+                      </div>
+
+                      {/* SMS Phone Mockup */}
+                      <div className="p-6 bg-gradient-to-b from-gray-100 to-gray-200 flex justify-center">
+                        <div className="w-64 bg-black rounded-[2.5rem] p-3 shadow-xl">
+                          {/* Notch */}
+                          <div className="flex justify-center mb-2">
+                            <div className="w-20 h-5 bg-black rounded-b-2xl"></div>
+                          </div>
+                          {/* Screen */}
+                          <div className="p-4 min-h-[200px] bg-gray-50">
+                            <div className="text-xs text-gray-400 text-center mb-3">Edge Talent</div>
+                            <div className="bg-green-500 text-white rounded-2xl rounded-bl-sm p-3 text-sm shadow-md">
+                              {previewData.template.smsBody || '(No SMS content)'}
+                            </div>
+                            <div className="text-xs text-gray-400 text-right mt-1">Just now</div>
+                          </div>
+                          {/* Home indicator */}
+                          <div className="bg-white h-8 flex justify-center items-center">
+                            <div className="w-24 h-1 bg-gray-800 rounded-full"></div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Sample Data */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Sample Data Used</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg text-sm">
-                      <div><strong>Lead:</strong> {previewData.sampleData.lead.name}</div>
-                      <div><strong>Email:</strong> {previewData.sampleData.lead.email}</div>
-                      <div><strong>Phone:</strong> {previewData.sampleData.lead.phone}</div>
-                      <div><strong>Booking Date:</strong> {previewData.sampleData.bookingDate ? new Date(previewData.sampleData.bookingDate).toDateString() : 'Not available'}</div>
+                  {/* No content message */}
+                  {!previewData.template.emailBody && !previewData.template.smsBody && (
+                    <div className="text-center py-12 text-gray-500">
+                      <div className="text-4xl mb-3">📭</div>
+                      <p>This template has no content yet.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
