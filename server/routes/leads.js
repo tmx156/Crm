@@ -4476,6 +4476,7 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
       .from('leads')
       .update({
         status: 'Wrong Number',
+        updated_by_user_id: req.user.id,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -4754,6 +4755,7 @@ router.post('/:id/no-answer', auth, async (req, res) => {
       .from('leads')
       .update({
         status: 'No Answer',
+        updated_by_user_id: req.user.id,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
