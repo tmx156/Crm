@@ -205,6 +205,8 @@ const LeadsNew = () => {
       if (dateRange) {
         params.created_at_start = dateRange.start;
         params.created_at_end = dateRange.end;
+        params.assigned_at_start = dateRange.start;
+        params.assigned_at_end = dateRange.end;
       }
 
       const response = await axios.get('/api/stats/leads', {

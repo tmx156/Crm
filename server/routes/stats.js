@@ -123,17 +123,13 @@ router.get('/leads', auth, async (req, res) => {
       }
     }
 
-    // Apply date filters
+    // Apply date filters - always use created_at for main query
     const useCreatedAt = created_at_start && created_at_end;
-    const useAssignedAt = assigned_at_start && assigned_at_end;
-    const useLegacy = !useCreatedAt && !useAssignedAt && startDate && endDate;
+    const useLegacy = !useCreatedAt && startDate && endDate;
 
     if (useCreatedAt) {
       countQuery = countQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
       statusQuery = statusQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
-    } else if (useAssignedAt) {
-      countQuery = countQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
-      statusQuery = statusQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
     } else if (useLegacy) {
       countQuery = countQuery.gte('created_at', startDate).lte('created_at', endDate);
       statusQuery = statusQuery.gte('created_at', startDate).lte('created_at', endDate);
@@ -165,8 +161,6 @@ router.get('/leads', auth, async (req, res) => {
 
       if (useCreatedAt) {
         batchQuery = batchQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
-      } else if (useAssignedAt) {
-        batchQuery = batchQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
       } else if (useLegacy) {
         batchQuery = batchQuery.gte('created_at', startDate).lte('created_at', endDate);
       }
@@ -203,12 +197,32 @@ router.get('/leads', auth, async (req, res) => {
 
     console.log(`📊 Stats: total fetched ${statusData.length} status records from database (${batchCount} batches)`);
 
+    // Assigned count uses assigned_at date range separately
+    let assignedCount = statusData.filter(lead => lead.status === 'Assigned').length;
+    if (assigned_at_start && assigned_at_end) {
+      let assignedQuery = dbManager.client
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'Assigned')
+        .gte('assigned_at', assigned_at_start)
+        .lte('assigned_at', assigned_at_end);
+
+      if (req.user.role !== 'admin') {
+        assignedQuery = assignedQuery.eq('booker_id', req.user.id);
+      } else if (userId && userId !== 'all') {
+        assignedQuery = assignedQuery.eq('booker_id', userId);
+      }
+
+      const { count: assignedResult, error: assignedError } = await assignedQuery;
+      if (!assignedError) assignedCount = assignedResult || 0;
+    }
+
     const statusCounts = {
       new: statusData.filter(lead => lead.status === 'New').length,
       booked: statusData.filter(lead => lead.status === 'Booked').length,
       attended: statusData.filter(lead => lead.status === 'Attended').length,
       cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
-      assigned: statusData.filter(lead => lead.status === 'Assigned').length,
+      assigned: assignedCount,
       rejected: statusData.filter(lead => lead.status === 'Rejected').length,
       wrongNumber: statusData.filter(lead => lead.status === 'Wrong Number').length,
       noAnswer: statusData.filter(lead => lead.status === 'No Answer').length
