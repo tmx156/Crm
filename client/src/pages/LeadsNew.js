@@ -203,13 +203,8 @@ const LeadsNew = () => {
       const dateRange = getDateRange();
 
       if (dateRange) {
-        if (statusFilter === 'Assigned') {
-          params.assigned_at_start = dateRange.start;
-          params.assigned_at_end = dateRange.end;
-        } else {
-          params.created_at_start = dateRange.start;
-          params.created_at_end = dateRange.end;
-        }
+        params.created_at_start = dateRange.start;
+        params.created_at_end = dateRange.end;
       }
 
       const response = await axios.get('/api/stats/leads', {
