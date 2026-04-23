@@ -372,7 +372,9 @@ router.get('/', auth, async (req, res) => {
     }
 
     // Apply status filter
-    if (status && status !== 'all') {
+    // Skip status filter for Assigned when assigned_at date range is set (show all leads assigned in period)
+    const skipStatusFilter = (status === 'Assigned' && assigned_at_start && assigned_at_end);
+    if (status && status !== 'all' && !skipStatusFilter) {
       if (status === 'sales') {
         dataQuery = dataQuery.eq('has_sale', 1);
         countQuery = countQuery.eq('has_sale', 1);

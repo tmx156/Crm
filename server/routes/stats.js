@@ -203,7 +203,7 @@ router.get('/leads', auth, async (req, res) => {
       let assignedQuery = dbManager.client
         .from('leads')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'Assigned')
+        .not('assigned_at', 'is', null)
         .gte('assigned_at', assigned_at_start)
         .lte('assigned_at', assigned_at_end);
 
