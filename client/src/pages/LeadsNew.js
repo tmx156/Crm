@@ -198,20 +198,24 @@ const LeadsNew = () => {
 
   const fetchLeadCounts = async () => {
     try {
-      // Build params for stats API with date filter if applicable
+      const token = localStorage.getItem('token');
       const params = {};
       const dateRange = getDateRange();
-      
+
       if (dateRange) {
-        // Always use created_at for stats counters
-        // (assigned_at is only used for the actual leads list when viewing Assigned status)
-        params.created_at_start = dateRange.start;
-        params.created_at_end = dateRange.end;
-        console.log('📊 Fetching counts with date filter:', dateRange);
+        if (statusFilter === 'Assigned') {
+          params.assigned_at_start = dateRange.start;
+          params.assigned_at_end = dateRange.end;
+        } else {
+          params.created_at_start = dateRange.start;
+          params.created_at_end = dateRange.end;
+        }
       }
 
-      const response = await axios.get('/api/stats/leads', { params });
-      console.log('📊 Fetched lead counts with date filter:', response.data);
+      const response = await axios.get('/api/stats/leads', {
+        params,
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       setLeadCounts(response.data);
     } catch (error) {
       console.error('Error fetching lead counts:', error);
@@ -229,14 +233,13 @@ const LeadsNew = () => {
     }
   }, [user]);
 
-  // Refetch lead counts when date filter changes
+  // Refetch lead counts when date or status filter changes
   useEffect(() => {
     if (user) {
-      console.log('📅 Date filter changed, refetching counts...');
       fetchLeadCounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFilter, customDateStart, customDateEnd]);
+  }, [dateFilter, customDateStart, customDateEnd, statusFilter]);
 
   // Handle navigation state changes from sidebar
   useEffect(() => {
@@ -682,129 +685,116 @@ const LeadsNew = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-      {/* Modern Sticky Header */}
-      <div className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 border-b border-gray-200/50 shadow-sm">
-        <div className="px-6 py-4">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200/50 shadow-sm">
+        <div className="px-3 sm:px-6 py-3 sm:py-4">
           {/* Top Row */}
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Leads Management
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3 sm:mb-4">
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+              <h1 className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                Leads
               </h1>
               <div className="flex items-center space-x-2">
-                <FiWifi className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  isConnected 
-                    ? 'bg-green-100 text-green-700' 
+                <FiWifi className={`h-3 w-3 sm:h-4 sm:w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
+                <span className={`text-xs px-2 py-0.5 sm:py-1 rounded-full font-medium ${
+                  isConnected
+                    ? 'bg-green-100 text-green-700'
                     : 'bg-red-100 text-red-700'
                 }`}>
                   {isConnected ? 'Live' : 'Offline'}
                 </span>
               </div>
-              <div className="px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-sm font-semibold">
-                {totalLeads} Total Leads
+              <div className="px-2 sm:px-3 py-0.5 sm:py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs sm:text-sm font-semibold">
+                {totalLeads} Leads
               </div>
             </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               {selectedLeads.length > 0 && (
                 <>
-                  <div className="flex items-center space-x-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-xl">
+                  <div className="flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-purple-100 text-purple-700 rounded-xl text-sm">
                     <FiCheck className="h-4 w-4" />
                     <span className="font-medium">{selectedLeads.length} Selected</span>
                   </div>
-                  
+
                   {user?.role === 'admin' && (
                     <>
                       <button
                         onClick={() => setShowBulkAssignModal(true)}
-                        className="group px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                        style={{
-                          pointerEvents: 'auto',
-                          cursor: 'pointer'
-                        }}
+                        className="group px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
+                        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                       >
-                        <FiUserPlus className="h-5 w-5 group-hover:animate-pulse" />
-                        <span className="font-medium">Assign Leads</span>
+                        <FiUserPlus className="h-4 w-4 sm:h-5 sm:w-5" />
+                        <span className="font-medium text-sm sm:text-base">Assign</span>
                       </button>
 
                       <button
                         onClick={() => setShowBulkDeleteModal(true)}
-                        className="group px-4 py-2 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:from-red-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                        style={{
-                          pointerEvents: 'auto',
-                          cursor: 'pointer'
-                        }}
+                        className="group px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:from-red-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
+                        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                       >
-                        <FiTrash2 className="h-5 w-5 group-hover:animate-bounce" />
-                        <span className="font-medium">Delete Leads</span>
+                        <FiTrash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                        <span className="font-medium text-sm sm:text-base">Delete</span>
                       </button>
                     </>
                   )}
-                  
+
                   {user?.role !== 'admin' && (
                     <button
                       onClick={() => setSelectedLeads([])}
-                      className="group px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                      style={{
-                        pointerEvents: 'auto',
-                        cursor: 'pointer'
-                      }}
+                      className="group px-3 py-1.5 sm:px-4 sm:py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all duration-200 flex items-center space-x-2"
+                      style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                     >
-                      <FiX className="h-5 w-5" />
-                      <span className="font-medium">Clear Selection</span>
+                      <FiX className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="font-medium text-sm sm:text-base">Clear</span>
                     </button>
                   )}
                 </>
               )}
-              
+
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="group px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                style={{
-                  pointerEvents: 'auto',
-                  cursor: 'pointer'
-                }}
+                className="group px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-1.5 sm:space-x-2"
+                style={{ pointerEvents: 'auto', cursor: 'pointer' }}
               >
-                <FiUpload className="h-5 w-5 group-hover:animate-bounce" />
-                <span className="font-medium">Upload CSV</span>
+                <FiUpload className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="font-medium text-sm sm:text-base hidden sm:inline">Upload CSV</span>
+                <span className="font-medium text-sm sm:hidden">Upload</span>
               </button>
 
               <button
                 onClick={() => setShowAddModal(true)}
-                className="group px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2 hover:scale-105 transform"
-                style={{
-                  pointerEvents: 'auto',
-                  cursor: 'pointer'
-                }}
+                className="group px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-1.5 sm:space-x-2"
+                style={{ pointerEvents: 'auto', cursor: 'pointer' }}
               >
-                <FiPlus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
-                <span className="font-medium">Add Lead</span>
+                <FiPlus className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="font-medium text-sm sm:text-base hidden sm:inline">Add Lead</span>
+                <span className="font-medium text-sm sm:hidden">Add</span>
               </button>
             </div>
           </div>
 
           {/* Search and Filter Row */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Search Bar */}
             <div className="flex-1 relative">
-              <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <FiSearch className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
               <input
                 type="text"
-                placeholder="Search by name, phone, email, or postcode..."
-                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-800 placeholder-gray-400"
+                placeholder="Search leads..."
+                className="w-full pl-9 sm:pl-12 pr-3 sm:pr-4 py-2.5 sm:py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm sm:text-base text-gray-800 placeholder-gray-400"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
+            <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1 shrink-0">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-2 rounded-lg transition-all duration-200 ${
-                  viewMode === 'grid' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all duration-200 text-sm ${
+                  viewMode === 'grid'
+                    ? 'bg-blue-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -812,9 +802,9 @@ const LeadsNew = () => {
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`px-3 py-2 rounded-lg transition-all duration-200 ${
-                  viewMode === 'table' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all duration-200 text-sm ${
+                  viewMode === 'table'
+                    ? 'bg-blue-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -825,8 +815,8 @@ const LeadsNew = () => {
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="px-6 pb-3">
-          <div className="flex items-center space-x-2 overflow-x-auto pb-2">
+        <div className="px-3 sm:px-6 pb-3">
+          <div className="grid grid-cols-4 sm:flex sm:items-center gap-1.5 sm:gap-2">
             {[
               { value: 'all', label: 'All', count: leadCounts.total },
               { value: 'New', label: 'New', count: leadCounts.new },
@@ -836,31 +826,30 @@ const LeadsNew = () => {
               { value: 'Assigned', label: 'Assigned', count: leadCounts.assigned },
               { value: 'Rejected', label: 'Rejected', count: leadCounts.rejected }
             ].map(filter => {
-              const getFilterStyle = () => {
-                if (statusFilter !== filter.value) {
-                  return 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50';
-                }
-                switch(filter.value) {
-                  case 'all': return 'bg-gray-600 text-white shadow-lg transform scale-105';
-                  case 'New': return 'bg-amber-600 text-white shadow-lg transform scale-105';
-                  case 'Booked': return 'bg-blue-600 text-white shadow-lg transform scale-105';
-                  case 'Attended': return 'bg-green-600 text-white shadow-lg transform scale-105';
-                  case 'Cancelled': return 'bg-red-600 text-white shadow-lg transform scale-105';
-                  case 'Assigned': return 'bg-purple-600 text-white shadow-lg transform scale-105';
-                  case 'Rejected': return 'bg-gray-600 text-white shadow-lg transform scale-105';
-                  default: return 'bg-gray-600 text-white shadow-lg transform scale-105';
-                }
+              const activeStyles = {
+                'all': 'bg-gray-600 text-white shadow-lg',
+                'New': 'bg-amber-600 text-white shadow-lg',
+                'Booked': 'bg-blue-600 text-white shadow-lg',
+                'Attended': 'bg-green-600 text-white shadow-lg',
+                'Cancelled': 'bg-red-600 text-white shadow-lg',
+                'Assigned': 'bg-purple-600 text-white shadow-lg',
+                'Rejected': 'bg-gray-600 text-white shadow-lg'
               };
-              
+              const isActive = statusFilter === filter.value;
+
               return (
                 <button
                   key={filter.value}
                   onClick={() => setStatusFilter(filter.value)}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 whitespace-nowrap ${getFilterStyle()}`}
+                  className={`px-2 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 text-center ${
+                    isActive
+                      ? activeStyles[filter.value]
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  }`}
                 >
                   {filter.label}
-                  <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                    statusFilter === filter.value
+                  <span className={`ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs ${
+                    isActive
                       ? 'bg-white/20 text-white'
                       : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -873,69 +862,40 @@ const LeadsNew = () => {
         </div>
 
         {/* Date Filter */}
-        <div className="px-6 pb-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl border border-blue-200">
-            <div className="flex items-center space-x-2">
-              <FiCalendar className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-semibold text-gray-800">
-                {statusFilter === 'Assigned' ? 'Date Assigned:' : 'Date Added:'}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDateFilter('today')}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  dateFilter === 'today'
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => setDateFilter('yesterday')}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  dateFilter === 'yesterday'
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Yesterday
-              </button>
-              <button
-                onClick={() => setDateFilter('week')}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  dateFilter === 'week'
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Last 7 Days
-              </button>
-              <button
-                onClick={() => setDateFilter('month')}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  dateFilter === 'month'
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Last 30 Days
-              </button>
-              <button
-                onClick={() => setDateFilter('all')}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                  dateFilter === 'all'
-                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                All Time
-              </button>
+        <div className="px-3 sm:px-6 pb-4">
+          <div className="flex flex-col gap-2 sm:gap-3 bg-gradient-to-r from-blue-50 to-purple-50 p-3 sm:p-4 rounded-xl border border-blue-200">
+            <div className="flex flex-row items-center justify-between sm:justify-start gap-2">
+              <div className="flex items-center space-x-2">
+                <FiCalendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                <span className="text-xs sm:text-sm font-semibold text-gray-800">
+                  {statusFilter === 'Assigned' ? 'Date Assigned:' : 'Date Added:'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {[
+                  { value: 'today', label: 'Today' },
+                  { value: 'yesterday', label: 'Yesterday' },
+                  { value: 'week', label: '7 Days' },
+                  { value: 'month', label: '30 Days' },
+                  { value: 'all', label: 'All' }
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setDateFilter(value)}
+                    className={`px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-all duration-200 ${
+                      dateFilter === value
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Custom Date Range */}
-            <div className="flex items-center space-x-2 ml-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
               <input
                 type="date"
                 value={customDateStart}
@@ -943,10 +903,9 @@ const LeadsNew = () => {
                   setCustomDateStart(e.target.value);
                   if (e.target.value) setDateFilter('custom');
                 }}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Start date"
+                className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
               />
-              <span className="text-gray-500 text-sm">to</span>
+              <span className="text-gray-500 text-xs sm:text-sm shrink-0">to</span>
               <input
                 type="date"
                 value={customDateEnd}
@@ -954,8 +913,7 @@ const LeadsNew = () => {
                   setCustomDateEnd(e.target.value);
                   if (e.target.value) setDateFilter('custom');
                 }}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="End date"
+                className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
               />
               {(customDateStart || customDateEnd) && (
                 <button
@@ -964,7 +922,7 @@ const LeadsNew = () => {
                     setCustomDateEnd('');
                     setDateFilter('all');
                   }}
-                  className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                  className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                   title="Clear custom dates"
                 >
                   <FiX className="h-4 w-4" />
@@ -976,7 +934,7 @@ const LeadsNew = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="px-6 py-6">
+      <div className="px-3 sm:px-6 py-4 sm:py-6">
         {viewMode === 'grid' ? (
           /* Modern Card Grid View */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
@@ -1082,24 +1040,71 @@ const LeadsNew = () => {
             ))}
           </div>
         ) : (
-          /* Modern Table View */
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <>
+          {/* Mobile Card List */}
+          <div className="sm:hidden space-y-2">
+            {leads.map((lead) => (
+              <div
+                key={lead.id}
+                onClick={() => handleRowClick(lead)}
+                className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3 active:bg-gray-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedLeads.includes(lead.id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleSelectLead(lead.id);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded text-blue-600 shrink-0 w-5 h-5"
+                />
+                {lead.image_url ? (
+                  <LazyImage
+                    src={getOptimizedImageUrl(lead.image_url, 'thumbnail')}
+                    alt={lead.name}
+                    className="w-10 h-10 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+                    <FiUser className="h-5 w-5 text-gray-500" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-gray-900 text-sm truncate">{lead.name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${getStatusColor(lead.status)}`}>
+                      {lead.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                    <span>{lead.phone}</span>
+                    {lead.postcode && <span>{lead.postcode}</span>}
+                  </div>
+                </div>
+                <FiChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden sm:block bg-white rounded-2xl shadow-lg overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left">
+                  <th className="px-4 py-3 text-left">
                     <input
                       type="checkbox"
                       checked={selectedLeads.length === leads.length && leads.length > 0}
                       onChange={handleSelectAll}
-                      className="rounded text-blue-600"
+                      className="rounded text-blue-600 w-5 h-5"
                     />
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Lead</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date Booked</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Lead</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Contact</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date Booked</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1109,7 +1114,7 @@ const LeadsNew = () => {
                     onClick={() => handleRowClick(lead)}
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={selectedLeads.includes(lead.id)}
@@ -1118,10 +1123,10 @@ const LeadsNew = () => {
                           handleSelectLead(lead.id);
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className="rounded text-blue-600"
+                        className="rounded text-blue-600 w-5 h-5"
                       />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex items-center space-x-3">
                         {lead.image_url ? (
                           <LazyImage
@@ -1145,7 +1150,7 @@ const LeadsNew = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="text-sm">
                         <div className="text-gray-900">{lead.phone}</div>
                         {lead.email && (
@@ -1153,15 +1158,15 @@ const LeadsNew = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(lead.status)}`}>
                         {lead.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900">
                       {formatDate(lead.date_booked)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={(e) => handleBookLead(lead, e)}
@@ -1187,6 +1192,7 @@ const LeadsNew = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Empty State */}

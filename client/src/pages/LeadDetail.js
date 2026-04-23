@@ -935,11 +935,11 @@ const LeadDetail = () => {
         )}
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button
                 onClick={() => navigate('/leads', {
-                  state: { 
+                  state: {
                     statusFilter: filterContext.statusFilter,
                     searchTerm: filterContext.searchTerm
                   }
@@ -948,66 +948,65 @@ const LeadDetail = () => {
               >
                 <FiArrowLeft className="h-5 w-5" />
               </button>
-              <h1 className="text-2xl font-semibold text-gray-900">Lead Details</h1>
-              
+              <h1 className="text-lg sm:text-2xl font-semibold text-gray-900">Lead Details</h1>
+
               {/* Navigation Counter */}
               {allLeads.length > 0 && (
-                <span className="text-sm text-gray-500">
+                <span className="text-xs sm:text-sm text-gray-500">
                   {currentIndex + 1} of {allLeads.length}
-                  {/* Debug info */}
-                  <span className="ml-2 text-xs text-gray-400">
-                    (filter: {filterContext.statusFilter}, search: "{filterContext.searchTerm}")
-                  </span>
                 </span>
               )}
-            </div>
-            
-            {/* Navigation Arrows */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handlePreviousLead}
-                disabled={!canNavigatePrevious() || navigationLoading}
-                className={`p-2 rounded-md transition-colors relative ${
-                  canNavigatePrevious() && !navigationLoading
-                    ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                    : 'text-gray-300 cursor-not-allowed'
-                }`}
-                title={`Previous Lead ${canNavigatePrevious() ? `(${allLeads[currentIndex - 1]?.name})` : '(none)'}`}
-              >
-                {navigationLoading && currentIndex > 0 ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
-                ) : (
-                  <FiChevronLeft className="h-5 w-5" />
-                )}
-              </button>
 
-              <button
-                onClick={handleNextLead}
-                disabled={!canNavigateNext() || navigationLoading}
-                className={`p-2 rounded-md transition-colors relative ${
-                  canNavigateNext() && !navigationLoading
-                    ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                    : 'text-gray-300 cursor-not-allowed'
-                }`}
-                title={`Next Lead ${canNavigateNext() ? `(${allLeads[currentIndex + 1]?.name})` : '(none)'}`}
-              >
-                {navigationLoading && currentIndex < allLeads.length - 1 ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
-                ) : (
-                  <FiChevronRight className="h-5 w-5" />
-                )}
-              </button>
+              {/* Navigation Arrows */}
+              <div className="flex items-center">
+                <button
+                  onClick={handlePreviousLead}
+                  disabled={!canNavigatePrevious() || navigationLoading}
+                  className={`p-1.5 sm:p-2 rounded-md transition-colors relative ${
+                    canNavigatePrevious() && !navigationLoading
+                      ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                      : 'text-gray-300 cursor-not-allowed'
+                  }`}
+                  title={`Previous Lead ${canNavigatePrevious() ? `(${allLeads[currentIndex - 1]?.name})` : '(none)'}`}
+                >
+                  {navigationLoading && currentIndex > 0 ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <FiChevronLeft className="h-5 w-5" />
+                  )}
+                </button>
+
+                <button
+                  onClick={handleNextLead}
+                  disabled={!canNavigateNext() || navigationLoading}
+                  className={`p-1.5 sm:p-2 rounded-md transition-colors relative ${
+                    canNavigateNext() && !navigationLoading
+                      ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                      : 'text-gray-300 cursor-not-allowed'
+                  }`}
+                  title={`Next Lead ${canNavigateNext() ? `(${allLeads[currentIndex + 1]?.name})` : '(none)'}`}
+                >
+                  {navigationLoading && currentIndex < allLeads.length - 1 ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <FiChevronRight className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {!editing && (
                 <button
                   onClick={() => handleBookAppointment()}
-                  className="btn-secondary flex items-center space-x-2"
+                  className="btn-secondary flex items-center space-x-1.5 sm:space-x-2 text-sm sm:text-base"
                 >
                   <FiCalendar className="h-4 w-4" />
-                  <span>
+                  <span className="hidden sm:inline">
                     {lead.status?.toLowerCase() === 'booked' ? 'Reschedule' : 'Book Appointment'}
+                  </span>
+                  <span className="sm:hidden">
+                    {lead.status?.toLowerCase() === 'booked' ? 'Reschedule' : 'Book'}
                   </span>
                 </button>
               )}

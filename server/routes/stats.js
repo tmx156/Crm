@@ -107,15 +107,23 @@ router.get('/leads', auth, async (req, res) => {
     // Parse filters from query - support both old and new parameter names
     const { startDate, endDate, userId, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
 
-    // ROLE-BASED ACCESS CONTROL - Counters show global stats, not filtered by user
-    console.log(`👑 Lead counters show global stats for user ${req.user.name} (${req.user.role})`);
-
-    // Use direct Supabase queries to get accurate counts (same as leads endpoint)
     let countQuery = dbManager.client.from('leads').select('id', { count: 'exact', head: true });
-    let statusQuery = dbManager.client.from('leads').select('status, ever_booked');
+    let statusQuery = dbManager.client.from('leads').select('status');
 
-    // Apply date filters - support both created_at and assigned_at
-    // Prioritize new parameter names over old ones
+    // Role-based filtering: non-admins only see their own leads
+    if (req.user.role !== 'admin') {
+      countQuery = countQuery.eq('booker_id', req.user.id);
+      statusQuery = statusQuery.eq('booker_id', req.user.id);
+      console.log(`🔒 Stats filtered for user ${req.user.name} (booker_id: ${req.user.id})`);
+    } else {
+      console.log(`👑 Stats showing all leads for admin ${req.user.name}`);
+      if (userId && userId !== 'all') {
+        countQuery = countQuery.eq('booker_id', userId);
+        statusQuery = statusQuery.eq('booker_id', userId);
+      }
+    }
+
+    // Apply date filters
     const useCreatedAt = created_at_start && created_at_end;
     const useAssignedAt = assigned_at_start && assigned_at_end;
     const useLegacy = !useCreatedAt && !useAssignedAt && startDate && endDate;
@@ -123,21 +131,12 @@ router.get('/leads', auth, async (req, res) => {
     if (useCreatedAt) {
       countQuery = countQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
       statusQuery = statusQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
-      console.log(`📅 Stats filtering by creation date: ${created_at_start} to ${created_at_end}`);
     } else if (useAssignedAt) {
       countQuery = countQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
       statusQuery = statusQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
-      console.log(`📅 Stats filtering by assignment date: ${assigned_at_start} to ${assigned_at_end}`);
     } else if (useLegacy) {
       countQuery = countQuery.gte('created_at', startDate).lte('created_at', endDate);
       statusQuery = statusQuery.gte('created_at', startDate).lte('created_at', endDate);
-      console.log(`📅 Stats filtering by creation date (legacy): ${startDate} to ${endDate}`);
-    }
-
-    // Apply user filter (booker) - only for admins
-    if (userId && userId !== 'all' && req.user.role === 'admin') {
-      countQuery = countQuery.eq('booker_id', userId);
-      statusQuery = statusQuery.eq('booker_id', userId);
     }
 
     // Get total count
@@ -155,8 +154,14 @@ router.get('/leads', auth, async (req, res) => {
     while (true) {
       console.log(`📊 Stats: fetching batch ${batchCount + 1}, offset ${offset} to ${offset + batchSize - 1}`);
 
-      // Rebuild the query for each batch to ensure range works correctly
-      let batchQuery = dbManager.client.from('leads').select('status, ever_booked');
+      let batchQuery = dbManager.client.from('leads').select('status');
+
+      // Role-based filtering
+      if (req.user.role !== 'admin') {
+        batchQuery = batchQuery.eq('booker_id', req.user.id);
+      } else if (userId && userId !== 'all') {
+        batchQuery = batchQuery.eq('booker_id', userId);
+      }
 
       if (useCreatedAt) {
         batchQuery = batchQuery.gte('created_at', created_at_start).lte('created_at', created_at_end);
@@ -164,10 +169,6 @@ router.get('/leads', auth, async (req, res) => {
         batchQuery = batchQuery.gte('assigned_at', assigned_at_start).lte('assigned_at', assigned_at_end);
       } else if (useLegacy) {
         batchQuery = batchQuery.gte('created_at', startDate).lte('created_at', endDate);
-      }
-
-      if (userId && userId !== 'all' && req.user.role === 'admin') {
-        batchQuery = batchQuery.eq('booker_id', userId);
       }
 
       const { data: batch, error: batchError } = await batchQuery
@@ -202,11 +203,9 @@ router.get('/leads', auth, async (req, res) => {
 
     console.log(`📊 Stats: total fetched ${statusData.length} status records from database (${batchCount} batches)`);
 
-    // Calculate counts from the status data
-    // ✅ BOOKING HISTORY FIX: Use ever_booked to count all bookings (including cancelled)
     const statusCounts = {
       new: statusData.filter(lead => lead.status === 'New').length,
-      booked: statusData.filter(lead => lead.ever_booked).length, // All leads ever booked
+      booked: statusData.filter(lead => lead.status === 'Booked').length,
       attended: statusData.filter(lead => lead.status === 'Attended').length,
       cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
       assigned: statusData.filter(lead => lead.status === 'Assigned').length,

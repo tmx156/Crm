@@ -177,6 +177,56 @@
   @apply space-y-0.5;
 }
 
+/* Day/Week view: compact events */
+.fc-timegrid-event {
+  @apply py-0 my-0;
+}
+
+/* "+" indicator on time slot hover to show user they can add a booking */
+.fc .fc-timegrid-slot-lane,
+.fc .fc-timegrid-slot-label {
+  height: 35px !important;
+}
+
+.fc .fc-timegrid-slot-lane {
+  position: relative;
+}
+
+/* Show + only on slots that have bookings */
+.fc .fc-timegrid-slot-lane.has-event::after {
+  content: '+';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #3b82f6;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Mobile: widen slots so + isn't covered by events */
+@media (max-width: 640px) {
+  .fc .fc-timegrid-slot-lane {
+    padding-right: 48px;
+  }
+  .fc .fc-timegrid-col-events {
+    margin-right: 48px !important;
+  }
+  .fc .fc-timegrid-slot-lane.has-event::after {
+    right: 14px;
+  }
+}
+
 .fc-button {
   @apply bg-slate-700 text-white border-0 rounded-md px-3 py-1.5 font-medium shadow-sm hover:bg-slate-800 transition-all duration-150;
 }

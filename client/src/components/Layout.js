@@ -720,15 +720,17 @@ const Layout = ({ children }) => {
              onClick={() => setSidebarOpen(false)} />
 
         <div className={`relative flex-1 flex flex-col max-w-xs w-full bg-white transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="absolute top-0 right-0 -mr-12 pt-2">
-            <button
-              type="button"
-              className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <FiX className="h-6 w-6 text-white" />
-            </button>
-          </div>
+          {sidebarOpen && (
+            <div className="absolute top-0 right-0 -mr-12 pt-2">
+              <button
+                type="button"
+                className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <FiX className="h-6 w-6 text-white" />
+              </button>
+            </div>
+          )}
           
           <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
             <div className="flex-shrink-0 flex items-center px-4">
@@ -1176,9 +1178,9 @@ const Layout = ({ children }) => {
                   <button
                     type="button"
                     className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 touch-target"
-                    onClick={() => setSidebarOpen(true)}
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
                   >
-                    <FiMenu className="h-6 w-6" />
+                    {sidebarOpen ? <FiX className="h-6 w-6" /> : <FiMenu className="h-6 w-6" />}
                   </button>
                 </div>
                 <h1 className="md:hidden ml-2 text-lg font-bold text-gray-900">CRM</h1>

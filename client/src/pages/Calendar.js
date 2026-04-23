@@ -4,8 +4,8 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { 
-  FiCalendar, FiClock, FiMapPin, FiUser, FiX, FiPhone, FiMail, 
-  FiFileText, FiWifi, FiActivity, FiCheckCircle, 
+  FiCalendar, FiClock, FiMapPin, FiUser, FiX, FiPhone, FiMail,
+  FiFileText, FiWifi, FiActivity, FiCheckCircle,
   FiExternalLink, FiCheck, FiSettings, FiEdit, FiMessageSquare,
   FiChevronDown, FiChevronUp, FiChevronLeft, FiChevronRight, FiSearch
 } from 'react-icons/fi';
@@ -568,20 +568,42 @@ const Calendar = () => {
     }, 3000); // Increased to 3 seconds for better performance
   }, [fetchEvents]);
 
+  // Mark time slots that have bookings so the "+" button stays visible
+  const handleEventDidMount = useCallback((info) => {
+    const calendarEl = calendarRef.current?.getApi()?.el;
+    if (!calendarEl) return;
+    const start = info.event.start;
+    if (!start) return;
+    const h = String(start.getHours()).padStart(2, '0');
+    const m = String(start.getMinutes()).padStart(2, '0');
+    const time = `${h}:${m}:00`;
+    const slot = calendarEl.querySelector(`.fc-timegrid-slot-lane[data-time="${time}"]`);
+    if (slot) slot.classList.add('has-event');
+  }, []);
+
+  const handleEventWillUnmount = useCallback((info) => {
+    const calendarEl = calendarRef.current?.getApi()?.el;
+    if (!calendarEl) return;
+    const start = info.event.start;
+    if (!start) return;
+    const h = String(start.getHours()).padStart(2, '0');
+    const m = String(start.getMinutes()).padStart(2, '0');
+    const time = `${h}:${m}:00`;
+    const slot = calendarEl.querySelector(`.fc-timegrid-slot-lane[data-time="${time}"]`);
+    if (slot) {
+      const hasOthers = calendarEl.querySelectorAll(`.fc-timegrid-event-harness [data-time-start="${time}"]`).length > 1;
+      if (!hasOthers) slot.classList.remove('has-event');
+    }
+  }, []);
+
   // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
   const renderEventContent = useCallback((arg) => {
-    const isNewBooking = arg.event.extendedProps?.status === 'New';
     return (
-      <div className="fc-event-main p-1 flex items-center justify-between">
+      <div className="fc-event-main px-1 py-0.5 flex items-center">
         <div className="fc-event-title-container flex-1 overflow-hidden">
           <div className="fc-event-title text-xs truncate">
             {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
-            <span className="inline-flex items-center gap-1">
-              {!isNewBooking && (
-                <span className="bg-gray-500 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">A</span>
-              )}
-              {arg.event.title}
-            </span>
+            {arg.event.title}
           </div>
         </div>
       </div>
@@ -1880,8 +1902,6 @@ const Calendar = () => {
           height="auto"
           eventDisplay="block"
           datesSet={(dateInfo) => {
-            // PERFORMANCE: Skip this - let initial fetch handle it
-            // This was causing duplicate fetches
             console.log('📅 View initialized:', dateInfo.view.type, dateInfo.startStr, 'to', dateInfo.endStr);
           }}
           eventTimeFormat={{
@@ -1931,10 +1951,12 @@ const Calendar = () => {
               allDaySlot: false,
               slotMinTime: '10:00:00',
               slotMaxTime: '18:00:00',
-              height: 'auto'
+              height: 600
             }
           }}
           eventContent={renderEventContent}
+          eventDidMount={handleEventDidMount}
+          eventWillUnmount={handleEventWillUnmount}
         />
       </div>
 
