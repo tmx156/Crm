@@ -163,15 +163,15 @@ const LeadsNew = () => {
       // Add date filter if applicable
       const dateRange = getDateRange();
       if (dateRange) {
-        // Use assigned_at for Assigned status, created_at for all others
         if (statusFilter === 'Assigned') {
           params.assigned_at_start = dateRange.start;
           params.assigned_at_end = dateRange.end;
-          console.log('📅 Assigned date filter active:', dateFilter, 'Range:', dateRange);
+        } else if (statusFilter === 'Booked') {
+          params.booked_at_start = dateRange.start;
+          params.booked_at_end = dateRange.end;
         } else {
           params.created_at_start = dateRange.start;
           params.created_at_end = dateRange.end;
-          console.log('📅 Created date filter active:', dateFilter, 'Range:', dateRange);
         }
       } else {
         console.log('📅 Date filter: All time (no filter applied)');

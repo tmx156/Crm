@@ -343,7 +343,7 @@ const looksLikeNames = (values) => {
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end, assigned_at_start, assigned_at_end } = req.query;
+    const { page = 1, limit = 50, status, booker, search, created_at_start, created_at_end, assigned_at_start, assigned_at_end, booked_at_start, booked_at_end } = req.query;
 
     // Validate and cap limit to prevent performance issues
     const validatedLimit = Math.min(parseInt(limit) || 50, 100);
@@ -423,7 +423,16 @@ router.get('/', auth, async (req, res) => {
       countQuery = countQuery
         .gte('assigned_at', assigned_at_start)
         .lte('assigned_at', assigned_at_end);
-      console.log(`📅 Assigned date filter applied: ${assigned_at_start} to ${assigned_at_end}`);
+    }
+
+    // Apply booked_at date range filter for booked leads
+    if (booked_at_start && booked_at_end) {
+      dataQuery = dataQuery
+        .gte('booked_at', booked_at_start)
+        .lte('booked_at', booked_at_end);
+      countQuery = countQuery
+        .gte('booked_at', booked_at_start)
+        .lte('booked_at', booked_at_end);
     }
 
     // Execute queries
