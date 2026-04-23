@@ -217,9 +217,29 @@ router.get('/leads', auth, async (req, res) => {
       if (!assignedError) assignedCount = assignedResult || 0;
     }
 
+    // Booked count uses booked_at date range separately
+    let bookedCount = statusData.filter(lead => lead.status === 'Booked').length;
+    if (created_at_start && created_at_end) {
+      let bookedQuery = dbManager.client
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'Booked')
+        .gte('booked_at', created_at_start)
+        .lte('booked_at', created_at_end);
+
+      if (req.user.role !== 'admin') {
+        bookedQuery = bookedQuery.eq('booker_id', req.user.id);
+      } else if (userId && userId !== 'all') {
+        bookedQuery = bookedQuery.eq('booker_id', userId);
+      }
+
+      const { count: bookedResult, error: bookedError } = await bookedQuery;
+      if (!bookedError) bookedCount = bookedResult || 0;
+    }
+
     const statusCounts = {
       new: statusData.filter(lead => lead.status === 'New').length,
-      booked: statusData.filter(lead => lead.status === 'Booked').length,
+      booked: bookedCount,
       attended: statusData.filter(lead => lead.status === 'Attended').length,
       cancelled: statusData.filter(lead => lead.status === 'Cancelled').length,
       assigned: assignedCount,
