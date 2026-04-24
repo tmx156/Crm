@@ -2270,15 +2270,46 @@ router.put('/bulk-assign', auth, adminAuth, async (req, res) => {
 
     console.log(`📋 Found ${leads.length} leads to assign to ${booker.name}`);
 
-    // Update leads with new booker_id and status - use service role client to bypass RLS
-    const { error: updateError } = await serviceRoleClient
-      .from('leads')
-      .update({
-        booker_id: bookerId,
-        status: 'Assigned',
-        updated_at: new Date().toISOString()
-      })
-      .in('id', leadIds);
+    // Separate booked leads from non-booked leads to preserve Booked status
+    const bookedLeadIds = leads.filter(l => l.status === 'Booked').map(l => l.id);
+    const nonBookedLeadIds = leads.filter(l => l.status !== 'Booked').map(l => l.id);
+
+    // Update non-booked leads: set status to Assigned
+    if (nonBookedLeadIds.length > 0) {
+      const { error: updateError1 } = await serviceRoleClient
+        .from('leads')
+        .update({
+          booker_id: bookerId,
+          status: 'Assigned',
+          assigned_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .in('id', nonBookedLeadIds);
+
+      if (updateError1) {
+        console.error('Error updating non-booked leads:', updateError1);
+        return res.status(500).json({ message: 'Failed to assign leads', error: updateError1.message });
+      }
+    }
+
+    // Update booked leads: keep Booked status, only change booker_id
+    if (bookedLeadIds.length > 0) {
+      const { error: updateError2 } = await serviceRoleClient
+        .from('leads')
+        .update({
+          booker_id: bookerId,
+          updated_at: new Date().toISOString()
+        })
+        .in('id', bookedLeadIds);
+
+      if (updateError2) {
+        console.error('Error updating booked leads:', updateError2);
+        return res.status(500).json({ message: 'Failed to assign booked leads', error: updateError2.message });
+      }
+      console.log(`📌 Preserved Booked status for ${bookedLeadIds.length} leads`);
+    }
+
+    const updateError = null;
 
     if (updateError) {
       console.error('Error updating leads:', updateError);
