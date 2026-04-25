@@ -101,7 +101,7 @@ router.get('/', auth, async (req, res) => {
       // First get messages (bounded by time window and limit, trimmed columns)
       const { data: messageRows, error: messageError } = await supabase
         .from('messages')
-        .select('id, lead_id, type, content, sms_body, subject, sent_by, sent_by_name, status, email_status, read_status, delivery_status, provider_message_id, delivery_provider, delivery_attempts, sent_at, created_at')
+        .select('id, lead_id, type, content, sms_body, email_body, subject, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
         .gte('created_at', createdAfter)
         .order('created_at', { ascending: false })
         .limit(validatedLimit);
@@ -181,9 +181,14 @@ router.get('/', auth, async (req, res) => {
 
           const action = direction === 'received' ? `${row.type.toUpperCase()}_RECEIVED` : `${row.type.toUpperCase()}_SENT`;
 
+          // Separate embedded images from regular attachments
+          const rawAttachments = row.attachments || [];
+          const embeddedImages = rawAttachments.filter(a => a && a.is_embedded);
+          const regularAttachments = rawAttachments.filter(a => a && !a.is_embedded);
+
           messagesData.push({
-            id: row.id, // Use actual message UUID as primary ID (simplified format)
-            messageId: row.id, // Include the actual message UUID for proper read status handling
+            id: row.id,
+            messageId: row.id,
             leadId: row.lead_id,
             leadName: leadData.name,
             leadPhone: leadData.phone,
@@ -197,15 +202,18 @@ router.get('/', auth, async (req, res) => {
             performedBy: row.sent_by,
             performedByName: row.sent_by_name,
             content,
+            subject: row.subject,
+            email_body: row.email_body || null,
+            attachments: regularAttachments,
+            embedded_images: embeddedImages,
             details: { body: content, subject: row.subject },
-            isRead: row.read_status === true || direction === 'sent', // Use messages table read_status as source of truth
-            // Add delivery status tracking fields
+            isRead: row.read_status === true || direction === 'sent',
             delivery_status: row.delivery_status,
             error_message: row.error_message,
             provider_message_id: row.provider_message_id,
             delivery_provider: row.delivery_provider,
             delivery_attempts: row.delivery_attempts,
-            email_status: row.email_status // For email delivery status
+            email_status: row.email_status
           });
         });
       }

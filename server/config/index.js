@@ -46,6 +46,15 @@ const config = {
     redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
   },
 
+  // Gmail Poller (reads from env directly, these are for reference)
+  gmail: {
+    email: process.env.GMAIL_EMAIL || process.env.GMAIL_USER || null,
+    clientId: process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || null,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || null,
+    refreshToken: process.env.GMAIL_REFRESH_TOKEN || null,
+    pollIntervalMs: parseInt(process.env.GMAIL_POLL_INTERVAL_MS) || 180000
+  },
+
   // Webhook Configuration (for external lead sources like landing pages)
   webhook: {
     apiKey: process.env.WEBHOOK_API_KEY || 'a861c0da361d0723faeac04f0d39fa01129152a7b006dd1885e41eb2d8ceb558'

@@ -699,10 +699,9 @@ const Layout = ({ children }) => {
 
   const isLeadsPage = () => location.pathname === '/leads';
 
-  const handleMessagesNavigation = (type = 'sms') => {
+  const handleMessagesNavigation = () => {
     setSidebarOpen(false);
-    const target = (type === 'email') ? 'email' : 'sms';
-    navigate(`/messages?type=${target}`);
+    navigate('/messages');
   };
 
   const getActiveStatusClass = (status) => {
@@ -783,44 +782,17 @@ const Layout = ({ children }) => {
                       )}
                     </div>
                   ) : item.name === 'Messages' ? (
-                    <div className="relative" ref={messagesDropdownRef}>
-                      <button
-                        onClick={() => setMessagesDropdownOpen(!messagesDropdownOpen)}
-                        className={`group flex items-center justify-between w-full px-2 py-2 text-base font-medium rounded-md ${
-                          isCurrentPath(item.href)
-                            ? 'bg-blue-100 text-blue-900'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <item.icon className="mr-4 h-6 w-6" />
-                          {item.name}
-                        </div>
-                        {messagesDropdownOpen ? (
-                          <FiChevronUp className="h-4 w-4" />
-                        ) : (
-                          <FiChevronDown className="h-4 w-4" />
-                        )}
-                      </button>
-                      {messagesDropdownOpen && (
-                        <div className="mt-1 ml-6 space-y-1">
-                          <button
-                            onClick={() => handleMessagesNavigation('sms')}
-                            className="group flex items-center justify-between w-full px-2 py-2 text-sm rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                          >
-                            <span className="mr-2">📩</span>
-                            <span>SMS</span>
-                          </button>
-                          <button
-                            onClick={() => handleMessagesNavigation('email')}
-                            className="group flex items-center justify-between w-full px-2 py-2 text-sm rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                          >
-                            <span className="mr-2">✉️</span>
-                            <span>Email</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => handleMessagesNavigation()}
+                      className={`group flex items-center w-full px-2 py-2 text-base font-medium rounded-md ${
+                        isCurrentPath(item.href)
+                          ? 'bg-blue-100 text-blue-900'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <item.icon className="mr-4 h-6 w-6" />
+                      {item.name}
+                    </button>
                   ) : item.name === 'Templates' ? (
                     <div className="relative" ref={templatesDropdownRef}>
                       <button
@@ -999,44 +971,17 @@ const Layout = ({ children }) => {
                       )}
                     </div>
                   ) : item.name === 'Messages' ? (
-                    <div className="relative" ref={messagesDropdownRef}>
-                      <button
-                        onClick={() => setMessagesDropdownOpen(!messagesDropdownOpen)}
-                        className={`group flex items-center justify-between w-full px-2 py-2 text-sm font-medium rounded-md ${
-                          isCurrentPath(item.href)
-                            ? 'bg-blue-100 text-blue-900'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <item.icon className="mr-3 h-5 w-5" />
-                          {item.name}
-                        </div>
-                        {messagesDropdownOpen ? (
-                          <FiChevronUp className="h-4 w-4" />
-                        ) : (
-                          <FiChevronDown className="h-4 w-4" />
-                        )}
-                      </button>
-                      {messagesDropdownOpen && (
-                        <div className="mt-1 ml-6 space-y-1">
-                          <button
-                            onClick={() => handleMessagesNavigation('sms')}
-                            className="group flex items-center justify-between w-full px-2 py-2 text-sm rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                          >
-                            <span className="mr-2">📩</span>
-                            <span>SMS</span>
-                          </button>
-                          <button
-                            onClick={() => handleMessagesNavigation('email')}
-                            className="group flex items-center justify-between w-full px-2 py-2 text-sm rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                          >
-                            <span className="mr-2">✉️</span>
-                            <span>Email</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => handleMessagesNavigation()}
+                      className={`group flex items-center w-full px-2 py-2 text-sm font-medium rounded-md ${
+                        isCurrentPath(item.href)
+                          ? 'bg-blue-100 text-blue-900'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <item.icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </button>
                   ) : item.name === 'Templates' ? (
                     <div className="relative" ref={templatesDropdownRef}>
                       <button

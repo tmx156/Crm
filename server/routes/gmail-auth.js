@@ -7,7 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(config.supabase.url, config.supabase.anonKey);
 
-const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email'];
+const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email'];
 
 /**
  * GET /api/gmail/auth-url

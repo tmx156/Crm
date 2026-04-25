@@ -3,6 +3,7 @@ import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, 
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+import GmailEmailRenderer from '../components/GmailEmailRenderer';
 import { toZonedTime, format } from 'date-fns-tz';
 
 const getTodayUK = () => {
@@ -14,7 +15,7 @@ const getTodayUK = () => {
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { isConnected } = useSocket();
+  const { isConnected, activeUsers } = useSocket();
 
   // State management
   const [liveStats, setLiveStats] = useState({ todayBookings: 0, todaySales: 0, todayRevenue: 0, thisHourBookings: 0 });
@@ -448,11 +449,20 @@ const Dashboard = () => {
     }
   };
 
-  // Open message modal
-  const handleMessageClick = (message) => {
+  // Open message modal and mark as read
+  const handleMessageClick = async (message) => {
     setSelectedMessage(message);
     setReplyMode(message.type === 'email' ? 'email' : 'sms');
     setReplyText('');
+
+    if (!message.isRead && message.messageId) {
+      try {
+        await axios.put(`/api/messages-list/${message.messageId}/read`);
+        setUnreadMessages(prev => prev.filter(m => m.id !== message.id));
+      } catch (e) {
+        console.error('Error marking message as read:', e);
+      }
+    }
   };
 
   // Send reply
@@ -462,10 +472,9 @@ const Dashboard = () => {
     setSendingReply(true);
     try {
       await axios.post('/api/messages-list/reply', {
-        messageId: selectedMessage.id,
-        type: replyMode,
-        content: replyText,
-        to: selectedMessage.from
+        messageId: selectedMessage.messageId || selectedMessage.id,
+        reply: replyText,
+        replyType: replyMode
       });
 
       // Mark as read
@@ -576,7 +585,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-purple-100 text-xs sm:text-sm font-medium">Active</p>
-                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold">1</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{activeUsers}</p>
                   <p className="text-purple-100 text-xs mt-0.5 sm:mt-1">Users</p>
                 </div>
                 <FiUsers className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-purple-200" />
@@ -1014,15 +1023,24 @@ const Dashboard = () => {
 
               <div className="mb-6">
                 <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <p className="text-sm font-semibold text-gray-900 mb-1">From: {selectedMessage.from}</p>
+                  <p className="text-sm font-semibold text-gray-900 mb-1">From: {selectedMessage.leadName || selectedMessage.from || 'Unknown'}</p>
                   {selectedMessage.subject && (
-                    <p className="text-sm text-gray-700 mb-2">Subject: {selectedMessage.subject}</p>
+                    <p className="text-sm text-gray-700 mb-2">Subject: {selectedMessage.subject || selectedMessage.details?.subject}</p>
                   )}
-                  <p className="text-sm text-gray-600">
-                    {typeof (selectedMessage.content || selectedMessage.preview) === 'string'
-                      ? (selectedMessage.content || selectedMessage.preview)
-                      : 'Message content'}
-                  </p>
+                  {selectedMessage.email_body ? (
+                    <GmailEmailRenderer
+                      htmlContent={selectedMessage.email_body}
+                      textContent={selectedMessage.content}
+                      attachments={selectedMessage.attachments || []}
+                      embeddedImages={selectedMessage.embedded_images || []}
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      {typeof (selectedMessage.content || selectedMessage.preview) === 'string'
+                        ? (selectedMessage.content || selectedMessage.preview)
+                        : 'Message content'}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center space-x-4 mb-4">

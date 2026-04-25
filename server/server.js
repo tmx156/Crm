@@ -56,7 +56,7 @@ const gmailAuthRoutes = require('./routes/gmail-auth');
 const webhookRoutes = require('./routes/webhook');
 const usersPublicRoutes = require('./routes/usersPublic');
 const scheduler = require('./utils/scheduler');
-const { startEmailPoller } = require('./utils/emailPoller');
+const { startGmailPoller } = require('./utils/gmailPoller');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
 // Removed legacy auto-sync import to avoid accidental background duplication
 let startUltraFastSMSPolling = () => {};
@@ -110,6 +110,17 @@ app.use((req, res, next) => {
 // Global tracker for today's bookings (demo mode)
 global.todaysBookings = [];
 
+// Track active users by socket id -> user info
+const activeUsers = new Map();
+
+function broadcastActiveUserCount() {
+  const uniqueUsers = new Set();
+  for (const u of activeUsers.values()) {
+    if (u.id) uniqueUsers.add(u.id);
+  }
+  io.emit('active_users_count', uniqueUsers.size);
+}
+
 // Socket.IO connection handling with enhanced stability
 io.on('connection', (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
@@ -146,6 +157,9 @@ io.on('connection', (socket) => {
       // Keep legacy global room join for now if needed by other features
       socket.join('all_users'); // Join global room for system-wide updates
       console.log(`User ${userData.id} joined their room`);
+
+      activeUsers.set(socket.id, { id: userData.id, name: userData.name });
+      broadcastActiveUserCount();
 
       // Send welcome message
       socket.emit('welcome', {
@@ -188,6 +202,8 @@ io.on('connection', (socket) => {
     console.log(`   Session duration: ${duration}s`);
     console.log(`   Heartbeats: ${userSession.heartbeatCount}`);
 
+    activeUsers.delete(socket.id);
+    broadcastActiveUserCount();
   });
 
   // Handle lead updates with enhanced broadcasting
@@ -689,15 +705,13 @@ Promise.race([
       console.error('❌ Failed to start BulkSMS reply poller:', e?.message || e);
     }
 
-    // EMAIL POLLER DISABLED - uncomment to re-enable
-    // try {
-    //   console.log('📧 Starting Email Poller...');
-    //   startEmailPoller(io);
-    //   console.log('✅ Email poller started successfully');
-    // } catch (e) {
-    //   console.error('❌ Failed to start email poller:', e?.message || e);
-    // }
-    console.log('📧 Email poller disabled');
+    // Gmail API Poller
+    try {
+      console.log('📧 Starting Gmail Poller...');
+      startGmailPoller(io);
+    } catch (e) {
+      console.error('❌ Failed to start Gmail poller:', e?.message || e);
+    }
 
     // ENABLED: Finance Reminder Service (now converted to Supabase)
     try {

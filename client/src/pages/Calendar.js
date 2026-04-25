@@ -52,6 +52,7 @@ const Calendar = () => {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
   const [sendEmail, setSendEmail] = useState(true);
+  const [leadsWithUnreadEmails, setLeadsWithUnreadEmails] = useState(new Set());
   const [sendSms, setSendSms] = useState(true);
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [isBookingInProgress, setIsBookingInProgress] = useState(false);
@@ -470,6 +471,20 @@ const Calendar = () => {
     };
   }, []); // Empty dependency array - only run once on mount
 
+  // Fetch leads with unread emails for calendar indicators
+  useEffect(() => {
+    const fetchUnreadEmailLeads = async () => {
+      try {
+        const res = await axios.get('/api/messages-list', { params: { unread: true, limit: 100 } });
+        const msgs = (res.data?.messages || []).filter(m => m.type === 'email' && !m.isRead);
+        setLeadsWithUnreadEmails(new Set(msgs.map(m => m.leadId).filter(Boolean)));
+      } catch (e) { /* silent */ }
+    };
+    fetchUnreadEmailLeads();
+    const interval = setInterval(fetchUnreadEmailLeads, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Consolidated real-time updates with proper debouncing
   useEffect(() => {
     console.log('📅 Calendar: Setting up real-time updates and polling...');
@@ -598,6 +613,8 @@ const Calendar = () => {
 
   // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
   const renderEventContent = useCallback((arg) => {
+    const leadId = arg.event.extendedProps?.lead?.id;
+    const hasUnreadEmail = leadId && leadsWithUnreadEmails.has(leadId);
     return (
       <div className="fc-event-main px-1 py-0.5 flex items-center">
         <div className="fc-event-title-container flex-1 overflow-hidden">
@@ -606,9 +623,12 @@ const Calendar = () => {
             {arg.event.title}
           </div>
         </div>
+        {hasUnreadEmail && (
+          <FiMail className="h-3 w-3 text-white ml-1 flex-shrink-0 opacity-90" title="Unread email" />
+        )}
       </div>
     );
-  }, []);
+  }, [leadsWithUnreadEmails]);
 
   // Realtime: update open calendar modal conversation instantly on inbound SMS
   useEffect(() => {
