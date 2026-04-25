@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye } from 'react-icons/fi';
+import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -34,8 +34,7 @@ const Dashboard = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [selectedBooker, setSelectedBooker] = useState(null);
   const [isBookerModalOpen, setIsBookerModalOpen] = useState(false);
-  // Locked to today only - no date navigation
-  const selectedActivityDate = new Date().toISOString().split('T')[0];
+  const [selectedActivityDate, setSelectedActivityDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Fetch all dashboard data
   const fetchStats = useCallback(async () => {
@@ -641,9 +640,36 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Today's Activity - No Navigation */}
-            <div className="text-xs text-gray-500 font-medium mb-3 sm:mb-4 bg-gray-50 rounded-lg p-3">
-              Viewing Today - Resets at midnight
+            <div className="flex items-center justify-between mb-3 sm:mb-4 bg-gray-50 rounded-lg p-2 sm:p-3">
+              <button
+                onClick={() => {
+                  const d = new Date(selectedActivityDate);
+                  d.setDate(d.getDate() - 1);
+                  setSelectedActivityDate(d.toISOString().split('T')[0]);
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"
+              >
+                <FiChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xs sm:text-sm text-gray-700 font-medium">
+                {selectedActivityDate === new Date().toISOString().split('T')[0]
+                  ? 'Today'
+                  : new Date(selectedActivityDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </span>
+              <button
+                onClick={() => {
+                  const d = new Date(selectedActivityDate);
+                  d.setDate(d.getDate() + 1);
+                  const tomorrow = d.toISOString().split('T')[0];
+                  if (tomorrow <= new Date().toISOString().split('T')[0]) {
+                    setSelectedActivityDate(tomorrow);
+                  }
+                }}
+                disabled={selectedActivityDate === new Date().toISOString().split('T')[0]}
+                className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <FiChevronRight className="h-4 w-4" />
+              </button>
             </div>
             <div className="space-y-3">
               {bookerActivity.length === 0 ? (
