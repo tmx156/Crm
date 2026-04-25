@@ -257,18 +257,20 @@ router.post('/', auth, async (req, res) => {
 // Get all sales with filtering
 router.get('/', auth, async (req, res) => {
   try {
-    const { dateRange, paymentType } = req.query;
+    const { dateRange, paymentType, created_at_start, created_at_end } = req.query;
 
     // Build filters for dbManager
     const filters = {};
 
     // ROLE-BASED ACCESS CONTROL
-    // Only admins can see all sales, viewers can only see sales they personally created
     if (req.user.role !== 'admin') {
       filters.eq = { user_id: req.user.id };
-      console.log(`🔒 Sales filtering: User ${req.user.name} (${req.user.role}) can only see sales they personally created`);
-    } else {
-      console.log(`👑 Admin sales access: User ${req.user.name} can see all sales`);
+    }
+
+    // Date range filter
+    if (created_at_start && created_at_end) {
+      filters.gte = { created_at: created_at_start };
+      filters.lte = { created_at: created_at_end };
     }
 
     // Get sales
