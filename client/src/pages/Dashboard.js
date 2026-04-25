@@ -65,44 +65,21 @@ const Dashboard = () => {
   // Fetch booker activity
   const fetchBookerActivity = useCallback(async () => {
     try {
-      // Use selectedActivityDate instead of today
-      const ukTz = 'Europe/London';
       const todayUK = selectedActivityDate;
+      const startUTC = todayUK + 'T00:00:00.000Z';
+      const endUTC = todayUK + 'T23:59:59.999Z';
 
-      // Create start and end of day in UK local time (not UTC)
-      // Then let the timezone library convert to UTC properly
-      const startOfDayUK = new Date(todayUK + 'T00:00:00');
-      const endOfDayUK = new Date(todayUK + 'T23:59:59.999');
-
-      // Get timezone offset for UK (handles BST/GMT automatically)
-      const offsetMinutes = -startOfDayUK.getTimezoneOffset();
-
-      // Adjust to UTC by subtracting the offset
-      const startUTC = new Date(startOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
-      const endUTC = new Date(endOfDayUK.getTime() + (offsetMinutes * 60000)).toISOString();
-
-      console.log('📅 Dashboard querying bookings for UK date:', todayUK);
-      console.log('📅 UTC range:', startUTC, 'to', endUTC);
-
-      // Get all users
       const usersRes = await axios.get('/api/users');
       const users = usersRes.data || [];
 
-      // ✅ DAILY ACTIVITY FIX: Get today's leads - filter by updated_at to show leads updated today
-      // Then filter client-side for booked leads (more reliable than booked_at which may not be populated)
       const leadsRes = await axios.get('/api/leads/public', {
         params: {
-          updated_at_start: startUTC,
-          updated_at_end: endUTC,
+          booked_at_start: startUTC,
+          booked_at_end: endUTC,
           limit: 500
         }
       });
-      const allLeadsToday = leadsRes.data?.leads || [];
-      // Filter to only include leads that have been booked (status is Booked or ever_booked is true)
-      const leads = allLeadsToday.filter(lead =>
-        lead.status === 'Booked' || lead.ever_booked === true || lead.ever_booked === 1
-      );
-      console.log(`📊 Dashboard: Found ${leads.length} booked leads out of ${allLeadsToday.length} updated today`);
+      const leads = leadsRes.data?.leads || [];
 
       // Fetch sales data for admin/viewer - only sales made on selectedActivityDate
       let salesData = [];
