@@ -218,9 +218,9 @@ const DailyDiary = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Date Controls */}
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-6 mb-4 sm:mb-8">
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:justify-between">
+            <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-start">
               <button
                 onClick={() => navigateDate(-1)}
                 className="flex items-center justify-center w-10 h-10 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600"
@@ -228,20 +228,19 @@ const DailyDiary = () => {
                 <FiArrowLeft className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center space-x-3">
-                <FiCalendar className="w-5 h-5 text-blue-600" />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <FiCalendar className="w-5 h-5 text-blue-600 shrink-0 hidden sm:block" />
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-2 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base w-[130px] sm:w-auto"
                 />
-                <span className="text-lg font-semibold text-gray-900">
+                <span className="text-sm sm:text-lg font-semibold text-gray-900 truncate">
                   {new Date(selectedDate).toLocaleDateString('en-GB', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short'
                   })}
                 </span>
               </div>
@@ -254,8 +253,8 @@ const DailyDiary = () => {
               </button>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-500">
                 <FiClock className="w-4 h-4" />
                 <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
               </div>
@@ -263,7 +262,7 @@ const DailyDiary = () => {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
               >
                 <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                 <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
