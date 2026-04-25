@@ -281,40 +281,48 @@ router.get('/', auth, async (req, res) => {
       order: { created_at: 'desc' }
     });
 
-    // Get lead and user details for each sale
-    const salesWithDetails = await Promise.all(
-      (sales || []).map(async (sale) => {
-        // Get lead details
-        const leadResult = await dbManager.query('leads', {
-          select: 'name, email, phone, status, booking_history',
-          eq: { id: sale.lead_id }
-        });
+    // Batch fetch lead and user details instead of one query per sale
+    const leadIds = [...new Set((sales || []).map(s => s.lead_id).filter(Boolean))];
+    const userIds = [...new Set((sales || []).map(s => s.user_id).filter(Boolean))];
 
-        // Get user details (who created the sale)
-        let userResult = null;
-        if (sale.user_id) {
-          userResult = await dbManager.query('users', {
-            select: 'name, email',
-            eq: { id: sale.user_id }
-          });
-        }
+    const [leadsData, usersData] = await Promise.all([
+      leadIds.length > 0
+        ? dbManager.query('leads', {
+            select: 'id, name, email, phone, status, booking_history',
+            in: { id: leadIds }
+          })
+        : [],
+      userIds.length > 0
+        ? dbManager.query('users', {
+            select: 'id, name, email',
+            in: { id: userIds }
+          })
+        : []
+    ]);
 
-        return {
-          ...sale,
-          lead_name: leadResult?.[0]?.name || 'Unknown',
-          lead_email: leadResult?.[0]?.email || '',
-          lead_phone: leadResult?.[0]?.phone || '',
-          lead_status: leadResult?.[0]?.status || 'Unknown',
-          lead: {
-            booking_history: Array.isArray(leadResult?.[0]?.booking_history)
-              ? leadResult[0].booking_history
-              : []
-          },
-          user_name: userResult?.[0]?.name || (sale.user_id ? `User ${sale.user_id.slice(-4)}` : 'System'),
-          user_email: userResult?.[0]?.email || ''
-        };
-      })
-    );
+    const leadMap = {};
+    (leadsData || []).forEach(l => { leadMap[l.id] = l; });
+    const userMap = {};
+    (usersData || []).forEach(u => { userMap[u.id] = u; });
+
+    const salesWithDetails = (sales || []).map(sale => {
+      const lead = leadMap[sale.lead_id];
+      const user = userMap[sale.user_id];
+      return {
+        ...sale,
+        lead_name: lead?.name || 'Unknown',
+        lead_email: lead?.email || '',
+        lead_phone: lead?.phone || '',
+        lead_status: lead?.status || 'Unknown',
+        lead: {
+          booking_history: Array.isArray(lead?.booking_history)
+            ? lead.booking_history
+            : []
+        },
+        user_name: user?.name || (sale.user_id ? `User ${sale.user_id.slice(-4)}` : 'System'),
+        user_email: user?.email || ''
+      };
+    });
 
     res.json(salesWithDetails);
 
