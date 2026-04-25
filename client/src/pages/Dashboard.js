@@ -81,22 +81,19 @@ const Dashboard = () => {
       });
       const leads = leadsRes.data?.leads || [];
 
-      // Fetch sales data for admin/viewer - only sales made on selectedActivityDate
+      // Fetch sales data for admin/viewer
       let salesData = [];
       if (user?.role === 'admin' || user?.role === 'viewer') {
         try {
+          const token = localStorage.getItem('token');
           const salesRes = await axios.get('/api/sales', {
             params: {
-              dateRange: 'today' // This will be ignored, we filter client-side
-            }
+              created_at_start: startUTC,
+              created_at_end: endUTC
+            },
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
           });
-          // Filter sales client-side to only include those created on selectedActivityDate in UK time
-          salesData = (salesRes.data || []).filter(sale => {
-            if (!sale.created_at) return false;
-            const ukTz = 'Europe/London';
-            const saleDateUK = format(toZonedTime(new Date(sale.created_at), ukTz), 'yyyy-MM-dd', { timeZone: ukTz });
-            return saleDateUK === todayUK;
-          });
+          salesData = salesRes.data || [];
         } catch (err) {
           console.error('Error fetching sales:', err);
         }

@@ -173,7 +173,7 @@ const upload = multer({
 // Get all sales with filtering and pagination
 router.get('/', auth, async (req, res) => {
   try {
-    const { dateRange, paymentType } = req.query;
+    const { dateRange, paymentType, created_at_start, created_at_end } = req.query;
 
     // Build Supabase query
     let query = supabase
@@ -237,6 +237,12 @@ router.get('/', auth, async (req, res) => {
           .gte('created_at', startDate.toISOString())
           .lte('created_at', endDate.toISOString());
       }
+    }
+
+    if (created_at_start && created_at_end && !dateRange) {
+      query = query
+        .gte('created_at', created_at_start)
+        .lte('created_at', created_at_end);
     }
 
     // Handle payment type filtering
