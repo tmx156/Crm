@@ -128,6 +128,8 @@ class GmailEmailExtractor {
     text = text.replace(/&quot;/g, '"');
     text = text.replace(/&#39;/g, "'");
     text = text.replace(/&apos;/g, "'");
+    text = text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+    text = text.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
     text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
     text = text.replace(/[ \t]+/g, ' ');
     text = text.replace(/^\s+|\s+$/gm, '');

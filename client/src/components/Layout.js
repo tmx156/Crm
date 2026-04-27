@@ -285,14 +285,11 @@ const Layout = ({ children }) => {
     };
 
     socket.on('lead_updated', handleLeadUpdate);
-    // Listen to new event name only to avoid duplicate notifications
-    socket.on('sms_received', handleSmsReceived);
     socket.on('message_received', handleMessageReceived);
     socket.on('message_read', handleMessageRead);
 
     return () => {
       socket.off('lead_updated', handleLeadUpdate);
-      socket.off('sms_received', handleSmsReceived);
       socket.off('message_received', handleMessageReceived);
       socket.off('message_read', handleMessageRead);
     };

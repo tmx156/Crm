@@ -5,11 +5,10 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
 const dbManager = require('../database-connection-manager');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase-client');
 
-// Initialize Supabase using centralized config
-const config = require('../config');
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+// Use singleton Supabase client (service role key when available)
+const supabase = getSupabaseClient();
 
 // Import SMS service for sending
 const { sendSMS } = require('../utils/smsService');
@@ -101,7 +100,7 @@ router.get('/', auth, async (req, res) => {
       // First get messages (bounded by time window and limit, trimmed columns)
       const { data: messageRows, error: messageError } = await supabase
         .from('messages')
-        .select('id, lead_id, type, content, sms_body, email_body, subject, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
+        .select('id, lead_id, type, direction, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
         .gte('created_at', createdAfter)
         .order('created_at', { ascending: false })
         .limit(validatedLimit);
@@ -166,17 +165,14 @@ router.get('/', auth, async (req, res) => {
           if (seenKeys.has(key)) return;
           seenKeys.add(key);
 
-          // Determine direction based on message type and sent_by field
-          // For messages: if sent_by exists, it's sent; otherwise received
-          // Also check status field for additional context
-          let direction = 'received'; // Default to received
-
-          if (row.sent_by) {
-            direction = 'sent';
-          } else if (row.status === 'sent' || row.email_status === 'sent') {
-            direction = 'sent';
-          } else if (row.status === 'received') {
-            direction = 'received';
+          // Use DB direction column if present, otherwise infer
+          let direction = row.direction || 'received';
+          if (!row.direction) {
+            if (row.sent_by) {
+              direction = 'sent';
+            } else if (row.status === 'sent' || row.email_status === 'sent') {
+              direction = 'sent';
+            }
           }
 
           const action = direction === 'received' ? `${row.type.toUpperCase()}_RECEIVED` : `${row.type.toUpperCase()}_SENT`;
@@ -813,23 +809,36 @@ router.put('/bulk-read', auth, async (req, res) => {
     
     for (const messageId of messageIds) {
       try {
-        // Parse the messageId to extract leadId and timestamp
+        // Try UUID-based update first (messages table)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+        if (isUUID) {
+          const { error: updateErr } = await supabase
+            .from('messages')
+            .update({ read_status: true, updated_at: new Date().toISOString() })
+            .eq('id', messageId);
+          if (!updateErr) {
+            results.push({ messageId, success: true });
+            socketEvents.push({ messageId });
+            continue;
+          }
+        }
+
+        // Fallback: legacy composite ID (leadId_timestamp)
         const parts = messageId.split('_');
         if (parts.length < 2) {
           results.push({ messageId, success: false, error: 'Invalid message ID format' });
           continue;
         }
-        
+
         const leadId = parts[0];
         const timestamp = parts.slice(1).join('_');
-        
-        // Get the lead's current booking_history
+
         const { data: lead, error: leadError } = await supabase
           .from('leads')
           .select('booking_history, name')
           .eq('id', leadId)
           .single();
-        
+
         if (!lead) {
           results.push({ messageId, success: false, error: 'Lead not found' });
           continue;

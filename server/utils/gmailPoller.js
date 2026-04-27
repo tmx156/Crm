@@ -145,7 +145,7 @@ class GmailPoller {
     }
     if (cleanedCount > 0) {
       this.log(`🧹 Cleaned up ${cleanedCount} old processed message IDs`);
-      this.saveProcessedMessages();
+      this.saveProcessedMessages().catch(e => console.error('📧 Save error after cleanup:', e.message));
     }
   }
 
@@ -270,6 +270,9 @@ class GmailPoller {
         if (i < allMessages.length - 1) await new Promise(resolve => setTimeout(resolve, 100));
       }
 
+      if (processedCount > 0) {
+        await this.saveProcessedMessages();
+      }
       if (processedCount > 0 || errorCount > 0) {
         this.log(`📧 Scan: ${processedCount} new, ${skippedCount} skipped, ${errorCount} errors`, true);
       }
@@ -342,9 +345,13 @@ class GmailPoller {
           if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
           const tempPath = path.join(tempDir, `${Date.now()}_${img.contentId || 'img'}.${ext}`);
           fs.writeFileSync(tempPath, buffer);
-          const result = await supabaseStorage.uploadFile(tempPath, fileName, img.mimetype || 'image/jpeg');
-          try { fs.unlinkSync(tempPath); } catch (e) {}
-          if (result.success) {
+          let result;
+          try {
+            result = await supabaseStorage.uploadFile(tempPath, fileName, img.mimetype || 'image/jpeg');
+          } finally {
+            try { fs.unlinkSync(tempPath); } catch (e) {}
+          }
+          if (result && result.success) {
             embeddedImages.push({ contentId: img.contentId, url: result.url, mimetype: img.mimetype, is_embedded: true });
             // Replace cid: references in HTML with the public URL
             if (htmlBody && img.contentId) {
@@ -443,10 +450,14 @@ class GmailPoller {
         const tempPath = path.join(tempDir, `${Date.now()}_${att.filename}`);
         fs.writeFileSync(tempPath, buffer);
 
-        const result = await supabaseStorage.uploadFile(tempPath, storageName, att.mimeType);
-        try { fs.unlinkSync(tempPath); } catch (e) {}
+        let result;
+        try {
+          result = await supabaseStorage.uploadFile(tempPath, storageName, att.mimeType);
+        } finally {
+          try { fs.unlinkSync(tempPath); } catch (e) {}
+        }
 
-        if (result.success) {
+        if (result && result.success) {
           attachments.push({
             filename: att.filename,
             url: result.url,

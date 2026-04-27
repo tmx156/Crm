@@ -98,27 +98,36 @@ const GmailEmailRenderer = ({
   `;
 
   useEffect(() => {
-    if (iframeRef.current && htmlContent) {
-      const iframe = iframeRef.current;
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      const sanitizedHtml = sanitizeHtml(htmlContent);
+    const iframe = iframeRef.current;
+    if (!iframe || !htmlContent) return;
 
-      doc.open();
-      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${getEmailStyles()}</style></head><body>${sanitizedHtml}</body></html>`);
-      doc.close();
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    const sanitizedHtml = sanitizeHtml(htmlContent);
 
-      const resizeIframe = () => { iframe.style.height = doc.body.scrollHeight + 'px'; };
-      resizeIframe();
-      const images = doc.getElementsByTagName('img');
-      for (let img of images) img.onload = resizeIframe;
-    }
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${getEmailStyles()}</style></head><body>${sanitizedHtml}</body></html>`);
+    doc.close();
+
+    const resizeIframe = () => { iframe.style.height = doc.body.scrollHeight + 'px'; };
+    resizeIframe();
+
+    const images = doc.getElementsByTagName('img');
+    const imgArray = Array.from(images);
+    imgArray.forEach(img => { img.onload = resizeIframe; });
+
+    return () => {
+      imgArray.forEach(img => { img.onload = null; });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [htmlContent, embeddedImages]);
 
   const formatFileSize = (bytes) => {
-    if (!bytes) return '';
+    if (!bytes || bytes <= 0) return '';
+    const b = Number(bytes);
+    if (!b || b <= 0) return '';
     const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 10) / 10 + ' ' + sizes[i];
+    const i = Math.floor(Math.log(b) / Math.log(1024));
+    return Math.round(b / Math.pow(1024, i) * 10) / 10 + ' ' + sizes[i];
   };
 
   const isHtmlContent = (content) => {
@@ -134,7 +143,7 @@ const GmailEmailRenderer = ({
           className="w-full border-0"
           style={{ minHeight: '100px' }}
           title="Email Content"
-          sandbox="allow-same-origin allow-popups"
+          sandbox="allow-same-origin"
         />
         {attachments && attachments.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200">
