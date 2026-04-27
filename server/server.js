@@ -57,8 +57,6 @@ const webhookRoutes = require('./routes/webhook');
 const usersPublicRoutes = require('./routes/usersPublic');
 const scheduler = require('./utils/scheduler');
 const { startGmailPoller } = require('./utils/gmailPoller');
-const { startGoogleSheetsSync } = require('./utils/googleSheetsSync');
-const googleSheetsRoutes = require('./routes/google-sheets');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
 // Removed legacy auto-sync import to avoid accidental background duplication
 let startUltraFastSMSPolling = () => {};
@@ -455,7 +453,6 @@ app.use('/api/legacy', legacyRoutes);
 app.use('/api/booker-analytics', bookerAnalyticsRoutes);
 app.use('/api/email-test', emailTestRoutes);
 app.use('/api/gmail', gmailAuthRoutes);
-app.use('/api/google-sheets', googleSheetsRoutes);
 app.use('/api/webhook', webhookRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
@@ -704,14 +701,6 @@ Promise.race([
       startGmailPoller(io);
     } catch (e) {
       console.error('❌ Failed to start Gmail poller:', e?.message || e);
-    }
-
-    // Google Sheets Sync
-    try {
-      console.log('📊 Starting Google Sheets Sync...');
-      startGoogleSheetsSync(io);
-    } catch (e) {
-      console.error('❌ Failed to start Google Sheets sync:', e?.message || e);
     }
 
     // ENABLED: Finance Reminder Service (now converted to Supabase)
