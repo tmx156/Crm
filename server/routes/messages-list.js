@@ -1364,13 +1364,14 @@ router.post('/reply', auth, async (req, res) => {
         email_body: reply,
         content: reply,
         subject: `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
+        recipient_email: leadData.email,
         sent_by: user.id,
         sent_by_name: user.name,
         status: 'sent',
         email_status: 'sent',
         sent_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
-        read_status: true // Sent messages are marked as read
+        read_status: true
       };
     }
 

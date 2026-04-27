@@ -456,6 +456,7 @@ class GmailPoller {
     if (!email) return null;
     const emailLower = email.trim().toLowerCase();
 
+    // Exact match (case-insensitive)
     const { data: lead } = await this.supabase
       .from('leads')
       .select('*')
@@ -463,16 +464,7 @@ class GmailPoller {
       .limit(1)
       .maybeSingle();
 
-    if (lead) return lead;
-
-    const { data: partialMatch } = await this.supabase
-      .from('leads')
-      .select('*')
-      .ilike('email', `%${emailLower}%`)
-      .limit(1)
-      .maybeSingle();
-
-    return partialMatch || null;
+    return lead || null;
   }
 
   async updateLeadHistory(lead, subject, body, emailReceivedDate) {
