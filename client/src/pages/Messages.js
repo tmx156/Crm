@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useNavigate } from 'react-router-dom';
 import GmailEmailRenderer from '../components/GmailEmailRenderer';
 import axios from 'axios';
 import {
@@ -13,11 +14,16 @@ import {
   FiChevronLeft,
   FiCornerUpLeft,
   FiTrash2,
-  FiPaperclip
+  FiPaperclip,
+  FiCalendar,
+  FiXCircle
 } from 'react-icons/fi';
+
+const BOOKED_STATUSES = ['Booked', 'Confirmed', 'Unconfirmed'];
 
 const Messages = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { socket } = useSocket();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +134,37 @@ const Messages = () => {
     setSelectedEmail(null);
     setShowReplyBox(false);
     setReplyText('');
+  };
+
+  const isLeadBooked = (message) => {
+    return message && BOOKED_STATUSES.includes(message.leadStatus);
+  };
+
+  const handleCancelBooking = async (message) => {
+    if (!message?.leadId) return;
+    if (!window.confirm(`Cancel booking for ${message.leadName}?`)) return;
+    try {
+      await axios.put(`/api/leads/${message.leadId}`, { status: 'Cancelled' });
+      setSelectedEmail(prev => prev ? { ...prev, leadStatus: 'Cancelled' } : prev);
+      setMessages(prev => prev.map(m => m.leadId === message.leadId ? { ...m, leadStatus: 'Cancelled' } : m));
+      alert(`Booking cancelled for ${message.leadName}`);
+    } catch (e) {
+      console.error('Error cancelling:', e);
+      alert('Failed to cancel booking');
+    }
+  };
+
+  const handleReschedule = (message) => {
+    if (!message?.leadId) return;
+    localStorage.setItem('bookingLead', JSON.stringify({
+      id: message.leadId,
+      name: message.leadName,
+      phone: message.leadPhone,
+      email: message.leadEmail,
+      isReschedule: true,
+      currentStatus: message.leadStatus
+    }));
+    navigate('/calendar');
   };
 
   const handleSendReply = async () => {
@@ -363,16 +400,16 @@ const Messages = () => {
                     </div>
 
                     {/* Sender */}
-                    <div className={`w-44 flex-shrink-0 truncate text-sm ${!message.isRead ? 'text-gray-900 font-semibold' : 'text-gray-600'}`}>
+                    <div className={`w-24 sm:w-36 md:w-44 flex-shrink-0 truncate text-xs sm:text-sm ${!message.isRead ? 'text-gray-900 font-semibold' : 'text-gray-600'}`}>
                       {message.direction === 'sent' ? `To: ${message.leadName}` : message.leadName || 'Unknown'}
                     </div>
 
                     {/* Subject + Preview */}
                     <div className="flex-1 min-w-0 flex items-center">
-                      <span className={`text-sm truncate ${!message.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
+                      <span className={`text-xs sm:text-sm truncate ${!message.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
                         {message.subject || message.details?.subject || '(No Subject)'}
                       </span>
-                      <span className="text-sm text-gray-400 truncate ml-1 hidden sm:inline">
+                      <span className="text-sm text-gray-400 truncate ml-1 hidden md:inline">
                         — {getPreview(message)}
                       </span>
                     </div>
@@ -392,30 +429,43 @@ const Messages = () => {
             )}
           </div>
         ) : (
-          /* Email Detail View (Modal-style inline) */
-          <div className="flex-1 overflow-y-auto bg-white">
-            <div className="max-w-4xl mx-auto px-6 py-6">
+          /* Email Detail View */
+          <div className="flex-1 overflow-y-auto bg-white pb-20 md:pb-6">
+            <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
               {/* Subject */}
-              <h1 className="text-xl font-normal text-gray-900 mb-6">
+              <h1 className="text-base sm:text-xl font-normal text-gray-900 mb-4 sm:mb-6">
                 {selectedEmail.subject || selectedEmail.details?.subject || '(No Subject)'}
               </h1>
 
+              {/* Lead Status Badge */}
+              {selectedEmail.leadStatus && (
+                <div className="mb-3">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    selectedEmail.leadStatus === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                    BOOKED_STATUSES.includes(selectedEmail.leadStatus) ? 'bg-green-100 text-green-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {selectedEmail.leadStatus}
+                  </span>
+                </div>
+              )}
+
               {/* Email Header */}
-              <div className="flex items-start mb-6">
-                <div className={`w-10 h-10 rounded-full ${getAvatarColor(selectedEmail.leadName)} flex items-center justify-center text-white text-sm font-bold mr-4 flex-shrink-0`}>
+              <div className="flex items-start mb-4 sm:mb-6">
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${getAvatarColor(selectedEmail.leadName)} flex items-center justify-center text-white text-xs sm:text-sm font-bold mr-3 sm:mr-4 flex-shrink-0`}>
                   {getInitials(selectedEmail.leadName)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                    <div className="truncate">
                       <span className="text-sm font-semibold text-gray-900">
                         {selectedEmail.direction === 'sent' ? `To: ${selectedEmail.leadName}` : selectedEmail.leadName}
                       </span>
-                      <span className="text-sm text-gray-500 ml-2">
+                      <span className="text-xs sm:text-sm text-gray-500 ml-1 sm:ml-2">
                         &lt;{selectedEmail.leadEmail || 'unknown'}&gt;
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 flex-shrink-0">
                       {selectedEmail.timestamp ? new Date(selectedEmail.timestamp).toLocaleString() : ''}
                     </div>
                   </div>
@@ -427,7 +477,7 @@ const Messages = () => {
               </div>
 
               {/* Email Body */}
-              <div className="border-t border-gray-100 pt-4 mb-6">
+              <div className="border-t border-gray-100 pt-4 mb-4 sm:mb-6">
                 {selectedEmail.email_body ? (
                   <GmailEmailRenderer
                     htmlContent={selectedEmail.email_body}
@@ -442,52 +492,77 @@ const Messages = () => {
                 )}
               </div>
 
-              {/* Reply Section */}
-              {selectedEmail.direction === 'received' && (
-                <div className="border-t border-gray-200 pt-4">
-                  {!showReplyBox ? (
-                    <button
-                      onClick={() => setShowReplyBox(true)}
-                      className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <FiCornerUpLeft className="h-4 w-4" />
-                      Reply
-                    </button>
-                  ) : (
-                    <div className="border border-gray-300 rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <FiCornerUpLeft className="h-4 w-4" />
-                          <span>Reply to {selectedEmail.leadName}</span>
-                        </div>
-                        <button onClick={() => setShowReplyBox(false)} className="p-1 hover:bg-gray-200 rounded">
-                          <FiX className="h-4 w-4 text-gray-500" />
-                        </button>
-                      </div>
-                      <textarea
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Write your reply..."
-                        className="w-full p-4 border-0 focus:ring-0 focus:outline-none resize-none text-sm"
-                        rows="6"
-                        autoFocus
-                      />
-                      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+              {/* Action Buttons */}
+              <div className="border-t border-gray-200 pt-4">
+                {/* Reply + Cancel/Reschedule row */}
+                {!showReplyBox && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedEmail.direction === 'received' && (
+                      <button
+                        onClick={() => setShowReplyBox(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <FiCornerUpLeft className="h-4 w-4" />
+                        Reply
+                      </button>
+                    )}
+
+                    {isLeadBooked(selectedEmail) && (
+                      <>
                         <button
-                          onClick={handleSendReply}
-                          disabled={!replyText.trim() || sendingReply}
-                          className="inline-flex items-center px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          onClick={() => handleReschedule(selectedEmail)}
+                          className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 rounded-full text-sm text-blue-700 hover:bg-blue-50 transition-colors"
                         >
-                          {sendingReply ? 'Sending...' : 'Send'}
+                          <FiCalendar className="h-4 w-4" />
+                          Reschedule
                         </button>
-                        <button onClick={() => setShowReplyBox(false)} className="text-sm text-gray-500 hover:text-gray-700">
-                          Discard
+                        <button
+                          onClick={() => handleCancelBooking(selectedEmail)}
+                          className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 rounded-full text-sm text-red-700 hover:bg-red-50 transition-colors"
+                        >
+                          <FiXCircle className="h-4 w-4" />
+                          Cancel Booking
                         </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Reply Box */}
+                {showReplyBox && (
+                  <div className="border border-gray-300 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <FiCornerUpLeft className="h-4 w-4" />
+                        <span className="truncate">Reply to {selectedEmail.leadName}</span>
                       </div>
+                      <button onClick={() => setShowReplyBox(false)} className="p-1 hover:bg-gray-200 rounded flex-shrink-0">
+                        <FiX className="h-4 w-4 text-gray-500" />
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Write your reply..."
+                      className="w-full p-3 sm:p-4 border-0 focus:ring-0 focus:outline-none resize-none text-sm"
+                      rows="4"
+                      autoFocus
+                    />
+                    <div className="bg-gray-50 px-3 sm:px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                      <button
+                        onClick={handleSendReply}
+                        disabled={!replyText.trim() || sendingReply}
+                        className="inline-flex items-center px-4 sm:px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {sendingReply ? 'Sending...' : 'Send'}
+                      </button>
+                      <button onClick={() => setShowReplyBox(false)} className="text-sm text-gray-500 hover:text-gray-700">
+                        Discard
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

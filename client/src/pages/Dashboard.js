@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiChevronLeft, FiChevronRight, FiXCircle } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
@@ -13,9 +14,12 @@ const getTodayUK = () => {
   return format(ukNow, 'yyyy-MM-dd', { timeZone: ukTz });
 };
 
+const BOOKED_STATUSES = ['Booked', 'Confirmed', 'Unconfirmed'];
+
 const Dashboard = () => {
   const { user } = useAuth();
   const { isConnected, activeUsers } = useSocket();
+  const navigate = useNavigate();
 
   // State management
   const [liveStats, setLiveStats] = useState({ todayBookings: 0, todaySales: 0, todayRevenue: 0, thisHourBookings: 0 });
@@ -463,6 +467,32 @@ const Dashboard = () => {
         console.error('Error marking message as read:', e);
       }
     }
+  };
+
+  const handleCancelBooking = async () => {
+    if (!selectedMessage?.leadId) return;
+    if (!window.confirm(`Cancel booking for ${selectedMessage.leadName}?`)) return;
+    try {
+      await axios.put(`/api/leads/${selectedMessage.leadId}`, { status: 'Cancelled' });
+      setSelectedMessage(prev => prev ? { ...prev, leadStatus: 'Cancelled' } : prev);
+      alert(`Booking cancelled for ${selectedMessage.leadName}`);
+    } catch (e) {
+      alert('Failed to cancel booking');
+    }
+  };
+
+  const handleReschedule = () => {
+    if (!selectedMessage?.leadId) return;
+    localStorage.setItem('bookingLead', JSON.stringify({
+      id: selectedMessage.leadId,
+      name: selectedMessage.leadName,
+      phone: selectedMessage.leadPhone,
+      email: selectedMessage.leadEmail,
+      isReschedule: true,
+      currentStatus: selectedMessage.leadStatus
+    }));
+    setSelectedMessage(null);
+    navigate('/calendar');
   };
 
   // Send reply
@@ -1010,9 +1040,20 @@ const Dashboard = () => {
       {selectedMessage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">Reply to Message</h3>
+            <div className="p-3 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900">Reply to Message</h3>
+                  {selectedMessage.leadStatus && (
+                    <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium ${
+                      selectedMessage.leadStatus === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                      BOOKED_STATUSES.includes(selectedMessage.leadStatus) ? 'bg-green-100 text-green-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {selectedMessage.leadStatus}
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={() => setSelectedMessage(null)}
                   className="text-gray-400 hover:text-gray-600"
@@ -1021,10 +1062,10 @@ const Dashboard = () => {
                 </button>
               </div>
 
-              <div className="mb-6">
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="mb-4 sm:mb-6">
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
                   <p className="text-sm font-semibold text-gray-900 mb-1">From: {selectedMessage.leadName || selectedMessage.from || 'Unknown'}</p>
-                  {selectedMessage.subject && (
+                  {(selectedMessage.subject || selectedMessage.details?.subject) && (
                     <p className="text-sm text-gray-700 mb-2">Subject: {selectedMessage.subject || selectedMessage.details?.subject}</p>
                   )}
                   {selectedMessage.email_body ? (
@@ -1043,20 +1084,30 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                <div className="flex items-center space-x-4 mb-4">
-                  <button
-                    onClick={() => setReplyMode('sms')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      replyMode === 'sms'
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    SMS
-                  </button>
+                {/* Cancel / Reschedule buttons — only when lead is booked */}
+                {BOOKED_STATUSES.includes(selectedMessage.leadStatus) && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                      onClick={handleReschedule}
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 rounded-lg text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                    >
+                      <FiCalendar className="h-4 w-4" />
+                      Reschedule
+                    </button>
+                    <button
+                      onClick={handleCancelBooking}
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 rounded-lg text-sm text-red-700 hover:bg-red-50 transition-colors"
+                    >
+                      <FiXCircle className="h-4 w-4" />
+                      Cancel Booking
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-3 mb-4">
                   <button
                     onClick={() => setReplyMode('email')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                       replyMode === 'email'
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -1069,23 +1120,23 @@ const Dashboard = () => {
                 <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Type your ${replyMode} message here...`}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows="6"
+                  placeholder="Type your reply here..."
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  rows="4"
                 />
               </div>
 
               <div className="flex items-center justify-end space-x-3">
                 <button
                   onClick={() => setSelectedMessage(null)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   onClick={handleSendReply}
                   disabled={!replyText.trim() || sendingReply}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   <FiSend className="h-4 w-4" />
                   <span>{sendingReply ? 'Sending...' : 'Send'}</span>
