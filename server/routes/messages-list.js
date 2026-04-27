@@ -100,7 +100,7 @@ router.get('/', auth, async (req, res) => {
       // First get messages (bounded by time window and limit, trimmed columns)
       const { data: messageRows, error: messageError } = await supabase
         .from('messages')
-        .select('id, lead_id, type, direction, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
+        .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
         .gte('created_at', createdAfter)
         .order('created_at', { ascending: false })
         .limit(validatedLimit);
@@ -165,14 +165,11 @@ router.get('/', auth, async (req, res) => {
           if (seenKeys.has(key)) return;
           seenKeys.add(key);
 
-          // Use DB direction column if present, otherwise infer
-          let direction = row.direction || 'received';
-          if (!row.direction) {
-            if (row.sent_by) {
-              direction = 'sent';
-            } else if (row.status === 'sent' || row.email_status === 'sent') {
-              direction = 'sent';
-            }
+          let direction = 'received';
+          if (row.sent_by) {
+            direction = 'sent';
+          } else if (row.status === 'sent' || row.email_status === 'sent') {
+            direction = 'sent';
           }
 
           const action = direction === 'received' ? `${row.type.toUpperCase()}_RECEIVED` : `${row.type.toUpperCase()}_SENT`;
