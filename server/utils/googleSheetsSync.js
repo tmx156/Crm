@@ -151,8 +151,14 @@ class GoogleSheetsSync {
   }
 
   async authenticate() {
-    const keyPath = config.googleSheets?.serviceAccountKeyPath;
-    const keyJson = config.googleSheets?.serviceAccountKey;
+    let keyPath = config.googleSheets?.serviceAccountKeyPath;
+    let keyJson = config.googleSheets?.serviceAccountKey;
+
+    // Detect if keyPath actually contains JSON (common Railway misconfiguration)
+    if (keyPath && keyPath.trim().startsWith('{')) {
+      keyJson = keyPath;
+      keyPath = null;
+    }
 
     if (keyPath || keyJson) {
       const authOptions = {
