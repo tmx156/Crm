@@ -207,8 +207,8 @@ class GmailPoller {
     if (!this.gmail || !this.isRunning || this.disabled) return;
 
     try {
-      const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
-      const query = `in:inbox (is:unread OR after:${sevenDaysAgo})`;
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+      const query = `in:inbox after:${thirtyDaysAgo}`;
 
       let allMessages = [];
       let pageToken = null;
