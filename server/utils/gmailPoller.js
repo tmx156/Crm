@@ -106,17 +106,6 @@ class GmailPoller {
   async saveProcessedMessages() {
     try {
       await this.saveProcessedMessagesToDB();
-
-      const processedIds = Array.from(this.processedMessages.entries());
-      const data = {
-        lastUpdated: new Date().toISOString(),
-        processedIds: processedIds.slice(-1000),
-        count: processedIds.length
-      };
-
-      const dataDir = path.dirname(this.processedMessagesFile);
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(this.processedMessagesFile, JSON.stringify(data, null, 2));
     } catch (error) {
       console.error('📧 Error saving processed messages:', error.message);
     }
@@ -256,8 +245,13 @@ class GmailPoller {
             if (result === 'skipped' || result === 'duplicate') { await this.markMessageProcessed(message.id); skippedCount++; processed = true; break; }
           } catch (error) {
             lastError = error;
+            if (error.code === 429 || error.message?.includes('Rate Limit')) {
+              console.warn('⚠️ Gmail API rate limited, pausing scan for 60s');
+              await new Promise(resolve => setTimeout(resolve, 60000));
+              break;
+            }
             if (attempt < this.retryAttempts) {
-              await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
+              await new Promise(resolve => setTimeout(resolve, this.retryDelay * Math.pow(2, attempt)));
             }
           }
         }
@@ -302,8 +296,7 @@ class GmailPoller {
     const accountEmail = (this.accountEmail || '').toLowerCase();
 
     // Only process emails sent TO our account
-    const isToUs = toEmail.toLowerCase() === accountEmail ||
-                   toEmail.toLowerCase().includes(`<${accountEmail}>`);
+    const isToUs = toEmail.toLowerCase() === accountEmail;
     if (!isToUs) {
       const cc = (getHeader('Cc') || '').toLowerCase();
       const bcc = (getHeader('Bcc') || '').toLowerCase();
@@ -341,7 +334,7 @@ class GmailPoller {
           const buffer = Buffer.from(base64Data, 'base64');
           const ext = img.mimetype ? img.mimetype.split('/')[1] || 'jpg' : 'jpg';
           const fileName = `email-images/${messageId}/${img.contentId || Date.now()}.${ext}`;
-          const tempDir = path.join(__dirname, '../uploads/temp_email_attachments');
+          const tempDir = path.join(require('os').tmpdir(), 'crm_email_attachments');
           if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
           const tempPath = path.join(tempDir, `${Date.now()}_${img.contentId || 'img'}.${ext}`);
           fs.writeFileSync(tempPath, buffer);
@@ -445,7 +438,7 @@ class GmailPoller {
         const baseName = path.basename(att.filename, ext);
         const storageName = `email-attachments/${messageId}/${baseName}_${Date.now()}${ext}`;
 
-        const tempDir = path.join(__dirname, '../uploads/temp_email_attachments');
+        const tempDir = path.join(require('os').tmpdir(), 'crm_email_attachments');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const tempPath = path.join(tempDir, `${Date.now()}_${att.filename}`);
         fs.writeFileSync(tempPath, buffer);
@@ -577,11 +570,11 @@ class GmailPoller {
     }
   }
 
-  stop() {
+  async stop() {
     this.isRunning = false;
     if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
     if (this.cleanupTimer) { clearInterval(this.cleanupTimer); this.cleanupTimer = null; }
-    this.saveProcessedMessages();
+    await this.saveProcessedMessages();
     console.log('📧 Gmail poller stopped');
   }
 }
@@ -595,7 +588,7 @@ function startGmailPoller(socketIoInstance) {
 
   console.log(`📧 Starting Gmail poller for ${email} (tokens loaded from database)...`);
   const poller = new GmailPoller(socketIoInstance);
-  poller.start();
+  poller.start().catch(e => console.error('❌ Gmail poller startup failed:', e.message));
   return poller;
 }
 

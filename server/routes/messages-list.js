@@ -75,8 +75,9 @@ router.get('/', auth, async (req, res) => {
     // Query controls to cap egress
     const rawSince = req.query.since;
     const rawLimit = parseInt(req.query.limit, 10);
-    const MAX_LIMIT = 100; // Reduced from 200 to optimize egress usage
-    const validatedLimit = Math.min(Number.isFinite(rawLimit) ? rawLimit : MAX_LIMIT, MAX_LIMIT);
+    const typeFilter = req.query.type || null;
+    const MAX_LIMIT = 500;
+    const validatedLimit = Math.min(Number.isFinite(rawLimit) ? rawLimit : 100, MAX_LIMIT);
     const sinceIso = (() => {
       try { return rawSince ? new Date(rawSince).toISOString() : null; } catch { return null; }
     })();
@@ -95,15 +96,40 @@ router.get('/', auth, async (req, res) => {
 
     // 2) Pull communications from messages table (primary source)
     try {
-      const isAdmin = user.role === 'admin';
-      
-      // First get messages (bounded by time window and limit, trimmed columns)
-      const { data: messageRows, error: messageError } = await supabase
+      const isSuperAdmin = user.email === 'admin@crm.com';
+
+      // Everyone except admin@crm.com only sees their own leads' messages
+      let bookerLeadIds = null;
+      if (!isSuperAdmin) {
+        const { data: myLeads } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('booker_id', user.id);
+        bookerLeadIds = (myLeads || []).map(l => l.id);
+        if (bookerLeadIds.length === 0) {
+          // Booker has no leads — return empty early
+          return res.json({ messages: [], stats: { totalMessages: 0, emailCount: 0, smsCount: 0, unreadCount: 0, sentCount: 0, receivedCount: 0 }, userRole: user.role, userName: user.name, meta: { since: createdAfter, limit: validatedLimit, latestCreatedAt: new Date().toISOString() } });
+        }
+      }
+
+      // Build query
+      let query = supabase
         .from('messages')
         .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
         .gte('created_at', createdAfter)
         .order('created_at', { ascending: false })
         .limit(validatedLimit);
+
+      if (typeFilter) {
+        query = query.eq('type', typeFilter);
+      }
+
+      // Filter at DB level for non-admins
+      if (bookerLeadIds) {
+        query = query.in('lead_id', bookerLeadIds);
+      }
+
+      const { data: messageRows, error: messageError } = await query;
 
       if (messageError) {
         console.error('Error fetching messages:', messageError);
@@ -129,17 +155,29 @@ router.get('/', auth, async (req, res) => {
         
         console.log(`👥 Leads fetched: ${leads?.length || 0}`);
 
+        // Fetch booker names
+        const bookerIds = [...new Set((leads || []).map(l => l.booker_id).filter(Boolean))];
+        const bookerMap = new Map();
+        if (bookerIds.length > 0) {
+          const { data: bookers } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', bookerIds);
+          (bookers || []).forEach(b => bookerMap.set(b.id, b.name));
+        }
+
         // Create a map of lead data
         const leadMap = new Map();
         (leads || []).forEach(lead => {
+          lead.booker_name = bookerMap.get(lead.booker_id) || null;
           leadMap.set(lead.id, lead);
         });
 
         console.log(`🗺️ Lead map size: ${leadMap.size}`);
 
-        // Filter messages based on user permissions
+        // Filter messages based on user permissions (safety net — DB-level filter already applied)
         const filteredMessages = messageData.filter(msg => {
-          if (isAdmin) return true;
+          if (isSuperAdmin) return true;
           const lead = leadMap.get(msg.lead_id);
           return lead && lead.booker_id === user.id;
         });
@@ -188,6 +226,7 @@ router.get('/', auth, async (req, res) => {
             leadEmail: leadData.email,
             leadStatus: leadData.status,
             assignedTo: leadData.booker_id,
+            assignedToName: leadData.booker_name || null,
             type: row.type,
             direction: direction,
             action: action,
@@ -841,20 +880,18 @@ router.put('/bulk-read', auth, async (req, res) => {
           continue;
         }
 
-        // Safely parse booking_history
+        // Safely parse booking_history (handles both JSONB array and JSON string)
         let history = [];
         if (lead.booking_history) {
           try {
-            history = JSON.parse(lead.booking_history);
-            if (!Array.isArray(history)) {
-              history = [];
-            }
+            const raw = lead.booking_history;
+            history = Array.isArray(raw) ? raw : JSON.parse(raw);
+            if (!Array.isArray(history)) history = [];
           } catch (jsonError) {
-            console.warn(`⚠️ Invalid JSON in booking_history for lead ${leadId}:`, lead.booking_history?.substring(0, 100));
             history = [];
           }
         }
-        
+
         // Find the specific message entry and mark it as read
         let updated = false;
         let messageContent = '';
@@ -928,6 +965,9 @@ router.put('/bulk-read', auth, async (req, res) => {
 // @desc    Delete multiple messages across booking history (JSON/table) and messages table
 // @access  Private
 router.post('/bulk-delete', auth, async (req, res) => {
+  if (req.user?.email !== 'admin@crm.com') {
+    return res.status(403).json({ message: 'Only admin@crm.com can delete messages' });
+  }
   console.log('🗑️ Bulk delete endpoint hit by user:', req.user?.name || req.user?.id);
   try {
     const { messageIds } = req.body;
@@ -1323,7 +1363,6 @@ router.post('/reply', auth, async (req, res) => {
         id: result.messageId || crypto.randomUUID(),
         lead_id: leadId,
         type: 'sms',
-        direction: 'sent',
         sms_body: reply,
         content: reply,
         sent_by: user.id,
@@ -1366,7 +1405,6 @@ router.post('/reply', auth, async (req, res) => {
         id: crypto.randomUUID(),
         lead_id: leadId,
         type: 'email',
-        direction: 'sent',
         email_body: reply,
         content: reply,
         subject: `Re: ${originalMessage?.subject || 'Your Inquiry'}`,

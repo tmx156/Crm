@@ -16,7 +16,8 @@ import {
   FiTrash2,
   FiPaperclip,
   FiCalendar,
-  FiXCircle
+  FiXCircle,
+  FiUser
 } from 'react-icons/fi';
 
 const BOOKED_STATUSES = ['Booked', 'Confirmed', 'Unconfirmed'];
@@ -39,7 +40,10 @@ const Messages = () => {
   const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/messages-list');
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const response = await axios.get('/api/messages-list', {
+        params: { limit: 500, since, type: 'email' }
+      });
       const fetched = (response.data.messages || []).filter(m => m.type === 'email');
       setMessages(fetched);
     } catch (error) {
@@ -304,23 +308,25 @@ const Messages = () => {
         </div>
       </div>
 
-      {/* Mobile folder tabs */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 flex">
-        <button
-          onClick={() => { setActiveFolder('inbox'); setSelectedEmail(null); }}
-          className={`flex-1 py-3 text-center text-sm font-medium ${activeFolder === 'inbox' ? 'text-blue-600 border-t-2 border-blue-600' : 'text-gray-500'}`}
-        >
-          <FiInbox className="h-5 w-5 mx-auto mb-1" />
-          Inbox {unreadCount > 0 && `(${unreadCount})`}
-        </button>
-        <button
-          onClick={() => { setActiveFolder('sent'); setSelectedEmail(null); }}
-          className={`flex-1 py-3 text-center text-sm font-medium ${activeFolder === 'sent' ? 'text-blue-600 border-t-2 border-blue-600' : 'text-gray-500'}`}
-        >
-          <FiSend className="h-5 w-5 mx-auto mb-1" />
-          Sent
-        </button>
-      </div>
+      {/* Mobile folder tabs — hide when viewing an email */}
+      {!selectedEmail && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 flex">
+          <button
+            onClick={() => { setActiveFolder('inbox'); setSelectedEmail(null); }}
+            className={`flex-1 py-3 text-center text-sm font-medium ${activeFolder === 'inbox' ? 'text-blue-600 border-t-2 border-blue-600' : 'text-gray-500'}`}
+          >
+            <FiInbox className="h-5 w-5 mx-auto mb-1" />
+            Inbox {unreadCount > 0 && `(${unreadCount})`}
+          </button>
+          <button
+            onClick={() => { setActiveFolder('sent'); setSelectedEmail(null); }}
+            className={`flex-1 py-3 text-center text-sm font-medium ${activeFolder === 'sent' ? 'text-blue-600 border-t-2 border-blue-600' : 'text-gray-500'}`}
+          >
+            <FiSend className="h-5 w-5 mx-auto mb-1" />
+            Sent
+          </button>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -430,16 +436,16 @@ const Messages = () => {
           </div>
         ) : (
           /* Email Detail View */
-          <div className="flex-1 overflow-y-auto bg-white pb-20 md:pb-6">
+          <div className="flex-1 overflow-y-auto bg-white pb-24">
             <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
               {/* Subject */}
-              <h1 className="text-base sm:text-xl font-normal text-gray-900 mb-4 sm:mb-6">
+              <h1 className="text-base sm:text-xl font-normal text-gray-900 mb-3 sm:mb-4">
                 {selectedEmail.subject || selectedEmail.details?.subject || '(No Subject)'}
               </h1>
 
-              {/* Lead Status Badge */}
-              {selectedEmail.leadStatus && (
-                <div className="mb-3">
+              {/* Tags row: Status + Assigned User */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {selectedEmail.leadStatus && (
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     selectedEmail.leadStatus === 'Cancelled' ? 'bg-red-100 text-red-700' :
                     BOOKED_STATUSES.includes(selectedEmail.leadStatus) ? 'bg-green-100 text-green-700' :
@@ -447,8 +453,14 @@ const Messages = () => {
                   }`}>
                     {selectedEmail.leadStatus}
                   </span>
-                </div>
-              )}
+                )}
+                {selectedEmail.assignedToName && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                    <FiUser className="h-3 w-3" />
+                    {selectedEmail.assignedToName}
+                  </span>
+                )}
+              </div>
 
               {/* Email Header */}
               <div className="flex items-start mb-4 sm:mb-6">
@@ -492,77 +504,79 @@ const Messages = () => {
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="border-t border-gray-200 pt-4">
-                {/* Reply + Cancel/Reschedule row */}
-                {!showReplyBox && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedEmail.direction === 'received' && (
-                      <button
-                        onClick={() => setShowReplyBox(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <FiCornerUpLeft className="h-4 w-4" />
-                        Reply
-                      </button>
-                    )}
-
-                    {isLeadBooked(selectedEmail) && (
-                      <>
-                        <button
-                          onClick={() => handleReschedule(selectedEmail)}
-                          className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 rounded-full text-sm text-blue-700 hover:bg-blue-50 transition-colors"
-                        >
-                          <FiCalendar className="h-4 w-4" />
-                          Reschedule
-                        </button>
-                        <button
-                          onClick={() => handleCancelBooking(selectedEmail)}
-                          className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 rounded-full text-sm text-red-700 hover:bg-red-50 transition-colors"
-                        >
-                          <FiXCircle className="h-4 w-4" />
-                          Cancel Booking
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Reply Box */}
-                {showReplyBox && (
-                  <div className="border border-gray-300 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <FiCornerUpLeft className="h-4 w-4" />
-                        <span className="truncate">Reply to {selectedEmail.leadName}</span>
-                      </div>
-                      <button onClick={() => setShowReplyBox(false)} className="p-1 hover:bg-gray-200 rounded flex-shrink-0">
-                        <FiX className="h-4 w-4 text-gray-500" />
-                      </button>
+              {/* Reply Box (inline, scrolls with content) */}
+              {showReplyBox && (
+                <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
+                  <div className="bg-gray-50 px-3 sm:px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <FiCornerUpLeft className="h-4 w-4" />
+                      <span className="truncate">Reply to {selectedEmail.leadName}</span>
                     </div>
-                    <textarea
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      placeholder="Write your reply..."
-                      className="w-full p-3 sm:p-4 border-0 focus:ring-0 focus:outline-none resize-none text-sm"
-                      rows="4"
-                      autoFocus
-                    />
-                    <div className="bg-gray-50 px-3 sm:px-4 py-3 flex items-center justify-between border-t border-gray-200">
-                      <button
-                        onClick={handleSendReply}
-                        disabled={!replyText.trim() || sendingReply}
-                        className="inline-flex items-center px-4 sm:px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {sendingReply ? 'Sending...' : 'Send'}
-                      </button>
-                      <button onClick={() => setShowReplyBox(false)} className="text-sm text-gray-500 hover:text-gray-700">
-                        Discard
-                      </button>
-                    </div>
+                    <button onClick={() => setShowReplyBox(false)} className="p-1 hover:bg-gray-200 rounded flex-shrink-0">
+                      <FiX className="h-4 w-4 text-gray-500" />
+                    </button>
                   </div>
-                )}
-              </div>
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Write your reply..."
+                    className="w-full p-3 sm:p-4 border-0 focus:ring-0 focus:outline-none resize-none text-sm"
+                    rows="4"
+                    autoFocus
+                  />
+                  <div className="bg-gray-50 px-3 sm:px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                    <button
+                      onClick={handleSendReply}
+                      disabled={!replyText.trim() || sendingReply}
+                      className="inline-flex items-center px-4 sm:px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {sendingReply ? 'Sending...' : 'Send'}
+                    </button>
+                    <button onClick={() => setShowReplyBox(false)} className="text-sm text-gray-500 hover:text-gray-700">
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Floating Action Bar — always visible when viewing email */}
+            <div className="fixed bottom-0 left-0 md:left-56 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex items-center gap-2 z-50 shadow-lg">
+              {selectedEmail.direction === 'received' && !showReplyBox && (
+                <button
+                  onClick={() => setShowReplyBox(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <FiCornerUpLeft className="h-4 w-4" />
+                  Reply
+                </button>
+              )}
+
+              {isLeadBooked(selectedEmail) && (
+                <>
+                  <button
+                    onClick={() => handleReschedule(selectedEmail)}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 bg-white rounded-full text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                  >
+                    <FiCalendar className="h-4 w-4" />
+                    Reschedule
+                  </button>
+                  <button
+                    onClick={() => handleCancelBooking(selectedEmail)}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 bg-white rounded-full text-sm text-red-700 hover:bg-red-50 transition-colors"
+                  >
+                    <FiXCircle className="h-4 w-4" />
+                    Cancel
+                  </button>
+                </>
+              )}
+
+              {selectedEmail.assignedToName && (
+                <span className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                  <FiUser className="h-3 w-3" />
+                  {selectedEmail.assignedToName}
+                </span>
+              )}
             </div>
           </div>
         )}

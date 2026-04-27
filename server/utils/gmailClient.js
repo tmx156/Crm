@@ -1,8 +1,8 @@
 const { google } = require('googleapis');
 const config = require('../config');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase-client');
 
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = getSupabaseClient();
 
 /**
  * Build an OAuth2 client (no tokens yet).

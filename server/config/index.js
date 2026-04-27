@@ -46,6 +46,13 @@ const config = {
     redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
   },
 
+  // Google Sheets Sync
+  googleSheets: {
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID || null,
+    serviceAccountKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || null,
+    serviceAccountKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || null
+  },
+
   // Gmail Poller (reads from env directly, these are for reference)
   gmail: {
     email: process.env.GMAIL_EMAIL || process.env.GMAIL_USER || null,

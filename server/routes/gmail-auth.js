@@ -3,9 +3,9 @@ const router = express.Router();
 const { google } = require('googleapis');
 const { makeOAuth2Client } = require('../utils/gmailClient');
 const config = require('../config');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase-client');
 
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = getSupabaseClient();
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email'];
 

@@ -15,7 +15,7 @@ const GmailEmailRenderer = ({
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 
-    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'];
+    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'meta', 'link', 'base', 'svg', 'video', 'audio', 'source', 'applet'];
     dangerousTags.forEach(tag => {
       const elements = doc.getElementsByTagName(tag);
       while (elements.length > 0) elements[0].remove();

@@ -459,9 +459,9 @@ const Dashboard = () => {
     setReplyMode(message.type === 'email' ? 'email' : 'sms');
     setReplyText('');
 
-    if (!message.isRead && message.messageId) {
+    if (!message.isRead && (message.messageId || message.id)) {
       try {
-        await axios.put(`/api/messages-list/${message.messageId}/read`);
+        await axios.put(`/api/messages-list/${message.messageId || message.id}/read`);
         setUnreadMessages(prev => prev.filter(m => m.id !== message.id));
       } catch (e) {
         console.error('Error marking message as read:', e);
