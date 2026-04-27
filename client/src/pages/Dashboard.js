@@ -478,7 +478,7 @@ const Dashboard = () => {
       });
 
       // Mark as read
-      await axios.put(`/api/messages-list/${selectedMessage.id}/read`);
+      await axios.put(`/api/messages-list/${selectedMessage.messageId || selectedMessage.id}/read`);
 
       // Close modal and refresh
       setSelectedMessage(null);

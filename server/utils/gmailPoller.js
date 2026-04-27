@@ -14,7 +14,10 @@ const GMAIL_EMAIL = process.env.GMAIL_EMAIL || process.env.GMAIL_USER || '';
 
 class GmailPoller {
   constructor(ioInstance) {
-    if (GmailPoller._instance) return GmailPoller._instance;
+    if (GmailPoller._instance) {
+      if (ioInstance) GmailPoller._instance.io = ioInstance;
+      return GmailPoller._instance;
+    }
     GmailPoller._instance = this;
 
     this.supabase = getSupabaseClient();
@@ -187,13 +190,17 @@ class GmailPoller {
   startPolling() {
     if (this.pollTimer) clearInterval(this.pollTimer);
 
+    this.isScanning = false;
     this.pollTimer = setInterval(async () => {
-      if (this.isRunning && !this.disabled) {
+      if (this.isRunning && !this.disabled && !this.isScanning) {
+        this.isScanning = true;
         try {
           await this.scanNewMessages();
-          this.saveProcessedMessages();
+          await this.saveProcessedMessages();
         } catch (error) {
           console.error('❌ Gmail polling error:', error.message);
+        } finally {
+          this.isScanning = false;
         }
       }
     }, POLL_INTERVAL_MS);
@@ -317,7 +324,7 @@ class GmailPoller {
     const extractor = new GmailEmailExtractor(this.gmail);
     const emailContent = await extractor.extractEmailContent(message, messageId);
 
-    const bodyText = emailContent.text || '';
+    const bodyText = extractor.cleanEmailBody(emailContent.text || '', false);
     let htmlBody = emailContent.html || null;
     const rawEmbeddedImages = emailContent.embeddedImages || [];
 
@@ -341,7 +348,8 @@ class GmailPoller {
             embeddedImages.push({ contentId: img.contentId, url: result.url, mimetype: img.mimetype, is_embedded: true });
             // Replace cid: references in HTML with the public URL
             if (htmlBody && img.contentId) {
-              htmlBody = htmlBody.replace(new RegExp(`cid:${img.contentId.replace(/[<>]/g, '')}`, 'g'), result.url);
+              const cidEscaped = img.contentId.replace(/[<>]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              htmlBody = htmlBody.replace(new RegExp(`cid:${cidEscaped}`, 'g'), result.url);
             }
           }
         } catch (e) {
@@ -357,7 +365,9 @@ class GmailPoller {
     const allAttachments = [...attachments, ...embeddedImages];
 
     const recordId = randomUUID();
-    const emailReceivedDate = date ? new Date(date).toISOString() : new Date().toISOString();
+    let emailReceivedDate;
+    try { emailReceivedDate = date ? new Date(date).toISOString() : new Date().toISOString(); }
+    catch { emailReceivedDate = new Date().toISOString(); }
 
     const { error: insertError } = await this.supabase
       .from('messages')
@@ -368,7 +378,7 @@ class GmailPoller {
         subject,
         content: bodyText || '(No content)',
         email_body: htmlBody,
-        recipient_email: fromEmail,
+        recipient_email: accountEmail,
         status: 'delivered',
         gmail_message_id: messageId,
         gmail_account_key: 'primary',
@@ -469,7 +479,10 @@ class GmailPoller {
 
   async updateLeadHistory(lead, subject, body, emailReceivedDate) {
     let history = [];
-    try { history = JSON.parse(lead.booking_history || '[]'); } catch (e) {}
+    try {
+      const raw = lead.booking_history;
+      history = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+    } catch (e) {}
 
     history.unshift({
       action: 'EMAIL_RECEIVED',
@@ -513,7 +526,8 @@ class GmailPoller {
 
   async routeReplyToOriginalSender(lead, subject, fromEmail, messageId) {
     try {
-      const normalizedSubject = subject.replace(/^(re|fwd?|fw):\s*/i, '').trim().toLowerCase();
+      const stripPrefixes = (s) => (s || '').replace(/^(re|fwd?|fw):\s*/gi, '').trim().toLowerCase();
+      const normalizedSubject = stripPrefixes(subject);
       if (!normalizedSubject) return;
 
       const { data: sentMessages } = await this.supabase
@@ -528,7 +542,7 @@ class GmailPoller {
       if (!sentMessages || sentMessages.length === 0) return;
 
       const matchingMessage = sentMessages.find(msg => {
-        const msgSubject = (msg.subject || '').replace(/^(re|fwd?|fw):\s*/i, '').trim().toLowerCase();
+        const msgSubject = stripPrefixes(msg.subject);
         return msgSubject === normalizedSubject || normalizedSubject.includes(msgSubject) || msgSubject.includes(normalizedSubject);
       });
 
