@@ -801,170 +801,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* SECTION 4: Calendar Status */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
-            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 lg:mb-6">
-              <FiCalendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-green-500" />
-              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">CALENDAR</h2>
-            </div>
-
-            {nextBookingDay ? (
-              <>
-                <div className="mb-4 flex items-center space-x-2">
-                  <FiCalendar className="text-blue-600" />
-                  <div>
-                    <p className="text-sm text-gray-600">Next Day with Bookings: <span className="font-bold text-gray-900">{new Date(nextBookingDay).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span></p>
-                  </div>
-                </div>
-
-                {/* Stats boxes */}
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <div className="text-4xl font-bold text-blue-600 mb-1">{calendarStats.total}</div>
-                    <div className="flex items-center text-sm text-blue-600">
-                      <FiCalendar className="mr-1" />
-                      <span className="font-medium">Total</span>
-                    </div>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <div className="text-4xl font-bold text-green-600 mb-1">{calendarStats.confirmed}</div>
-                    <div className="flex items-center text-sm text-green-600">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <span className="font-medium">Confirmed</span>
-                    </div>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg p-4">
-                    <div className="text-4xl font-bold text-orange-600 mb-1">{calendarStats.unconfirmed}</div>
-                    <div className="flex items-center text-sm text-orange-600">
-                      <FiAlertCircle className="mr-1" />
-                      <span className="font-medium">Unconfirmed</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Warning if unconfirmed */}
-                {calendarStats.unconfirmed > 0 && (
-                  <div className="bg-orange-50 border-l-4 border-orange-500 p-3 mb-4">
-                    <div className="flex items-center">
-                      <FiAlertCircle className="h-5 w-5 text-orange-500 mr-2" />
-                      <p className="text-sm text-orange-700">
-                        {calendarStats.unconfirmed} booking{calendarStats.unconfirmed > 1 ? 's' : ''} need confirmation
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Live Events */}
-                <div className="mb-4">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <FiCalendar className="text-gray-600" />
-                    <p className="text-sm font-semibold text-gray-700">Live Events</p>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto space-y-2 pr-2">
-                    {calendarEvents.map((event) => {
-                      const leadStatus = (event.lead_status || '').toLowerCase();
-                      const isConfirmed = event.is_confirmed === true;
-                      const isCancelled = leadStatus === 'cancelled';
-
-                      return (
-                        <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center space-x-3 flex-1">
-                            <span className="text-sm font-semibold text-gray-900 min-w-[60px]">
-                              {event.booking_time || '09:00'}
-                            </span>
-                            <span className="text-sm font-medium text-gray-900">{event.name || 'Unknown'}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {isCancelled ? (
-                              <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-semibold bg-red-100 text-red-700">
-                                Cancelled
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-semibold bg-orange-100 text-orange-700">
-                                Booked
-                              </span>
-                            )}
-                            {isConfirmed && !isCancelled && (
-                              <div className="w-8 h-8 flex items-center justify-center bg-green-500 text-white rounded-full flex-shrink-0">
-                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Week Overview */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-3">Week Overview:</p>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div>
-                      <p className="text-lg font-bold text-gray-900">{weekOverview.total}</p>
-                      <p className="text-xs text-gray-600">Total</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-green-600">{weekOverview.confirmed}</p>
-                      <p className="text-xs text-gray-600">Confirmed</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-orange-600">{weekOverview.unconfirmed}</p>
-                      <p className="text-xs text-gray-600">Unconfirmed</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-blue-600">{weekOverview.rate}%</p>
-                      <p className="text-xs text-gray-600">Rate</p>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FiCalendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                <p>No upcoming bookings</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* SECTIONS 5 & 6: Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
-
-          {/* SECTION 5: Live Activity Feed */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
-            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 lg:mb-6">
-              <FiActivity className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-purple-500" />
-              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">ACTIVITY</h2>
-            </div>
-            <div className="space-y-3">
-              {recentActivity.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <FiActivity className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p>No recent activity</p>
-                </div>
-              ) : (
-                recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-shrink-0 w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center">
-                      {activity.icon === 'calendar' && <FiCalendar className="h-5 w-5" />}
-                      {activity.icon === 'dollar' && <FiDollarSign className="h-5 w-5" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">{activity.message}</p>
-                      <p className="text-xs text-gray-500 mt-1">{timeAgo(activity.timestamp)}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* SECTION 6: Live Messages */}
+          {/* SECTION 4: Live Messages */}
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4 lg:mb-6">
               <div className="flex items-center space-x-2 sm:space-x-3">
@@ -1034,18 +871,53 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* SECTION 5: Bottom Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+
+          {/* SECTION 5: Live Activity Feed */}
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4 lg:mb-6">
+              <FiActivity className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-purple-500" />
+              <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">ACTIVITY</h2>
+            </div>
+            <div className="space-y-3">
+              {recentActivity.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FiActivity className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No recent activity</p>
+                </div>
+              ) : (
+                recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex-shrink-0 w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center">
+                      {activity.icon === 'calendar' && <FiCalendar className="h-5 w-5" />}
+                      {activity.icon === 'dollar' && <FiDollarSign className="h-5 w-5" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">{activity.message}</p>
+                      <p className="text-xs text-gray-500 mt-1">{timeAgo(activity.timestamp)}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {/* Message Reply Modal */}
+      {/* Message Modal with Floating Action Bar */}
       {selectedMessage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-3 sm:p-6">
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900">Reply to Message</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">{selectedMessage.leadName || 'Unknown'}</h3>
+                <div className="flex items-center gap-2 mt-1">
                   {selectedMessage.leadStatus && (
-                    <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium ${
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       selectedMessage.leadStatus === 'Cancelled' ? 'bg-red-100 text-red-700' :
                       BOOKED_STATUSES.includes(selectedMessage.leadStatus) ? 'bg-green-100 text-green-700' :
                       'bg-gray-100 text-gray-700'
@@ -1053,95 +925,86 @@ const Dashboard = () => {
                       {selectedMessage.leadStatus}
                     </span>
                   )}
+                  {selectedMessage.assignedToName && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                      {selectedMessage.assignedToName}
+                    </span>
+                  )}
                 </div>
-                <button
-                  onClick={() => setSelectedMessage(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <FiX className="h-6 w-6" />
-                </button>
               </div>
+              <button onClick={() => setSelectedMessage(null)} className="text-gray-400 hover:text-gray-600">
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
 
-              <div className="mb-4 sm:mb-6">
-                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-                  <p className="text-sm font-semibold text-gray-900 mb-1">From: {selectedMessage.leadName || selectedMessage.from || 'Unknown'}</p>
-                  {(selectedMessage.subject || selectedMessage.details?.subject) && (
-                    <p className="text-sm text-gray-700 mb-2">Subject: {selectedMessage.subject || selectedMessage.details?.subject}</p>
-                  )}
-                  {selectedMessage.email_body ? (
-                    <GmailEmailRenderer
-                      htmlContent={selectedMessage.email_body}
-                      textContent={selectedMessage.content}
-                      attachments={selectedMessage.attachments || []}
-                      embeddedImages={selectedMessage.embedded_images || []}
-                    />
-                  ) : (
-                    <p className="text-sm text-gray-600">
-                      {typeof (selectedMessage.content || selectedMessage.preview) === 'string'
-                        ? (selectedMessage.content || selectedMessage.preview)
-                        : 'Message content'}
-                    </p>
-                  )}
-                </div>
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24">
+              {(selectedMessage.subject || selectedMessage.details?.subject) && (
+                <p className="text-sm font-semibold text-gray-900 mb-3">{selectedMessage.subject || selectedMessage.details?.subject}</p>
+              )}
+              {selectedMessage.email_body ? (
+                <GmailEmailRenderer
+                  htmlContent={selectedMessage.email_body}
+                  textContent={selectedMessage.content}
+                  attachments={selectedMessage.attachments || []}
+                  embeddedImages={selectedMessage.embedded_images || []}
+                />
+              ) : (
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                  {typeof (selectedMessage.content || selectedMessage.preview) === 'string'
+                    ? (selectedMessage.content || selectedMessage.preview)
+                    : 'Message content'}
+                </p>
+              )}
 
-                {/* Cancel / Reschedule buttons — only when lead is booked */}
-                {BOOKED_STATUSES.includes(selectedMessage.leadStatus) && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <button
-                      onClick={handleReschedule}
-                      className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 rounded-lg text-sm text-blue-700 hover:bg-blue-50 transition-colors"
-                    >
-                      <FiCalendar className="h-4 w-4" />
-                      Reschedule
-                    </button>
-                    <button
-                      onClick={handleCancelBooking}
-                      className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 rounded-lg text-sm text-red-700 hover:bg-red-50 transition-colors"
-                    >
-                      <FiXCircle className="h-4 w-4" />
-                      Cancel Booking
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center space-x-3 mb-4">
-                  <button
-                    onClick={() => setReplyMode('email')}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                      replyMode === 'email'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    Email
-                  </button>
-                </div>
-
+              {/* Reply textarea */}
+              <div className="mt-4">
                 <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Type your reply here..."
+                  placeholder="Type your reply..."
                   className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  rows="4"
+                  rows="3"
                 />
               </div>
+            </div>
 
-              <div className="flex items-center justify-end space-x-3">
-                <button
-                  onClick={() => setSelectedMessage(null)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={handleSendReply}
-                  disabled={!replyText.trim() || sendingReply}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  <FiSend className="h-4 w-4" />
-                  <span>{sendingReply ? 'Sending...' : 'Send'}</span>
-                </button>
-              </div>
+            {/* Floating Action Bar */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white rounded-b-xl sm:rounded-b-2xl px-3 sm:px-4 py-3 flex items-center gap-2">
+              <button
+                onClick={handleSendReply}
+                disabled={!replyText.trim() || sendingReply}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <FiSend className="h-4 w-4" />
+                {sendingReply ? 'Sending...' : 'Reply'}
+              </button>
+
+              {BOOKED_STATUSES.includes(selectedMessage.leadStatus) && (
+                <>
+                  <button
+                    onClick={handleReschedule}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-blue-300 bg-white rounded-full text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                  >
+                    <FiCalendar className="h-4 w-4" />
+                    Reschedule
+                  </button>
+                  <button
+                    onClick={handleCancelBooking}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 bg-white rounded-full text-sm text-red-700 hover:bg-red-50 transition-colors"
+                  >
+                    <FiXCircle className="h-4 w-4" />
+                    Cancel
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={() => setSelectedMessage(null)}
+                className="ml-auto text-sm text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

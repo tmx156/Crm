@@ -15,6 +15,7 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [activeUsers, setActiveUsers] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [lastConnectionError, setLastConnectionError] = useState(null);
@@ -151,6 +152,10 @@ export const SocketProvider = ({ children }) => {
       // Handle ping/pong for connection health
       newSocket.on('ping', () => {
         newSocket.emit('pong');
+      });
+
+      newSocket.on('active_users_count', (count) => {
+        setActiveUsers(count);
       });
 
       setSocket(newSocket);
@@ -343,6 +348,7 @@ export const SocketProvider = ({ children }) => {
   const value = {
     socket,
     isConnected,
+    activeUsers,
     lastUpdate,
     connectionAttempts,
     lastConnectionError,

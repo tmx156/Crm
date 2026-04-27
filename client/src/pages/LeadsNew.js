@@ -39,6 +39,7 @@ const LeadsNew = () => {
   const [dateFilter, setDateFilter] = useState('all'); // New: Date filter
   const [customDateStart, setCustomDateStart] = useState(''); // New: Custom date range start
   const [customDateEnd, setCustomDateEnd] = useState(''); // New: Custom date range end
+  const [bookerFilter, setBookerFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalLeads, setTotalLeads] = useState(0);
@@ -84,7 +85,7 @@ const LeadsNew = () => {
       setCurrentPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchTerm, statusFilter, dateFilter, customDateStart, customDateEnd]);
+  }, [searchTerm, statusFilter, dateFilter, customDateStart, customDateEnd, bookerFilter]);
 
   // Helper function to calculate date range in GMT/London timezone
   const getDateRange = () => {
@@ -157,7 +158,8 @@ const LeadsNew = () => {
         page: currentPage,
         limit: leadsPerPage,
         status: statusFilter === 'all' ? undefined : statusFilter,
-        search: searchTerm
+        search: searchTerm,
+        booker: bookerFilter || undefined
       };
 
       // Add date filter if applicable
@@ -209,6 +211,10 @@ const LeadsNew = () => {
         params.assigned_at_end = dateRange.end;
       }
 
+      if (bookerFilter) {
+        params.userId = bookerFilter;
+      }
+
       const response = await axios.get('/api/stats/leads', {
         params,
         headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -221,7 +227,7 @@ const LeadsNew = () => {
 
   useEffect(() => {
     fetchLeads();
-  }, [currentPage, statusFilter, searchTerm, dateFilter, customDateStart, customDateEnd]);
+  }, [currentPage, statusFilter, searchTerm, dateFilter, customDateStart, customDateEnd, bookerFilter]);
 
   useEffect(() => {
     if (user) {
@@ -236,7 +242,7 @@ const LeadsNew = () => {
       fetchLeadCounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFilter, customDateStart, customDateEnd, statusFilter]);
+  }, [dateFilter, customDateStart, customDateEnd, statusFilter, bookerFilter]);
 
   // Handle navigation state changes from sidebar
   useEffect(() => {
@@ -891,39 +897,68 @@ const LeadsNew = () => {
               </div>
             </div>
 
-            {/* Custom Date Range */}
-            <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-              <input
-                type="date"
-                value={customDateStart}
-                onChange={(e) => {
-                  setCustomDateStart(e.target.value);
-                  if (e.target.value) setDateFilter('custom');
-                }}
-                className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
-              />
-              <span className="text-gray-500 text-xs sm:text-sm shrink-0">to</span>
-              <input
-                type="date"
-                value={customDateEnd}
-                onChange={(e) => {
-                  setCustomDateEnd(e.target.value);
-                  if (e.target.value) setDateFilter('custom');
-                }}
-                className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
-              />
-              {(customDateStart || customDateEnd) && (
-                <button
-                  onClick={() => {
-                    setCustomDateStart('');
-                    setCustomDateEnd('');
-                    setDateFilter('all');
+            {/* Custom Date Range and Booker Filter */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
+              <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1">
+                <input
+                  type="date"
+                  value={customDateStart}
+                  onChange={(e) => {
+                    setCustomDateStart(e.target.value);
+                    if (e.target.value) setDateFilter('custom');
                   }}
-                  className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                  title="Clear custom dates"
-                >
-                  <FiX className="h-4 w-4" />
-                </button>
+                  className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
+                />
+                <span className="text-gray-500 text-xs sm:text-sm shrink-0">to</span>
+                <input
+                  type="date"
+                  value={customDateEnd}
+                  onChange={(e) => {
+                    setCustomDateEnd(e.target.value);
+                    if (e.target.value) setDateFilter('custom');
+                  }}
+                  className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
+                />
+                {(customDateStart || customDateEnd) && (
+                  <button
+                    onClick={() => {
+                      setCustomDateStart('');
+                      setCustomDateEnd('');
+                      setDateFilter('all');
+                    }}
+                    className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Clear custom dates"
+                  >
+                    <FiX className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {user?.role === 'admin' && salesTeam.length > 0 && (
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <FiUser className="h-4 w-4 text-purple-600 shrink-0" />
+                  <select
+                    value={bookerFilter}
+                    onChange={(e) => setBookerFilter(e.target.value)}
+                    className="flex-1 sm:flex-none border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white min-w-0 sm:min-w-[180px]"
+                  >
+                    <option value="">All Bookers</option>
+                    {salesTeam.map(member => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                      </option>
+                    ))}
+                  </select>
+                  {bookerFilter && (
+                    <button
+                      onClick={() => setBookerFilter('')}
+                      className="text-gray-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                      title="Clear booker filter"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
