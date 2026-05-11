@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import SaleModal from '../components/SaleModal';
 import ImageLightbox from '../components/ImageLightbox';
 import LazyImage from '../components/LazyImage';
+import GmailEmailRenderer from '../components/GmailEmailRenderer';
 import { getOptimizedImageUrl } from '../utils/imageUtils';
 
 const Calendar = () => {
@@ -70,6 +71,25 @@ const Calendar = () => {
 
   // Image lightbox state
   const [lightboxImage, setLightboxImage] = useState(null);
+
+  // Message counts for calendar badges
+  const [messageCounts, setMessageCounts] = useState({});
+
+  // Modal: lead emails (from messages table)
+  const [leadMessages, setLeadMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [showAllEmailsModal, setShowAllEmailsModal] = useState(false);
+
+  // Modal: email reply
+  const [showReplyEmail, setShowReplyEmail] = useState(false);
+  const [emailReplySubject, setEmailReplySubject] = useState('');
+  const [emailReplyBody, setEmailReplyBody] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  // Modal: model stats
+  const [editingStats, setEditingStats] = useState(false);
+  const [statsForm, setStatsForm] = useState({});
+  const [savingStats, setSavingStats] = useState(false);
 
   // Memoize fetchEvents to prevent unnecessary re-renders
   const [isFetching, setIsFetching] = useState(false);
@@ -485,6 +505,30 @@ const Calendar = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch message counts for calendar badges when events change
+  useEffect(() => {
+    if (events.length === 0) return;
+    const leadIds = events.map(e => e.id).filter(Boolean);
+    if (leadIds.length === 0) return;
+
+    const fetchMessageCounts = async () => {
+      try {
+        const batchSize = 200;
+        const allCounts = {};
+        for (let i = 0; i < leadIds.length; i += batchSize) {
+          const batch = leadIds.slice(i, i + batchSize);
+          const res = await axios.get('/api/leads/message-counts', {
+            params: { leadIds: batch.join(',') },
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          Object.assign(allCounts, res.data?.counts || {});
+        }
+        setMessageCounts(allCounts);
+      } catch (e) { /* silent */ }
+    };
+    fetchMessageCounts();
+  }, [events]);
+
   // Consolidated real-time updates with proper debouncing
   useEffect(() => {
     console.log('📅 Calendar: Setting up real-time updates and polling...');
@@ -611,10 +655,59 @@ const Calendar = () => {
     }
   }, []);
 
+  // Compute per-day aggregate message counts for calendar day indicators
+  const dayMessageCounts = React.useMemo(() => {
+    if (!events.length || !Object.keys(messageCounts).length) return {};
+    const dayCounts = {};
+    for (const event of events) {
+      const leadId = event.id;
+      const counts = messageCounts[leadId];
+      if (!counts) continue;
+      const dateKey = event.start ? new Date(event.start).toISOString().slice(0, 10) : null;
+      if (!dateKey) continue;
+      if (!dayCounts[dateKey]) dayCounts[dateKey] = { sms: 0, email: 0 };
+      dayCounts[dateKey].sms += counts.sms || 0;
+      dayCounts[dateKey].email += counts.email || 0;
+    }
+    return dayCounts;
+  }, [events, messageCounts]);
+
+  // MoreLink component that finds its date from the parent DOM cell
+  const MoreLinkWithEmails = React.memo(({ num, dayMessageCounts: counts }) => {
+    const ref = useRef(null);
+    const [emailCount, setEmailCount] = useState(0);
+    useEffect(() => {
+      if (!ref.current) return;
+      const td = ref.current.closest('td[data-date]');
+      if (td) {
+        const dateStr = td.getAttribute('data-date');
+        const c = dateStr ? counts[dateStr] : null;
+        setEmailCount(c?.email || 0);
+      }
+    });
+    return (
+      <div ref={ref} className="flex items-center w-full text-xs text-gray-500">
+        <span className="flex-shrink-0">+{num} more</span>
+        <span className="flex-1" />
+        {emailCount > 0 && (
+          <span className="flex items-center text-gray-400 flex-shrink-0 ml-1">
+            <FiMail className="h-3 w-3 sm:mr-0.5" />
+            <span className="hidden sm:inline text-[10px]">{emailCount}</span>
+          </span>
+        )}
+      </div>
+    );
+  });
+
+  const renderMoreLinkContent = useCallback((arg) => {
+    return <MoreLinkWithEmails num={arg.num} dayMessageCounts={dayMessageCounts} />;
+  }, [dayMessageCounts]);
+
   // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
   const renderEventContent = useCallback((arg) => {
     const leadId = arg.event.extendedProps?.lead?.id;
     const hasUnreadEmail = leadId && leadsWithUnreadEmails.has(leadId);
+    const counts = leadId ? messageCounts[leadId] : null;
     return (
       <div className="fc-event-main px-1 py-0.5 flex items-center">
         <div className="fc-event-title-container flex-1 overflow-hidden">
@@ -623,12 +716,18 @@ const Calendar = () => {
             {arg.event.title}
           </div>
         </div>
-        {hasUnreadEmail && (
-          <FiMail className="h-3 w-3 text-white ml-1 flex-shrink-0 opacity-90" title="Unread email" />
+        {((counts && (counts.sms > 0 || counts.email > 0)) || hasUnreadEmail) && (
+          <div className="flex items-center ml-1 flex-shrink-0">
+            {(counts && counts.email > 0) || hasUnreadEmail ? (
+              <span className="flex items-center opacity-90" title={`${counts?.email || 0} emails${hasUnreadEmail ? ' (unread)' : ''}`}>
+                <FiMail className={`h-3 w-3 text-white ${hasUnreadEmail ? 'animate-pulse' : ''}`} />
+              </span>
+            ) : null}
+          </div>
         )}
       </div>
     );
-  }, [leadsWithUnreadEmails]);
+  }, [leadsWithUnreadEmails, messageCounts]);
 
   // Realtime: update open calendar modal conversation instantly on inbound SMS
   useEffect(() => {
@@ -685,6 +784,56 @@ const Calendar = () => {
       socket.off('message_received', handleSmsReceived);
     };
   }, [socket, selectedEvent]);
+
+  // Fetch lead messages when modal opens
+  useEffect(() => {
+    if (!showEventModal || !selectedEvent) {
+      setLeadMessages([]);
+      setShowReplyEmail(false);
+      setShowAllEmailsModal(false);
+      setEditingStats(false);
+      return;
+    }
+    const leadId = selectedEvent.extendedProps?.lead?.id;
+    if (!leadId) return;
+
+    const fetchMessages = async () => {
+      setLoadingMessages(true);
+      try {
+        const res = await axios.get(`/api/leads/${leadId}/messages`, {
+          params: { type: 'email' },
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setLeadMessages(res.data?.messages || []);
+      } catch (e) {
+        console.error('Error fetching lead messages:', e);
+        setLeadMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    fetchMessages();
+
+    // Fetch model stats on-demand
+    const fetchStats = async () => {
+      try {
+        const res = await axios.get(`/api/leads/${leadId}/model-stats`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const stats = res.data?.model_stats;
+        if (stats && typeof stats === 'object') {
+          setStatsForm(stats);
+        } else if (typeof stats === 'string') {
+          try { setStatsForm(JSON.parse(stats)); } catch { setStatsForm({}); }
+        } else {
+          setStatsForm({});
+        }
+      } catch (e) {
+        setStatsForm({});
+      }
+    };
+    fetchStats();
+  }, [showEventModal, selectedEvent?.id]);
 
   // Fetch booking confirmation templates for welcome pack dropdown
   const fetchWelcomePackTemplates = useCallback(async () => {
@@ -1974,6 +2123,7 @@ const Calendar = () => {
               height: 600
             }
           }}
+          moreLinkContent={renderMoreLinkContent}
           eventContent={renderEventContent}
           eventDidMount={handleEventDidMount}
           eventWillUnmount={handleEventWillUnmount}
@@ -2787,348 +2937,169 @@ const Calendar = () => {
               {/* History/Notes at the bottom */}
               <div className="mt-4 pt-3 border-t border-gray-200">
                 <div className="flex flex-col space-y-3">
-                  {/* SMS Conversation History */}
-                  {(() => {
-                    const rawHistory = selectedEvent.extendedProps?.lead?.bookingHistory ??
-                                       selectedEvent.extendedProps?.lead?.booking_history ?? [];
-                    let history = [];
-                    try {
-                      if (Array.isArray(rawHistory)) {
-                        history = rawHistory;
-                      } else if (typeof rawHistory === 'string') {
-                        history = rawHistory.trim() ? JSON.parse(rawHistory) : [];
-                      } else if (rawHistory && typeof rawHistory === 'object') {
-                        history = Array.isArray(rawHistory) ? rawHistory : [];
-                      }
-                    } catch (e) {
-                      history = [];
-                    }
-                    const messages = Array.isArray(history) ? history.filter(h => ['SMS_SENT', 'SMS_RECEIVED', 'SMS_FAILED'].includes(h.action)) : [];
-                    const receivedMessages = messages.filter(m => m.action === 'SMS_RECEIVED')
-                                                     .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-                    const lastReceived = receivedMessages[0];
-                    
-                    if (messages.length === 0) return null;
-                    
-                    return (
-                      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-3">
-                        <div className="flex items-start space-x-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
-                            <FiMessageSquare className="h-4 w-4 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            {/* Collapsible Messages Section */}
-                            <>
-                                <div 
-                                  className="flex items-center space-x-2 mb-2 cursor-pointer hover:bg-blue-200/50 -mx-2 px-2 py-1 rounded transition-colors"
-                                  onClick={() => setShowAllMessages(!showAllMessages)}
-                                >
-                                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Messages</p>
-                                  <span className="text-xs text-gray-500">({messages.length})</span>
-                                  {showAllMessages ? (
-                                    <FiChevronUp className="h-4 w-4 text-gray-600" />
-                                  ) : (
-                                    <FiChevronDown className="h-4 w-4 text-gray-600" />
-                                  )}
-                                </div>
-                            
-                            {showAllMessages && (
-                              <div 
-                                className="max-h-64 overflow-y-auto space-y-2" 
-                                id="calendar-messages-container"
-                                ref={(el) => {
-                                  if (el && messages.length > 0) {
-                                    setTimeout(() => {
-                                      el.scrollTop = el.scrollHeight;
-                                    }, 50);
-                                  }
-                                }}
-                              >
-                                {messages
-                                  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-                                  .slice(-8)
-                                  .map((message, idx) => (
-                                  <div 
-                                    key={idx} 
-                                    className={`flex ${message.action === 'SMS_SENT' ? 'justify-end' : 'justify-start'}`}
-                                  >
-                                    <div className={`max-w-xs px-3 py-2 rounded-lg ${
-                                      message.action === 'SMS_SENT' 
-                                        ? 'bg-blue-500 text-white' 
-                                        : message.action === 'SMS_FAILED'
-                                          ? 'bg-red-50 border border-red-300 text-red-800'
-                                          : 'bg-gray-200 text-gray-800'
-                                    }`}>
-                                      <p className="text-sm whitespace-pre-wrap">
-                                        {message.details?.body || message.details?.message || 'No content'}
-                                      </p>
-                                      <div className="flex items-center justify-between mt-1">
-                                        <p className={`text-xs ${
-                                          message.action === 'SMS_SENT' ? 'text-blue-100' : (message.action === 'SMS_FAILED' ? 'text-red-700' : 'text-gray-600')
-                                        }`}>
-                                        {(() => {
-                                          try {
-                                            if (!message.timestamp) return 'Unknown time';
-                                            
-                                            let date;
-                                            if (typeof message.timestamp === 'string') {
-                                              date = new Date(message.timestamp);
-                                            } else if (typeof message.timestamp === 'number') {
-                                              date = new Date(message.timestamp > 1000000000000 ? message.timestamp : message.timestamp * 1000);
-                                            } else {
-                                              date = new Date(message.timestamp);
-                                            }
-                                            
-                                            if (isNaN(date.getTime())) {
-                                              return 'Invalid date';
-                                            }
-                                            
-                                            const now = new Date();
-                                            const diffMs = now - date;
-                                            const diffHours = diffMs / (1000 * 60 * 60);
-                                            
-                                            if (diffHours < 1) {
-                                              const minutes = Math.floor(diffMs / (1000 * 60));
-                                              return minutes <= 0 ? 'Just now' : `${minutes} min ago`;
-                                            } else if (diffHours < 24) {
-                                              return date.toLocaleTimeString([], { 
-                                                hour: '2-digit', 
-                                                minute: '2-digit', 
-                                                hour12: true 
-                                              });
-                                            } else {
-                                              return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { 
-                                                hour: '2-digit', 
-                                                minute: '2-digit', 
-                                                hour12: true 
-                                              });
-                                            }
-                                          } catch (error) {
-                                            console.error('Error formatting timestamp:', error, 'Timestamp:', message.timestamp);
-                                            return 'Unknown time';
-                                          }
-                                        })()}
-                                        {message.action === 'SMS_SENT' && (
-                                          <span className="ml-1">
-                                            {message.details?.status === 'sending' ? (
-                                              <>
-                                                <span className="inline-block w-2 h-2 bg-orange-400 rounded-full animate-pulse mr-1"></span>
-                                                Sending...
-                                              </>
-                                            ) : (
-                                              '• Sent'
-                                            )}
-                                          </span>
-                                        )}
-                                        </p>
-                                        {/* Delivery ticks mirroring MessageModal */}
-                                        {message.action === 'SMS_SENT' && message.details?.status !== 'sending' && (
-                                          <div className="flex items-center space-x-1">
-                                            <svg viewBox="0 0 24 24" className="h-3 w-3 text-blue-100 fill-current"><path d="M20.285 6.708a1 1 0 010 1.414l-9.193 9.193a1 1 0 01-1.414 0l-5.657-5.657a1 1 0 111.414-1.414l4.95 4.95 8.486-8.486a1 1 0 011.414 0z"/></svg>
-                                            <svg viewBox="0 0 24 24" className="h-3 w-3 text-blue-100 fill-current"><path d="M20.285 6.708a1 1 0 010 1.414l-9.193 9.193a1 1 0 01-1.414 0l-5.657-5.657a1 1 0 111.414-1.414l4.95 4.95 8.486-8.486a1 1 0 011.414 0z"/></svg>
-                                          </div>
-                                        )}
-                                        {message.action === 'SMS_RECEIVED' && (
-                                          <div className="flex items-center"><svg viewBox="0 0 24 24" className="h-3 w-3 text-gray-500 fill-current"><path d="M20.285 6.708a1 1 0 010 1.414l-9.193 9.193a1 1 0 01-1.414 0l-5.657-5.657a1 1 0 111.414-1.414l4.95 4.95 8.486-8.486a1 1 0 011.414 0z"/></svg></div>
-                                        )}
-                                        {message.action === 'SMS_FAILED' && (
-                                          <div className="flex items-center text-red-600" title={message.details?.error_message || 'SMS send failed'}>
-                                            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 5v6h-2V7h2zm0 8v2h-2v-2h2z"/></svg>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* Quick Reply Section */}
-                            {user?.role !== 'viewer' && selectedEvent.extendedProps?.lead?.phone && showAllMessages && (
-                              <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200">
-                                <div className="flex space-x-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Type a quick reply..."
-                                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    onKeyPress={async (e) => {
-                                      if (e.key === 'Enter' && e.target.value.trim()) {
-                                        const message = e.target.value.trim();
-                                        const leadId = selectedEvent.extendedProps.lead.id;
-                                        
-                                        // Clear input immediately for better UX
-                                        e.target.value = '';
-                                        
-                                        // Optimistically add the message to local state
-                                        const optimisticMessage = {
-                                          action: 'SMS_SENT',
-                                          timestamp: new Date().toISOString(),
-                                          performed_by: user.id,
-                                          performed_by_name: user.name,
-                                          details: {
-                                            message: message,
-                                            type: 'custom',
-                                            phone: selectedEvent.extendedProps.lead.phone,
-                                            status: 'sending'
-                                          }
-                                        };
-                                        
-                                        // Update the event's booking history immediately
-                                        const currentHistory = selectedEvent.extendedProps.lead.bookingHistory || [];
-                                        
-                                        // Mark all received messages as read when user replies
-                                        const updatedHistoryWithReadStatus = currentHistory.map(entry => {
-                                          if (entry.action === 'SMS_RECEIVED' && !entry.details?.read) {
-                                            return {
-                                              ...entry,
-                                              details: {
-                                                ...entry.details,
-                                                read: true
-                                              }
-                                            };
-                                          }
-                                          return entry;
-                                        });
-                                        
-                                        const updatedHistory = [...updatedHistoryWithReadStatus, optimisticMessage];
-                                        selectedEvent.extendedProps.lead.bookingHistory = updatedHistory;
-                                        
-                                        // Force re-render to update notification icon
-                                        setEvents(prevEvents => [...prevEvents]);
-                                        
-                                        try {
-                                          const response = await fetch(`/api/leads/${leadId}/send-sms`, {
-                                            method: 'POST',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                              'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                            },
-                                            body: JSON.stringify({ message, type: 'custom' })
-                                          });
-                                          
-                                          if (response.ok) {
-                                            // Update status to sent
-                                            optimisticMessage.details.status = 'sent';
-                                            setEvents(prevEvents => [...prevEvents]);
-                                            
-                                            // Refresh events from server to ensure read status is synced
-                                            setTimeout(() => {
-                                              debouncedFetchEvents();
-                                            }, 1000);
-                                          } else {
-                                            // Remove the optimistic message on failure
-                                            selectedEvent.extendedProps.lead.bookingHistory = currentHistory;
-                                            setEvents(prevEvents => [...prevEvents]);
-                                            alert('Failed to send SMS');
-                                          }
-                                        } catch (error) {
-                                          // Remove the optimistic message on error
-                                          selectedEvent.extendedProps.lead.bookingHistory = currentHistory;
-                                          setEvents(prevEvents => [...prevEvents]);
-                                          console.error('Error sending SMS:', error);
-                                          alert('Error sending SMS');
-                                        }
-                                      }
-                                    }}
-                                  />
-                                  <button
-                                    onClick={async (e) => {
-                                      const input = e.target.parentElement.querySelector('input');
-                                      const message = input.value.trim();
-                                      if (message) {
-                                        const leadId = selectedEvent.extendedProps.lead.id;
-                                        
-                                        // Clear input immediately for better UX
-                                        input.value = '';
-                                        
-                                        // Optimistically add the message to local state
-                                        const optimisticMessage = {
-                                          action: 'SMS_SENT',
-                                          timestamp: new Date().toISOString(),
-                                          performed_by: user.id,
-                                          performed_by_name: user.name,
-                                          details: {
-                                            message: message,
-                                            type: 'custom',
-                                            phone: selectedEvent.extendedProps.lead.phone,
-                                            status: 'sending'
-                                          }
-                                        };
-                                        
-                                        // Update the event's booking history immediately
-                                        const currentHistory = selectedEvent.extendedProps.lead.bookingHistory || [];
-                                        
-                                        // Mark all received messages as read when user replies
-                                        const updatedHistoryWithReadStatus = currentHistory.map(entry => {
-                                          if (entry.action === 'SMS_RECEIVED' && !entry.details?.read) {
-                                            return {
-                                              ...entry,
-                                              details: {
-                                                ...entry.details,
-                                                read: true
-                                              }
-                                            };
-                                          }
-                                          return entry;
-                                        });
-                                        
-                                        const updatedHistory = [...updatedHistoryWithReadStatus, optimisticMessage];
-                                        selectedEvent.extendedProps.lead.bookingHistory = updatedHistory;
-                                        
-                                        // Force re-render to update notification icon
-                                        setEvents(prevEvents => [...prevEvents]);
-                                        
-                                        try {
-                                          const response = await fetch(`/api/leads/${leadId}/send-sms`, {
-                                            method: 'POST',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                              'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                            },
-                                            body: JSON.stringify({ message, type: 'custom' })
-                                          });
-                                          
-                                          if (response.ok) {
-                                            // Update status to sent
-                                            optimisticMessage.details.status = 'sent';
-                                            setEvents(prevEvents => [...prevEvents]);
-                                            
-                                            // Refresh events from server to ensure read status is synced
-                                            setTimeout(() => {
-                                              debouncedFetchEvents();
-                                            }, 1000);
-                                          } else {
-                                            // Remove the optimistic message on failure
-                                            selectedEvent.extendedProps.lead.bookingHistory = currentHistory;
-                                            setEvents(prevEvents => [...prevEvents]);
-                                            alert('Failed to send SMS');
-                                          }
-                                        } catch (error) {
-                                          // Remove the optimistic message on error
-                                          selectedEvent.extendedProps.lead.bookingHistory = currentHistory;
-                                          setEvents(prevEvents => [...prevEvents]);
-                                          console.error('Error sending SMS:', error);
-                                          alert('Error sending SMS');
-                                        }
-                                      }
-                                    }}
-                                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                                  >
-                                    Send
-                                  </button>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Press Enter or click Send to reply to {selectedEvent.extendedProps?.lead?.name}
-                                </div>
-                              </div>
-                            )}
-                            </>
+                  {/* Email Section */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 border border-blue-100">
+                    <div className="flex items-start space-x-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <FiMail className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setShowAllMessages(!showAllMessages)}>
+                            <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Emails</p>
+                            <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-blue-500 rounded-full">
+                              {leadMessages.length}
+                            </span>
+                            {showAllMessages ? <FiChevronUp className="h-4 w-4 text-gray-600" /> : <FiChevronDown className="h-4 w-4 text-gray-600" />}
                           </div>
                         </div>
+
+                        {showAllMessages && (
+                          <>
+                            {loadingMessages ? (
+                              <div className="text-center py-4 text-sm text-gray-500">Loading emails...</div>
+                            ) : leadMessages.length === 0 ? (
+                              <p className="text-xs text-gray-500 py-2">No emails yet.</p>
+                            ) : (
+                              <div className="space-y-0 max-h-52 overflow-y-auto">
+                                {leadMessages.slice(-4).map((msg, idx) => {
+                                  const timestamp = msg.sent_at || msg.created_at;
+                                  const isSent = msg.status === 'sent' || msg.sent_by;
+                                  const formattedTime = timestamp ? (() => {
+                                    const d = new Date(timestamp);
+                                    if (isNaN(d.getTime())) return '';
+                                    return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                                  })() : '';
+                                  const raw = msg.email_body || msg.content || '';
+                                  const plainText = raw.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+                                  return (
+                                    <div key={msg.id || idx} className={`py-2.5 border-l-3 pl-3 ${isSent ? 'border-l-purple-400 bg-purple-50/40' : 'border-l-blue-400 bg-white'} ${idx < leadMessages.slice(-4).length - 1 ? 'border-b border-gray-100' : ''}`} style={{ borderLeftWidth: '3px' }}>
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <span className={`text-[11px] font-semibold ${isSent ? 'text-purple-600' : 'text-blue-600'}`}>
+                                          {isSent ? 'You' : selectedEvent.extendedProps?.lead?.name || 'Lead'}
+                                        </span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${isSent ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                          {isSent ? 'Sent' : 'Received'}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-gray-400 mb-1">{formattedTime}</p>
+                                      {msg.subject && (
+                                        <p className="text-[11px] font-medium text-gray-500 mb-0.5">{msg.subject}</p>
+                                      )}
+                                      <p className="text-xs text-gray-700 line-clamp-2">{plainText || 'No content'}</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* View all emails link */}
+                            <div className="text-right mt-2">
+                              <button
+                                onClick={() => setShowAllEmailsModal(true)}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                View all emails &gt;
+                              </button>
+                            </div>
+
+                            {/* Reply Email Button */}
+                            {user?.role !== 'viewer' && selectedEvent.extendedProps?.lead?.email && (
+                              <div className="mt-3">
+                                <button
+                                  onClick={() => setShowReplyEmail(!showReplyEmail)}
+                                  className={`w-full px-4 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-center space-x-2 font-medium ${
+                                    showReplyEmail
+                                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                                      : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                                  }`}
+                                >
+                                  <FiMail className="h-4 w-4" />
+                                  <span>Reply Email</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Email Compose Form */}
+                            {showReplyEmail && selectedEvent.extendedProps?.lead?.email && (
+                              <div className="mt-3 p-3 bg-white rounded-lg border border-purple-200">
+                                <div className="space-y-2">
+                                  <div className="text-xs text-gray-500">To: {selectedEvent.extendedProps.lead.email}</div>
+                                  <input
+                                    type="text"
+                                    placeholder="Subject..."
+                                    value={emailReplySubject}
+                                    onChange={(e) => setEmailReplySubject(e.target.value)}
+                                    className="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                  />
+                                  <textarea
+                                    placeholder="Compose your email..."
+                                    value={emailReplyBody}
+                                    onChange={(e) => setEmailReplyBody(e.target.value)}
+                                    rows={4}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                                  />
+                                  <div className="flex justify-end space-x-2">
+                                    <button
+                                      onClick={() => { setShowReplyEmail(false); setEmailReplySubject(''); setEmailReplyBody(''); }}
+                                      className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 rounded-lg hover:bg-gray-100 transition-colors"
+                                    >Cancel</button>
+                                    <button
+                                      disabled={sendingEmail || !emailReplyBody.trim()}
+                                      onClick={async () => {
+                                        setSendingEmail(true);
+                                        try {
+                                          const leadId = selectedEvent.extendedProps.lead.id;
+                                          await axios.post('/api/leads/' + leadId + '/send-email', {
+                                            to: selectedEvent.extendedProps.lead.email,
+                                            subject: emailReplySubject || 'Re: Your Inquiry',
+                                            body: emailReplyBody
+                                          }, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+                                          setShowReplyEmail(false);
+                                          setEmailReplySubject('');
+                                          setEmailReplyBody('');
+                                          const res = await axios.get(`/api/leads/${leadId}/messages`, {
+                                            params: { type: 'email' },
+                                            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                                          });
+                                          setLeadMessages(res.data?.messages || []);
+                                        } catch (err) {
+                                          alert('Failed to send email: ' + (err.response?.data?.message || err.message));
+                                        } finally {
+                                          setSendingEmail(false);
+                                        }
+                                      }}
+                                      className="px-4 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors disabled:opacity-50 flex items-center space-x-1"
+                                    >
+                                      <FiMail className="h-3 w-3" />
+                                      <span>{sendingEmail ? 'Sending...' : 'Send Email'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Collapsed preview - show latest email */}
+                        {!showAllMessages && leadMessages.length > 0 && (() => {
+                          const latest = leadMessages[leadMessages.length - 1];
+                          const raw = latest?.email_body || latest?.content || '';
+                          const preview = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                          return (
+                            <div className="text-xs text-gray-600 mt-1 truncate cursor-pointer" onClick={() => setShowAllMessages(true)}>
+                              <span className="inline-block px-1 py-0.5 rounded text-[9px] font-medium mr-1 bg-purple-100 text-purple-700">EMAIL</span>
+                              {latest?.subject ? <span className="text-blue-400 mr-1">{latest.subject}:</span> : null}
+                              {preview.substring(0, 50)}{preview.length > 50 ? '...' : ''}
+                            </div>
+                          );
+                        })()}
                       </div>
-                    );
-                  })()}
-                  
+                    </div>
+                  </div>
+
+                  {/* Model Stats - disabled for now, re-enable when DB column is ready */}
+
                   {/* Notes */}
                   <div className="bg-gradient-to-r from-gray-50 to-slate-50 rounded-lg p-3">
                     <div className="flex items-start space-x-3">
@@ -3426,6 +3397,146 @@ const Calendar = () => {
           alt={selectedEvent?.extendedProps?.lead?.name || 'Lead Photo'}
           onClose={() => setLightboxImage(null)}
         />
+      )}
+
+      {/* View All Emails Modal */}
+      {showAllEmailsModal && selectedEvent && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-pink-500 rounded-t-xl">
+              <div className="flex items-center space-x-3">
+                <FiMail className="h-5 w-5 text-white" />
+                <h3 className="text-base font-bold text-white">
+                  Emails - {selectedEvent.extendedProps?.lead?.name}
+                </h3>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-purple-700 bg-white rounded-full">
+                  {leadMessages.length}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowAllEmailsModal(false)}
+                className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/40 transition-colors"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Email conversation */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {leadMessages.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">No emails found for this lead.</p>
+              ) : (
+                leadMessages.map((msg, idx) => {
+                  const timestamp = msg.sent_at || msg.created_at;
+                  const isSent = msg.status === 'sent' || msg.sent_by;
+                  const formattedTime = timestamp ? (() => {
+                    const d = new Date(timestamp);
+                    if (isNaN(d.getTime())) return '';
+                    return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                  })() : '';
+                  return (
+                    <div key={msg.id || idx} className={`rounded-lg border ${isSent ? 'border-purple-200 bg-purple-50/50' : 'border-gray-200 bg-white'}`}>
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                          {msg.subject && <p className="text-sm font-semibold text-gray-800">{msg.subject}</p>}
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            {isSent ? `You to ${selectedEvent.extendedProps?.lead?.email}` : `${selectedEvent.extendedProps?.lead?.name}`}
+                            {formattedTime && <span className="ml-2">{formattedTime}</span>}
+                          </p>
+                        </div>
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isSent ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {isSent ? 'Sent' : 'Received'}
+                        </span>
+                      </div>
+                      <div className="px-4 py-3">
+                        {msg.email_body ? (
+                          <GmailEmailRenderer
+                            htmlContent={msg.email_body}
+                            textContent={msg.content}
+                            attachments={msg.attachments || []}
+                            embeddedImages={[]}
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content || 'No content'}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Reply footer */}
+            {user?.role !== 'viewer' && selectedEvent.extendedProps?.lead?.email && (
+              <div className="border-t border-gray-200 p-4">
+                {!showReplyEmail ? (
+                  <button
+                    onClick={() => setShowReplyEmail(true)}
+                    className="w-full px-4 py-2.5 text-sm rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-colors flex items-center justify-center space-x-2 font-medium"
+                  >
+                    <FiMail className="h-4 w-4" />
+                    <span>Reply Email</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-xs text-gray-500">To: {selectedEvent.extendedProps.lead.email}</div>
+                    <input
+                      type="text"
+                      placeholder="Subject..."
+                      value={emailReplySubject}
+                      onChange={(e) => setEmailReplySubject(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                    <textarea
+                      placeholder="Compose your email..."
+                      value={emailReplyBody}
+                      onChange={(e) => setEmailReplyBody(e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => { setShowReplyEmail(false); setEmailReplySubject(''); setEmailReplyBody(''); }}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg hover:bg-gray-100 transition-colors"
+                      >Cancel</button>
+                      <button
+                        disabled={sendingEmail || !emailReplyBody.trim()}
+                        onClick={async () => {
+                          setSendingEmail(true);
+                          try {
+                            const leadId = selectedEvent.extendedProps.lead.id;
+                            await axios.post('/api/leads/' + leadId + '/send-email', {
+                              to: selectedEvent.extendedProps.lead.email,
+                              subject: emailReplySubject || 'Re: Your Inquiry',
+                              body: emailReplyBody
+                            }, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+                            setShowReplyEmail(false);
+                            setEmailReplySubject('');
+                            setEmailReplyBody('');
+                            const res = await axios.get(`/api/leads/${leadId}/messages`, {
+                              params: { type: 'email' },
+                              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                            });
+                            setLeadMessages(res.data?.messages || []);
+                          } catch (err) {
+                            alert('Failed to send email: ' + (err.response?.data?.message || err.message));
+                          } finally {
+                            setSendingEmail(false);
+                          }
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors disabled:opacity-50 flex items-center space-x-2"
+                      >
+                        <FiMail className="h-4 w-4" />
+                        <span>{sendingEmail ? 'Sending...' : 'Send Email'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

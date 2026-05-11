@@ -759,6 +759,109 @@ router.get('/calendar', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/leads/message-counts
+// @desc    Get SMS and email message counts per lead for calendar badges
+// @access  Private
+router.get('/message-counts', auth, async (req, res) => {
+  try {
+    const { leadIds } = req.query;
+    if (!leadIds) {
+      return res.json({ counts: {} });
+    }
+
+    const ids = leadIds.split(',').filter(Boolean);
+    if (ids.length === 0) {
+      return res.json({ counts: {} });
+    }
+
+    const { data: messages, error } = await supabase
+      .from('messages')
+      .select('lead_id, type')
+      .in('lead_id', ids);
+
+    if (error) {
+      console.error('Error fetching message counts:', error);
+      return res.status(500).json({ message: 'Failed to fetch message counts' });
+    }
+
+    const counts = {};
+    for (const msg of (messages || [])) {
+      if (!msg.lead_id) continue;
+      if (!counts[msg.lead_id]) {
+        counts[msg.lead_id] = { sms: 0, email: 0 };
+      }
+      if (msg.type === 'sms') {
+        counts[msg.lead_id].sms++;
+      } else if (msg.type === 'email') {
+        counts[msg.lead_id].email++;
+      }
+    }
+
+    res.json({ counts });
+  } catch (error) {
+    console.error('Message counts route error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/leads/:id/model-stats
+// @desc    Get model stats for a lead (gracefully handles missing column)
+// @access  Private
+router.get('/:id([0-9a-fA-F-]{36})/model-stats', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('model_stats')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) {
+      // Column doesn't exist yet - return empty
+      return res.json({ model_stats: null });
+    }
+    res.json({ model_stats: data?.model_stats || null });
+  } catch (error) {
+    res.json({ model_stats: null });
+  }
+});
+
+// @route   GET /api/leads/:id/messages
+// @desc    Get all messages (SMS + email) for a specific lead
+// @access  Private
+router.get('/:id([0-9a-fA-F-]{36})/messages', auth, async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const { type } = req.query;
+
+    let query = supabase
+      .from('messages')
+      .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, attachments, sent_at, created_at')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: true });
+
+    if (type && (type === 'sms' || type === 'email')) {
+      query = query.eq('type', type);
+    }
+
+    const { data: messages, error } = await query;
+
+    if (error) {
+      console.error(`Error fetching messages for lead ${leadId}:`, error);
+      return res.status(500).json({ message: 'Failed to fetch messages' });
+    }
+
+    res.json({
+      messages: messages || [],
+      total: (messages || []).length,
+      smsCount: (messages || []).filter(m => m.type === 'sms').length,
+      emailCount: (messages || []).filter(m => m.type === 'email').length
+    });
+  } catch (error) {
+    console.error('Lead messages route error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // @route   GET /api/leads/:id/history
 // @desc    Get booking history for a lead
 // @access  Private
@@ -1507,11 +1610,12 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       if (value === undefined) continue; // Skip undefined values completely
 
       // Convert camelCase field names to snake_case for database columns
-      const dbKey = key === 'bookingHistory' ? 'booking_history' : 
+      const dbKey = key === 'bookingHistory' ? 'booking_history' :
                     key === 'dateBooked' ? 'date_booked' :
                     key === 'isConfirmed' ? 'is_confirmed' :
                     key === 'hasSale' ? 'has_sale' :
                     key === 'bookingStatus' ? 'booking_status' :
+                    key === 'modelStats' ? 'model_stats' :
                     key;
 
       // Convert Date objects to ISO strings
@@ -1528,6 +1632,11 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
 
       // For plain objects/arrays, flatten booker and rescheduleReason fields, otherwise store as string or skip
       if (valueType === 'object') {
+        // Keep model_stats as a raw object for JSONB column
+        if (key === 'model_stats' || key === 'modelStats') {
+          validUpdateData[dbKey] = value;
+          continue;
+        }
         if (key === 'booker') {
           // If booker is an object, try to extract id or name, otherwise stringify
           if (value && typeof value === 'object') {
@@ -1581,7 +1690,12 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       }
       
       if (typeof value === 'object') {
-        // Convert objects to JSON strings
+        // Keep model_stats as raw object for JSONB storage
+        if (key === 'model_stats') {
+          filteredUpdateFields[key] = value;
+          continue;
+        }
+        // Convert other objects to JSON strings
         try {
           filteredUpdateFields[key] = JSON.stringify(value);
         } catch (jsonErr) {
