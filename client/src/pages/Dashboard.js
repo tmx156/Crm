@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiChevronLeft, FiChevronRight, FiXCircle } from 'react-icons/fi';
+import { FiWifi, FiActivity, FiClock, FiUsers, FiCalendar, FiDollarSign, FiZap, FiTarget, FiAlertCircle, FiMessageSquare, FiMail, FiSend, FiX, FiEye, FiChevronLeft, FiChevronRight, FiXCircle, FiCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
@@ -40,6 +40,9 @@ const Dashboard = () => {
   const [selectedBooker, setSelectedBooker] = useState(null);
   const [isBookerModalOpen, setIsBookerModalOpen] = useState(false);
   const [selectedActivityDate, setSelectedActivityDate] = useState(new Date().toISOString().split('T')[0]);
+  const [completedMessageIds, setCompletedMessageIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('completedDashboardMessages') || '[]'); } catch { return []; }
+  });
 
   // Fetch all dashboard data
   const fetchStats = useCallback(async () => {
@@ -66,6 +69,18 @@ const Dashboard = () => {
       setLoading(false);
     }
   }, [user]);
+
+  // Auto-update date when page regains focus (prevents stale data from overnight)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const today = new Date().toISOString().split('T')[0];
+        setSelectedActivityDate(prev => prev < today ? today : prev);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Fetch booker activity
   const fetchBookerActivity = useCallback(async () => {
@@ -386,31 +401,21 @@ const Dashboard = () => {
     }
   }, [user]);
 
-  // Fetch unread messages
+  // Fetch received messages (all, not just unread — so opened emails stay visible)
   const fetchUnreadMessages = useCallback(async () => {
     try {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const messagesRes = await axios.get('/api/messages-list', {
-        params: { unread: true, limit: 10 }
+        params: { limit: 500, since }
       });
       let messages = messagesRes.data?.messages || messagesRes.data || [];
-      console.log(`📨 Fetched unread messages:`, messagesRes.data);
 
-      // Ensure messages is always an array
       if (!Array.isArray(messages)) {
-        console.warn('📨 Messages response is not an array:', messages);
         messages = [];
       }
 
-      console.log(`📨 Fetched ${messages.length} unread messages`);
-      if (messages.length > 0) {
-        console.log('📧 Sample message:', {
-          leadName: messages[0].leadName,
-          type: messages[0].type,
-          content: messages[0].content,
-          timestamp: messages[0].timestamp
-        });
-      }
-      setUnreadMessages(messages.slice(0, 10));
+      const received = messages.filter(m => m.direction === 'received');
+      setUnreadMessages(received);
     } catch (e) {
       console.error('Error fetching unread messages:', e);
     }
@@ -462,11 +467,30 @@ const Dashboard = () => {
     if (!message.isRead && (message.messageId || message.id)) {
       try {
         await axios.put(`/api/messages-list/${message.messageId || message.id}/read`);
-        setUnreadMessages(prev => prev.filter(m => m.id !== message.id));
+        setUnreadMessages(prev => prev.map(m => m.id === message.id ? { ...m, isRead: true } : m));
       } catch (e) {
         console.error('Error marking message as read:', e);
       }
     }
+  };
+
+  const navigateMessage = (direction) => {
+    if (!selectedMessage || !unreadMessages.length) return;
+    const currentIdx = unreadMessages.findIndex(m => m.id === selectedMessage.id);
+    const nextIdx = currentIdx + direction;
+    if (nextIdx >= 0 && nextIdx < unreadMessages.length) {
+      const next = unreadMessages[nextIdx];
+      setSelectedMessage(next);
+      setReplyMode(next.type === 'email' ? 'email' : 'sms');
+      setReplyText('');
+    }
+  };
+
+  const handleCompleteMessage = (messageId) => {
+    const updated = [...completedMessageIds, messageId];
+    setCompletedMessageIds(updated);
+    localStorage.setItem('completedDashboardMessages', JSON.stringify(updated));
+    setUnreadMessages(prev => prev.filter(m => m.id !== messageId));
   };
 
   const handleCancelBooking = async () => {
@@ -802,26 +826,27 @@ const Dashboard = () => {
           </div>
 
           {/* SECTION 4: Live Messages */}
+          {(() => { const visibleMessages = (unreadMessages || []).filter(m => !completedMessageIds.includes(m.id)); return (
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 lg:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4 lg:mb-6">
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <FiMessageSquare className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-indigo-500" />
                 <h2 className="text-sm sm:text-base lg:text-xl font-bold text-gray-900">MESSAGES</h2>
               </div>
-              {(unreadMessages || []).length > 0 && (
+              {visibleMessages.filter(m => !m.isRead).length > 0 && (
                 <div className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                  {(unreadMessages || []).length}
+                  {visibleMessages.filter(m => !m.isRead).length}
                 </div>
               )}
             </div>
-            <div className="space-y-3">
-              {(unreadMessages || []).length === 0 ? (
+            <div className="max-h-[500px] overflow-y-auto space-y-3">
+              {visibleMessages.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <FiMessageSquare className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <p>No unread messages</p>
                 </div>
               ) : (
-                (unreadMessages || []).map((message) => (
+                visibleMessages.map((message) => (
                   <div key={message.id} className="bg-white border-l-4 border-orange-400 rounded-lg p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
@@ -836,9 +861,24 @@ const Dashboard = () => {
                           <p className="font-bold text-gray-900">
                             {message.leadName || message.from || message.sender_name || 'Unknown'}
                           </p>
-                          <span className="inline-block px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">
-                            {message.type === 'email' ? 'EMAIL' : 'SMS'}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="inline-block px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">
+                              {message.type === 'email' ? 'EMAIL' : 'SMS'}
+                            </span>
+                            {message.leadStatus && (
+                              <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${
+                                message.leadStatus === 'Booked' ? 'bg-blue-100 text-blue-700' :
+                                message.leadStatus === 'Confirmed' ? 'bg-green-100 text-green-700' :
+                                message.leadStatus === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                                message.leadStatus === 'Attended' ? 'bg-purple-100 text-purple-700' :
+                                message.leadStatus === 'No Answer' ? 'bg-yellow-100 text-yellow-700' :
+                                message.leadStatus === 'New' ? 'bg-orange-100 text-orange-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {message.leadStatus}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -870,6 +910,7 @@ const Dashboard = () => {
               )}
             </div>
           </div>
+          ); })()}
         </div>
 
         {/* SECTION 5: Bottom Row */}
@@ -932,13 +973,22 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-              <button onClick={() => setSelectedMessage(null)} className="text-gray-400 hover:text-gray-600">
-                <FiX className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => navigateMessage(-1)} disabled={unreadMessages.findIndex(m => m.id === selectedMessage.id) <= 0} className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                  <FiChevronLeft className="h-5 w-5 text-gray-600" />
+                </button>
+                <span className="text-xs text-gray-400">{unreadMessages.findIndex(m => m.id === selectedMessage.id) + 1}/{unreadMessages.length}</span>
+                <button onClick={() => navigateMessage(1)} disabled={unreadMessages.findIndex(m => m.id === selectedMessage.id) >= unreadMessages.length - 1} className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                  <FiChevronRight className="h-5 w-5 text-gray-600" />
+                </button>
+                <button onClick={() => setSelectedMessage(null)} className="text-gray-400 hover:text-gray-600 ml-1">
+                  <FiX className="h-6 w-6" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-24">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {(selectedMessage.subject || selectedMessage.details?.subject) && (
                 <p className="text-sm font-semibold text-gray-900 mb-3">{selectedMessage.subject || selectedMessage.details?.subject}</p>
               )}
@@ -956,21 +1006,22 @@ const Dashboard = () => {
                     : 'Message content'}
                 </p>
               )}
-
-              {/* Reply textarea */}
-              <div className="mt-4">
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Type your reply..."
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  rows="3"
-                />
-              </div>
             </div>
 
-            {/* Floating Action Bar */}
-            <div className="flex-shrink-0 border-t border-gray-200 bg-white rounded-b-xl sm:rounded-b-2xl px-3 sm:px-4 py-3 flex items-center gap-2">
+            {/* Fixed Reply + Action Bar */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 sm:px-4 pt-3">
+              <textarea
+                value={replyText}
+                onChange={(e) => { setReplyText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }}
+                placeholder="Type your reply..."
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none overflow-y-auto transition-all duration-200 rows-1 focus:rows-3"
+                rows="1"
+                style={{ minHeight: '40px', maxHeight: '200px' }}
+                onFocus={(e) => { if (!replyText) e.target.rows = 3; }}
+                onBlur={(e) => { if (!replyText) { e.target.rows = 1; e.target.style.height = 'auto'; } }}
+              />
+            </div>
+            <div className="flex-shrink-0 bg-white rounded-b-xl sm:rounded-b-2xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2">
               <button
                 onClick={handleSendReply}
                 disabled={!replyText.trim() || sendingReply}
@@ -999,6 +1050,13 @@ const Dashboard = () => {
                 </>
               )}
 
+              <button
+                onClick={() => { handleCompleteMessage(selectedMessage.id || selectedMessage.messageId); setSelectedMessage(null); }}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-green-300 bg-white rounded-full text-sm text-green-700 hover:bg-green-50 transition-colors"
+              >
+                <FiCheck className="h-4 w-4" />
+                Complete
+              </button>
               <button
                 onClick={() => setSelectedMessage(null)}
                 className="ml-auto text-sm text-gray-500 hover:text-gray-700"

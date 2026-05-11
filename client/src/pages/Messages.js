@@ -17,7 +17,9 @@ import {
   FiPaperclip,
   FiCalendar,
   FiXCircle,
-  FiUser
+  FiUser,
+  FiChevronUp,
+  FiChevronDown
 } from 'react-icons/fi';
 
 const BOOKED_STATUSES = ['Booked', 'Confirmed', 'Unconfirmed'];
@@ -32,7 +34,6 @@ const Messages = () => {
   const [activeFolder, setActiveFolder] = useState('inbox');
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [replyText, setReplyText] = useState('');
-  const [replySubject, setReplySubject] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -130,8 +131,20 @@ const Messages = () => {
     setSelectedEmail(message);
     setShowReplyBox(false);
     setReplyText('');
-    setReplySubject(`Re: ${message.subject || message.details?.subject || ''}`);
     markAsRead(message);
+  };
+
+  const navigateEmail = (direction) => {
+    if (!selectedEmail || !messages.length) return;
+    const currentIdx = messages.findIndex(m => m.id === selectedEmail.id);
+    const nextIdx = currentIdx + direction;
+    if (nextIdx >= 0 && nextIdx < messages.length) {
+      const next = messages[nextIdx];
+      setSelectedEmail(next);
+      setShowReplyBox(false);
+      setReplyText('');
+      markAsRead(next);
+    }
   };
 
   const handleCloseEmail = () => {
@@ -333,9 +346,18 @@ const Messages = () => {
         {/* Top Bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3">
           {selectedEmail && (
-            <button onClick={handleCloseEmail} className="p-1 hover:bg-gray-100 rounded-full mr-1">
-              <FiChevronLeft className="h-5 w-5 text-gray-600" />
-            </button>
+            <div className="flex items-center gap-1 mr-1">
+              <button onClick={handleCloseEmail} className="p-1 hover:bg-gray-100 rounded-full">
+                <FiChevronLeft className="h-5 w-5 text-gray-600" />
+              </button>
+              <button onClick={() => navigateEmail(-1)} disabled={messages.findIndex(m => m.id === selectedEmail.id) <= 0} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-30 disabled:cursor-not-allowed">
+                <FiChevronUp className="h-4 w-4 text-gray-600" />
+              </button>
+              <button onClick={() => navigateEmail(1)} disabled={messages.findIndex(m => m.id === selectedEmail.id) >= messages.length - 1} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-30 disabled:cursor-not-allowed">
+                <FiChevronDown className="h-4 w-4 text-gray-600" />
+              </button>
+              <span className="text-xs text-gray-400 ml-1">{messages.findIndex(m => m.id === selectedEmail.id) + 1}/{messages.length}</span>
+            </div>
           )}
           <div className="flex-1 max-w-2xl">
             <div className="relative">
@@ -541,7 +563,7 @@ const Messages = () => {
             </div>
 
             {/* Floating Action Bar — always visible when viewing email */}
-            <div className="fixed bottom-0 left-0 md:left-56 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex items-center gap-2 z-50 shadow-lg">
+            <div className="fixed bottom-0 left-0 md:left-56 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex flex-wrap items-center gap-2 z-50 shadow-lg">
               {selectedEmail.direction === 'received' && !showReplyBox && (
                 <button
                   onClick={() => setShowReplyBox(true)}

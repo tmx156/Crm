@@ -101,41 +101,59 @@ router.get('/', auth, async (req, res) => {
       // Everyone except admin@crm.com only sees their own leads' messages
       let bookerLeadIds = null;
       if (!isSuperAdmin) {
-        const { data: myLeads } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('booker_id', user.id);
-        bookerLeadIds = (myLeads || []).map(l => l.id);
+        let myLeads = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+          const { data: page } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('booker_id', user.id)
+            .range(from, from + PAGE - 1);
+          if (!page || page.length === 0) break;
+          myLeads.push(...page);
+          if (page.length < PAGE) break;
+          from += PAGE;
+        }
+        bookerLeadIds = myLeads.map(l => l.id);
+        console.log(`📧 Messages filter: user=${user.name}, role=${user.role}, leads=${bookerLeadIds.length}`);
         if (bookerLeadIds.length === 0) {
-          // Booker has no leads — return empty early
           return res.json({ messages: [], stats: { totalMessages: 0, emailCount: 0, smsCount: 0, unreadCount: 0, sentCount: 0, receivedCount: 0 }, userRole: user.role, userName: user.name, meta: { since: createdAfter, limit: validatedLimit, latestCreatedAt: new Date().toISOString() } });
         }
       }
 
-      // Build query
-      let query = supabase
-        .from('messages')
-        .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at')
-        .gte('created_at', createdAfter)
-        .order('created_at', { ascending: false })
-        .limit(validatedLimit);
+      const msgColumns = 'id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at';
+      let messageData = [];
 
-      if (typeFilter) {
-        query = query.eq('type', typeFilter);
+      if (!bookerLeadIds) {
+        // Super admin — fetch all
+        let query = supabase.from('messages').select(msgColumns)
+          .gte('created_at', createdAfter).order('created_at', { ascending: false }).limit(validatedLimit);
+        if (typeFilter) query = query.eq('type', typeFilter);
+        const { data, error } = await query;
+        if (error) console.error('Error fetching messages:', error);
+        messageData = data || [];
+      } else {
+        // Batch .in() queries in chunks of 200 to avoid Supabase URL limit
+        const BATCH = 200;
+        const batches = [];
+        for (let i = 0; i < bookerLeadIds.length; i += BATCH) {
+          batches.push(bookerLeadIds.slice(i, i + BATCH));
+        }
+        const results = await Promise.all(batches.map(batch => {
+          let q = supabase.from('messages').select(msgColumns)
+            .gte('created_at', createdAfter).order('created_at', { ascending: false })
+            .in('lead_id', batch);
+          if (typeFilter) q = q.eq('type', typeFilter);
+          return q;
+        }));
+        for (const { data, error } of results) {
+          if (error) console.error('Error fetching messages batch:', error);
+          if (data) messageData.push(...data);
+        }
+        messageData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        messageData = messageData.slice(0, validatedLimit);
       }
-
-      // Filter at DB level for non-admins
-      if (bookerLeadIds) {
-        query = query.in('lead_id', bookerLeadIds);
-      }
-
-      const { data: messageRows, error: messageError } = await query;
-
-      if (messageError) {
-        console.error('Error fetching messages:', messageError);
-      }
-
-      const messageData = messageRows || [];
       
       if (messageData.length > 0) {
         // Get lead IDs from messages (filter out null values)
@@ -176,10 +194,10 @@ router.get('/', auth, async (req, res) => {
         console.log(`🗺️ Lead map size: ${leadMap.size}`);
 
         // Filter messages based on user permissions (safety net — DB-level filter already applied)
+        const bookerLeadIdSet = new Set(bookerLeadIds || []);
         const filteredMessages = messageData.filter(msg => {
           if (isSuperAdmin) return true;
-          const lead = leadMap.get(msg.lead_id);
-          return lead && lead.booker_id === user.id;
+          return bookerLeadIdSet.has(msg.lead_id);
         });
 
         console.log(`📋 Filtered messages: ${filteredMessages.length} out of ${messageData.length}`);
