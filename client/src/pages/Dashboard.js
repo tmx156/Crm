@@ -534,8 +534,7 @@ const Dashboard = () => {
       // Mark as read
       await axios.put(`/api/messages-list/${selectedMessage.messageId || selectedMessage.id}/read`);
 
-      // Close modal and refresh
-      setSelectedMessage(null);
+      // Stay on modal, clear reply text and refresh messages
       setReplyText('');
       fetchUnreadMessages();
     } catch (e) {
@@ -895,7 +894,7 @@ const Dashboard = () => {
 
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {(message.timestamp || message.created_at) ? new Date(message.timestamp || message.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {(message.timestamp || message.created_at) ? (() => { const d = new Date(message.timestamp || message.created_at); return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); })() : ''}
                       </p>
                       <button
                         onClick={() => handleMessageClick(message)}
@@ -970,6 +969,11 @@ const Dashboard = () => {
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
                       {selectedMessage.assignedToName}
                     </span>
+                  )}
+                  {selectedMessage.leadPhone && (
+                    <a href={`tel:${selectedMessage.leadPhone}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors">
+                      {selectedMessage.leadPhone}
+                    </a>
                   )}
                 </div>
               </div>
