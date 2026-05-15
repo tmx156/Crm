@@ -1460,9 +1460,13 @@ router.post('/', auth, async (req, res) => {
     }
 
     // Send events to Facebook Conversions API
-    fbCapi.trackLead(lead).catch(() => {});
+    fbCapi.trackLead(lead).catch(err => {
+      console.error('[FB CAPI] Unhandled error in trackLead (create):', err.message);
+    });
     if (lead.status === 'Booked' && lead.date_booked) {
-      fbCapi.trackBooking(lead, lead.date_booked).catch(() => {});
+      fbCapi.trackBooking(lead, lead.date_booked).catch(err => {
+        console.error('[FB CAPI] Unhandled error in trackBooking (create):', err.message);
+      });
     }
 
     // Enhanced real-time update for lead creation
@@ -1759,7 +1763,9 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
     }
     // Send Schedule event to Facebook when a lead gets booked
     if (isNewBooking && updatedLead.date_booked) {
-      fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(() => {});
+      fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
+        console.error('[FB CAPI] Unhandled error in trackBooking (update):', err.message);
+      });
     }
 
     // Add booking history entries based on the type of change
@@ -5185,4 +5191,15 @@ router.get('/:id/no-answer/template-check', auth, async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Facebook CAPI diagnostic endpoint
+router.get('/fb-capi/status', auth, adminAuth, async (req, res) => {
+  try {
+    const status = await fbCapi.testConnection();
+    res.json(status);
+  } catch (error) {
+    console.error('FB CAPI diagnostic error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;

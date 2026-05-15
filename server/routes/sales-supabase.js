@@ -228,7 +228,9 @@ router.post('/', auth, async (req, res) => {
     console.log(`💡 Sale created successfully. Receipt sending will be handled by individual endpoints if requested.`);
 
     // Send Purchase event to Facebook Conversions API
-    fbCapi.trackPurchase(lead, createdSale).catch(() => {});
+    fbCapi.trackPurchase(lead, createdSale).catch(err => {
+      console.error('[FB CAPI] Unhandled error in trackPurchase:', err.message);
+    });
 
     // Emit sale created event
     if (req.app.locals.io) {

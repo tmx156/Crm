@@ -71,7 +71,8 @@ const config = {
   facebook: {
     pixelId: process.env.FB_PIXEL_ID || null,
     accessToken: process.env.FB_ACCESS_TOKEN || null,
-    testEventCode: process.env.FB_TEST_EVENT_CODE || null
+    testEventCode: process.env.FB_TEST_EVENT_CODE || null,
+    eventSourceUrl: process.env.FB_EVENT_SOURCE_URL || null
   },
 
   // Client Configuration

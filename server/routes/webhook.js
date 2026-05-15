@@ -20,7 +20,7 @@ const webhookAuth = (req, res, next) => {
 // @access  API Key
 router.post('/leads', webhookAuth, async (req, res) => {
   try {
-    const { name, email, phone, age, postcode, parent_phone, image_url, source } = req.body;
+    const { name, email, phone, age, postcode, parent_phone, image_url, source, fbc, fbp } = req.body;
 
     // Validation
     if (!name || !phone) {
@@ -114,7 +114,16 @@ router.post('/leads', webhookAuth, async (req, res) => {
     console.log(`✅ Webhook: Created lead "${lead.name}" (${lead.id}) from ${source || 'website'}`);
 
     // Send Lead event to Facebook Conversions API
-    fbCapi.trackLead(lead).catch(() => {});
+    const fbOptions = {
+      actionSource: 'website',
+      fbc: fbc || null,
+      fbp: fbp || null,
+      clientIpAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
+      clientUserAgent: req.headers['user-agent'] || null,
+    };
+    fbCapi.trackLead(lead, fbOptions).catch(err => {
+      console.error('[FB CAPI] Unhandled error in trackLead (webhook):', err.message);
+    });
 
     res.status(201).json({
       success: true,

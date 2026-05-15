@@ -99,6 +99,31 @@ GMAIL_PASS=your-gmail-app-password
 
 ---
 
+## 📊 Facebook Conversions API (Optional)
+
+Only add if you want offline event tracking for Facebook Ads:
+
+```
+FB_PIXEL_ID=802266729380312
+```
+
+```
+FB_ACCESS_TOKEN=<YOUR_FB_ACCESS_TOKEN>
+```
+**⚠️ Important:** Get this from Facebook Events Manager → Settings → Generate Access Token. Tokens expire — regenerate if events stop flowing.
+
+```
+FB_TEST_EVENT_CODE=
+```
+**💡 Tip:** Set this temporarily to test events in Facebook Events Manager → Test Events tab. Clear it for production.
+
+```
+FB_EVENT_SOURCE_URL=
+```
+**💡 Tip:** Set this to your website URL (e.g., https://yoursite.com) for website-origin leads.
+
+---
+
 ## ✅ Quick Setup Checklist
 
 1. [ ] Set `SUPABASE_URL`
