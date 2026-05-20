@@ -1761,8 +1761,9 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         console.error('Failed to update daily performance:', perfError.message);
       }
     }
-    // Send Schedule event to Facebook when a lead gets booked
-    if (isNewBooking && updatedLead.date_booked) {
+    // Send Schedule event to Facebook whenever a lead gets a booking date
+    const isBeingBooked = req.body.status === 'Booked' && updatedLead.date_booked && (oldStatus !== 'Booked' || isReschedule);
+    if (isBeingBooked) {
       fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
         console.error('[FB CAPI] Unhandled error in trackBooking (update):', err.message);
       });
