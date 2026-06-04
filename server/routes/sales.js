@@ -10,7 +10,7 @@ const dbManager = require('../database-connection-manager');
 // Import Supabase client for direct operations
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 
 // Import messaging service for sending receipts
 const MessagingService = require('../utils/messagingService');

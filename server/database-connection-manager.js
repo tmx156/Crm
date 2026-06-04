@@ -14,7 +14,7 @@ class DatabaseConnectionManager {
   initializeClient() {
     try {
       // Use centralized configuration instead of hardcoded credentials
-      this.client = createClient(config.supabase.url, config.supabase.anonKey);
+      this.client = createClient(config.supabase.url, config.supabase.serverKey);
 
       console.log('✅ Supabase client initialized using centralized config');
     } catch (error) {

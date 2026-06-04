@@ -119,17 +119,21 @@ router.post('/', auth, async (req, res) => {
 // @access  Public (temporary for dashboard fix)
 router.get('/', async (req, res) => {
   try {
-    const { role } = req.query;
+    const { role, show_all } = req.query;
 
     let queryOptions = {
       select: '*',
-      eq: { is_active: true },
       order: { created_at: 'desc' }
     };
 
+    // Show all users (including inactive) when requested by admin
+    if (show_all !== 'true') {
+      queryOptions.eq = { is_active: true };
+    }
+
     // Add role filter if specified
     if (role) {
-      queryOptions.eq = { ...queryOptions.eq, role: role };
+      queryOptions.eq = { ...(queryOptions.eq || {}), role: role };
       console.log(`🔍 Filtering users by role: ${role}`);
     }
 
@@ -317,6 +321,11 @@ router.put('/:id', auth, async (req, res) => {
       role: role || existingUser.role,
       updated_at: new Date().toISOString()
     };
+
+    // Allow toggling is_active
+    if (req.body.is_active !== undefined) {
+      updateData.is_active = req.body.is_active;
+    }
 
     if (hashedPassword) {
       updateData.password_hash = hashedPassword;

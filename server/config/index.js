@@ -19,7 +19,9 @@ const config = {
   supabase: {
     url: process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co',
     anonKey: process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc',
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || null
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || null,
+    // Server-side operations should use serviceRoleKey to bypass RLS
+    serverKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubHR2ZnpsdGRlaWxhbnhobHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxOTk4MzUsImV4cCI6MjA3Mjc3NTgzNX0.T_HaALQeSiCjLkpVuwQZUFnJbuSyRy2wf2kWiqJ99Lc'
   },
 
   // SMS Configuration (BulkSMS) - reads from .env only, no fallback credentials

@@ -5,7 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',

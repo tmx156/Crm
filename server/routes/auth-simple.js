@@ -76,6 +76,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Block inactive/deactivated users
+    if (user.is_active === false) {
+      console.log(`🚫 Blocked login attempt from deactivated user: ${user.name} (${user.email})`);
+      return res.status(401).json({ message: 'Account has been deactivated. Contact an admin.' });
+    }
+
     // Check if user has a password hash (for existing users)
     if (user.password_hash) {
       // Compare password with bcrypt

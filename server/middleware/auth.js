@@ -5,7 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 
 // Use centralized Supabase configuration
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 
 const auth = async (req, res, next) => {
   try {
@@ -70,10 +70,10 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found' });
     }
 
-    // Check if user is active (optional, if you have an is_active column)
-    if (user.is_active === 0) {
-      console.error(`Authentication failed: User account is inactive - ID: ${decoded.userId}`);
-      return res.status(403).json({ message: 'Account is inactive' });
+    // Block deactivated users - even if they have a valid token
+    if (user.is_active === false || user.is_active === 0) {
+      console.log(`🚫 Blocked request from deactivated user: ${user.name} (${user.email})`);
+      return res.status(401).json({ message: 'Account has been deactivated', forceLogout: true });
     }
 
     req.user = user; // Single user object

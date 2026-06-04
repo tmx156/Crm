@@ -38,7 +38,7 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('/api/users');
+      const response = await axios.get('/api/users?show_all=true');
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -260,6 +260,25 @@ const Users = () => {
     setShowDeleteConfirm(true);
   };
 
+  // Toggle active/inactive status
+  const toggleUserActive = async (userData) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`/api/users/${userData.id}`, {
+        name: userData.name,
+        email: userData.email,
+        role: userData.role,
+        is_active: !userData.is_active
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchUsers();
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      alert('Failed to update user status');
+    }
+  };
+
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -356,6 +375,9 @@ const Users = () => {
                   Role
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Leads Assigned
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -371,10 +393,10 @@ const Users = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((userData) => (
-                <tr key={userData.id} className="table-row">
+                <tr key={userData.id} className="table-row" style={userData.is_active === false ? { opacity: 0.5, backgroundColor: '#fef2f2' } : {}}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                      <div className={`h-8 w-8 rounded-full ${userData.is_active === false ? 'bg-gray-400' : 'bg-blue-500'} flex items-center justify-center`}>
                         <span className="text-sm font-medium text-white">
                           {userData.name.charAt(0).toUpperCase()}
                         </span>
@@ -382,7 +404,7 @@ const Users = () => {
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900">{userData.name}</div>
                         <div className="text-sm text-gray-500">
-                          Joined {formatDate(userData.createdAt)}
+                          Joined {formatDate(userData.created_at || userData.createdAt)}
                         </div>
                       </div>
                     </div>
@@ -394,6 +416,18 @@ const Users = () => {
                     <span className={getRoleBadgeClass(userData.role)}>
                       {userData.role}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => toggleUserActive(userData)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer ${
+                        userData.is_active !== false
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-red-100 text-red-800 hover:bg-red-200'
+                      }`}
+                    >
+                      {userData.is_active !== false ? 'Active' : 'Inactive'}
+                    </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{userData.leadsAssigned}</div>
