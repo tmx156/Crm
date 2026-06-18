@@ -1123,6 +1123,8 @@ router.post('/', auth, async (req, res) => {
         // Update the existing lead
         // Remove fields that don't exist in Supabase schema
         const { isReschedule, sendEmail, sendSms, rescheduleReason, ...cleanBodyData } = bodyWithoutId;
+        // Get the existing lead to check if booked_by is already set
+        const existingLead = existingLeads[0];
         const updateData = {
           ...cleanBodyData,
           date_booked: bodyWithoutId.date_booked ? preserveLocalTime(bodyWithoutId.date_booked) : null,
@@ -1133,6 +1135,10 @@ router.post('/', auth, async (req, res) => {
           is_confirmed: bodyWithoutId.is_confirmed ? 1 : 0,
           booking_status: bodyWithoutId.booking_status || (isReschedule ? 'Reschedule' : null)
         };
+        // Preserve original booker - only set booked_by if not already set
+        if (!existingLead.booked_by) {
+          updateData.booked_by = req.user.id;
+        }
         
         const updateResult = await dbManager.update('leads', updateData, { id: _id });
         
@@ -1168,10 +1174,28 @@ router.post('/', auth, async (req, res) => {
             timestamp: new Date()
           });
         }
-        
+
+        // Log booking history for _id update path
+        const updatedLeadData = updated[0];
+        const isIdReschedule = existingLead.status === 'Booked' && existingLead.date_booked;
+        await addBookingHistoryEntry(
+          _id,
+          isIdReschedule ? 'RESCHEDULE' : 'INITIAL_BOOKING',
+          req.user.id,
+          req.user.name,
+          {
+            newDate: updateData.date_booked,
+            oldDate: isIdReschedule ? existingLead.date_booked : null,
+            notes: isIdReschedule
+              ? `Rescheduled for ${updatedLeadData.name}`
+              : `Appointment booked for ${updatedLeadData.name}`
+          },
+          createLeadSnapshot(updatedLeadData)
+        );
+
         return res.json({
           success: true,
-          lead: updated[0],
+          lead: updatedLeadData,
           isExistingLead: true,
           message: 'Appointment booked successfully'
         });
@@ -1226,18 +1250,22 @@ router.post('/', auth, async (req, res) => {
         
         // If there's an existing lead and we're trying to book it, update the existing lead instead
         if (finalBody.status === 'Booked' && finalBody.date_booked) {
-          const existingLead = existingLeads[0];
+          const existingLead = duplicateLeads[0];
           console.log(`📊 Updating existing lead ${existingLead.id} instead of creating duplicate`);
-          
+
           // Update the existing lead with booking information
           const updateFields = {
             status: 'Booked',
             date_booked: finalBody.date_booked ? preserveLocalTime(finalBody.date_booked) : null,
             booker_id: req.user.id,
-            booked_at: new Date().toISOString(), // ✅ BOOKING HISTORY FIX: Set booked_at timestamp
-            ever_booked: true, // ✅ BOOKING HISTORY FIX: Mark as ever booked
+            booked_at: new Date().toISOString(),
+            ever_booked: true,
             updated_at: new Date().toISOString()
           };
+          // Preserve original booker - only set booked_by if not already set
+          if (!existingLead.booked_by) {
+            updateFields.booked_by = req.user.id;
+          }
           
           // Include reschedule-specific fields if this is a reschedule
           if (isReschedule) {
@@ -1309,11 +1337,28 @@ router.post('/', auth, async (req, res) => {
           } else {
             console.warn('⚠️ global.io not available - live updates will not work');
           }
-          
+
+          // Log booking history for duplicate-detection path
+          const isDupReschedule = existingLead.status === 'Booked' && existingLead.date_booked;
+          await addBookingHistoryEntry(
+            existingLead.id,
+            isDupReschedule ? 'RESCHEDULE' : 'INITIAL_BOOKING',
+            req.user.id,
+            req.user.name,
+            {
+              newDate: finalBody.date_booked,
+              oldDate: isDupReschedule ? existingLead.date_booked : null,
+              notes: isDupReschedule
+                ? `Rescheduled via duplicate-detection for ${existingLead.name}`
+                : `Appointment booked for ${existingLead.name}`
+            },
+            createLeadSnapshot(updatedLead)
+          );
+
           return res.status(200).json({
             message: 'Existing lead updated successfully',
             lead: updatedLead,
-            isExistingLead: true  // Add this flag to indicate it was an existing lead
+            isExistingLead: true
           });
         } else {
           // If not booking, return error about duplicate
@@ -1355,6 +1400,8 @@ router.post('/', auth, async (req, res) => {
       booked_at: leadData.status === 'Booked' ? new Date().toISOString() : null,
       // ✅ BOOKING HISTORY FIX: Set ever_booked flag to track booking history for stats
       ever_booked: leadData.status === 'Booked' ? true : false,
+      // Track original booker (set once, never overwritten)
+      booked_by: leadData.status === 'Booked' ? req.user.id : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1593,6 +1640,11 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       req.body.booked_at = new Date().toISOString();
       req.body.ever_booked = true; // ✅ BOOKING HISTORY FIX: Mark as ever booked
       console.log(`📊 Setting booked_at timestamp for ${lead.name}: ${req.body.booked_at}`);
+      // Set booked_by ONLY if not already set (preserve original booker)
+      if (!lead.booked_by) {
+        req.body.booked_by = currentUser.id;
+        console.log(`📊 Setting original booked_by for ${lead.name}: ${currentUser.name}`);
+      }
     }
     
     // ✅ DAILY ACTIVITY FIX: Don't clear date_booked on cancellation
@@ -1605,6 +1657,14 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
     }
     // Update the lead - filter out problematic fields and ensure valid data types
     const { _id, ...updateData } = req.body;
+    // Protect booked_by: only allow changes from the booking logic above (line 1644)
+    // If lead already has booked_by, never overwrite it
+    // If lead doesn't have booked_by, only allow it if we're actually transitioning to Booked
+    if (lead.booked_by) {
+      delete updateData.booked_by;
+    } else if (updateData.booked_by && !(oldStatus !== 'Booked' && req.body.status === 'Booked')) {
+      delete updateData.booked_by;
+    }
     
     // Filter out any fields that might cause SQLite binding issues
     const validUpdateData = {};
@@ -1727,6 +1787,9 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       if (supabaseUpdateFields.status === 'Booked' && lead.status !== 'Booked') {
         supabaseUpdateFields.booked_at = new Date().toISOString();
         supabaseUpdateFields.ever_booked = true; // ✅ BOOKING HISTORY FIX: Mark as ever booked
+        if (!lead.booked_by) {
+          supabaseUpdateFields.booked_by = req.user.id;
+        }
         console.log(`📊 Lead ${lead.name} booked at ${supabaseUpdateFields.booked_at}`);
       }
       
@@ -1865,6 +1928,28 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         createLeadSnapshot(updatedLead)
       );
     }
+
+    // Track notes changes made via the general update route
+    const oldNotes = (lead.notes || '').trim();
+    const newNotes = (updatedLead.notes || '').trim();
+    if (newNotes && newNotes !== oldNotes) {
+      await addBookingHistoryEntry(
+        req.params.id,
+        'NOTES_UPDATED',
+        currentUser.id,
+        currentUser.name,
+        {
+          oldNotes: oldNotes,
+          newNotes: newNotes,
+          updatedBy: currentUser.name,
+          timestamp: new Date().toISOString(),
+          changeType: oldNotes ? 'modified' : 'added',
+          characterCount: newNotes.length
+        },
+        createLeadSnapshot(updatedLead)
+      );
+    }
+
     // Update user statistics if status changed
     if (oldStatus !== req.body.status && req.body.status && lead.booker) {
       await updateUserStatistics(lead.booker, {
@@ -1999,6 +2084,32 @@ router.put('/:id/assign', auth, adminAuth, async (req, res) => {
       newStatus: updatedLead.status,
       oldBooker: oldBookerId
     });
+
+    // Log reassignment to booking_history
+    if (oldBookerId && oldBookerId.toString() !== booker) {
+      const { data: bookerUsers } = await serviceRoleClient
+        .from('users')
+        .select('id, name')
+        .in('id', [oldBookerId, booker]);
+      const bookerNameMap = {};
+      if (bookerUsers) for (const u of bookerUsers) bookerNameMap[u.id] = u.name;
+
+      await addBookingHistoryEntry(
+        req.params.id,
+        'REASSIGNMENT',
+        req.user.id,
+        req.user.name,
+        {
+          previousBooker: oldBookerId,
+          previousBookerName: bookerNameMap[oldBookerId] || 'Unknown',
+          newBooker: booker,
+          newBookerName: bookerNameMap[booker] || 'Unknown',
+          originalBooker: leadData.booked_by || oldBookerId,
+          timestamp: new Date().toISOString()
+        },
+        null
+      );
+    }
 
     // Update user statistics using service role client
     if (oldBookerId && oldBookerId.toString() !== booker) {
@@ -4452,10 +4563,13 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    // ✅ BOOKING HISTORY FIX: Set ever_booked and booked_at when booking via quick status
+    // Set ever_booked, booked_at, and booked_by when booking via quick status
     if (statusMapping.status === 'Booked' && oldStatus !== 'Booked') {
       updateData.booked_at = new Date().toISOString();
       updateData.ever_booked = true;
+      if (!lead.booked_by) {
+        updateData.booked_by = req.user.id;
+      }
     }
 
     // Handle special cases
@@ -4664,34 +4778,19 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
     }
 
     // Add to booking history
-    try {
-      const historyEntry = {
-        action: 'STATUS_CHANGED',
-        performed_by: req.user.id,
-        performed_by_name: req.user.name || 'System',
-        details: {
-          oldStatus: oldStatus,
-          newStatus: 'Wrong Number',
-          reason: 'Wrong number - auto-trigger',
-          messageSent: sendMessage
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      let currentHistory = lead.booking_history || [];
-      if (typeof currentHistory === 'string') {
-        currentHistory = JSON.parse(currentHistory);
-      }
-      
-      currentHistory.push(historyEntry);
-      
-      await supabase
-        .from('leads')
-        .update({ booking_history: currentHistory })
-        .eq('id', id);
-    } catch (historyError) {
-      console.warn('Failed to add booking history:', historyError);
-    }
+    await addBookingHistoryEntry(
+      id,
+      'STATUS_CHANGED',
+      req.user.id,
+      req.user.name || 'System',
+      {
+        oldStatus: oldStatus,
+        newStatus: 'Wrong Number',
+        reason: 'Wrong number - auto-trigger',
+        messageSent: sendMessage
+      },
+      null
+    );
 
     let messageResult = null;
 
@@ -4955,34 +5054,19 @@ router.post('/:id/no-answer', auth, async (req, res) => {
     }
 
     // Add to booking history
-    try {
-      const historyEntry = {
-        action: 'STATUS_CHANGED',
-        performed_by: req.user.id,
-        performed_by_name: req.user.name || 'System',
-        details: {
-          oldStatus: oldStatus,
-          newStatus: 'No Answer',
-          reason: 'No answer - auto-trigger',
-          messageSent: sendMessage
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      let currentHistory = lead.booking_history || [];
-      if (typeof currentHistory === 'string') {
-        currentHistory = JSON.parse(currentHistory);
-      }
-      
-      currentHistory.push(historyEntry);
-      
-      await supabase
-        .from('leads')
-        .update({ booking_history: currentHistory })
-        .eq('id', id);
-    } catch (historyError) {
-      console.warn('Failed to add booking history:', historyError);
-    }
+    await addBookingHistoryEntry(
+      id,
+      'STATUS_CHANGED',
+      req.user.id,
+      req.user.name || 'System',
+      {
+        oldStatus: oldStatus,
+        newStatus: 'No Answer',
+        reason: 'No answer - auto-trigger',
+        messageSent: sendMessage
+      },
+      null
+    );
 
     let messageResult = null;
 

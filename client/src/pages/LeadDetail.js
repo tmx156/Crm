@@ -399,16 +399,13 @@ const LeadDetail = () => {
       setFormData(updatedLead); // Also update formData to match server state
       setEditing(false);
 
-      // Add to booking history if notes changed
+      // Notes changes are now tracked server-side in the PUT route
       if (oldNotes !== newNotes) {
-        await addHistoryEntry('NOTES_UPDATED', {
-          oldNotes: oldNotes,
-          newNotes: newNotes
-        });
-
         // Set refresh trigger for Calendar
         localStorage.setItem('calendarRefreshTrigger', 'true');
       }
+      // Refresh history to show the server-side entry
+      fetchBookingHistory();
     } catch (error) {
       console.error('Error updating lead:', error);
       // Don't update local state on error - keep original data
@@ -521,20 +518,6 @@ const LeadDetail = () => {
       .replace(/\[TIME\]/g, defaultTime);
   };
 
-  const addHistoryEntry = async (action, details) => {
-    try {
-      await axios.post(`/api/leads/${id}/history`, {
-        action,
-        details,
-        timestamp: new Date().toISOString()
-      });
-      // Refresh booking history
-      fetchBookingHistory();
-    } catch (error) {
-      console.error('Error adding history entry:', error);
-    }
-  };
-
   // Conversation Functions
   const fetchConversationHistory = async () => {
     if (!lead || !messagesExpanded) return;
@@ -585,17 +568,13 @@ const LeadDetail = () => {
         
         if (response.data.success) {
           alert(`SMS sent successfully to ${lead.phone}!`);
-          
-          // Add to booking history
-          await addHistoryEntry('SMS_SENT', {
-            recipient: lead.phone,
-            message: newReply,
-            template: 'Quick reply'
-          });
-          
+
           setNewReply('');
-          // Refresh conversation
-          setTimeout(() => fetchConversationHistory(), 1000);
+          // Refresh conversation and history (server logs SMS_SENT)
+          setTimeout(() => {
+            fetchConversationHistory();
+            fetchBookingHistory();
+          }, 1000);
         } else {
           alert(`Failed to send SMS: ${response.data.message}`);
         }
@@ -709,13 +688,9 @@ const LeadDetail = () => {
           // Don't block the main operation if diary update fails
         }
         
-        // Add to booking history
-        await addHistoryEntry('STATUS_CHANGED', {
-          oldStatus: oldStatus,
-          newStatus: newStatus,
-          reason: 'Manual status update'
-        });
-        
+        // Server logs STATUS_CHANGE via PUT route - refresh to show it
+        fetchBookingHistory();
+
         // Show success message with visual feedback
         const statusEmoji = {
           'Booked': '📅',
@@ -1570,6 +1545,15 @@ const LeadDetail = () => {
                                       <div className="text-xs text-gray-500 mt-1">
                                         {entry.details.characterCount} characters
                                       </div>
+                                    </div>
+                                  </div>
+                                ) : entry.action === 'REASSIGNMENT' ? (
+                                  <div className="bg-yellow-50 p-3 rounded-lg">
+                                    <div className="font-medium text-yellow-800 mb-1">Lead Reassigned</div>
+                                    <div className="text-sm text-gray-700">
+                                      <span className="font-medium">From:</span> {entry.details.previousBookerName}
+                                      {' → '}
+                                      <span className="font-medium">To:</span> {entry.details.newBookerName}
                                     </div>
                                   </div>
                                 ) : (
