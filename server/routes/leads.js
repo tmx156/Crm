@@ -675,31 +675,6 @@ router.get('/calendar', auth, async (req, res) => {
       }
     }
 
-    // Bulk fetch gmail_account_key for each lead from their most recent booking confirmation
-    if (leads && leads.length > 0) {
-      const leadIds = leads.map(l => l.id);
-      const { data: accountData } = await supabase
-        .from('messages')
-        .select('lead_id, gmail_account_key, templates!inner(type)')
-        .in('lead_id', leadIds)
-        .eq('templates.type', 'booking_confirmation')
-        .not('gmail_account_key', 'is', null)
-        .order('sent_at', { ascending: false });
-
-      if (accountData && accountData.length > 0) {
-        // First row per lead_id is most recent (ordered DESC)
-        const accountMap = {};
-        for (const row of accountData) {
-          if (!accountMap[row.lead_id]) {
-            accountMap[row.lead_id] = row.gmail_account_key;
-          }
-        }
-        leads.forEach(lead => {
-          if (accountMap[lead.id]) lead.gmail_account_key = accountMap[lead.id];
-        });
-        console.log(`✅ Calendar API: Assigned gmail_account_key to ${Object.keys(accountMap).length} leads`);
-      }
-    }
 
     // NOTE: Messages are fetched from the messages table via the messages-list API.
     // We no longer merge messages into booking_history here to avoid processing

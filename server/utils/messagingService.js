@@ -569,6 +569,7 @@ class MessagingService {
           .select('*')
           .eq('type', 'appointment_reminder')
           .eq('is_active', true)
+          .order('created_at', { ascending: true })
           .limit(1);
 
         if (templateError) {
