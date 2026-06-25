@@ -221,12 +221,15 @@ class MessagingService {
       }
 
       // If no specific template or it failed, get the default booking confirmation template
+      // Order by created_at ascending so the oldest (primary) template is always the default,
+      // never a newer secondary-account template added later.
       if (!template) {
         const { data: templates, error: templateError } = await supabase
           .from('templates')
           .select('*')
           .eq('type', 'booking_confirmation')
           .eq('is_active', true)
+          .order('created_at', { ascending: true })
           .limit(1);
 
         if (templateError) {
