@@ -106,42 +106,46 @@ class Scheduler {
     const uk = getUKTime();
     const currentTime = uk.time;
 
-    // Log a heartbeat every 15 minutes (on :00, :15, :30, :45)
-    if (uk.minutes % 15 === 0) {
-      console.log(`[SCHEDULER] Heartbeat ${currentTime} UK | ticks: ${this.tickCount} | scheduled: ${this.scheduledTime || 'unknown'} | next: ${this.nextRun || 'unknown'}`);
-    }
-
-    // Fetch the template's configured time
+    // Fetch ALL active reminder templates (not just first)
     const { data: templates, error } = await supabase
       .from('templates')
-      .select('reminder_time')
+      .select('*')
       .eq('type', 'appointment_reminder')
-      .eq('is_active', true)
-      .limit(1);
+      .eq('is_active', true);
 
     if (error) {
-      console.error(`[SCHEDULER] DB error fetching template: ${error.message}`);
+      console.error(`[SCHEDULER] DB error fetching templates: ${error.message}`);
       this.lastError = { time: new Date().toISOString(), message: `DB error: ${error.message}` };
       return;
     }
 
     if (!templates || templates.length === 0) {
-      // Only log this once per hour to avoid spam
-      if (uk.minutes === 0) {
-        console.log('[SCHEDULER] No active appointment_reminder template found');
-      }
+      if (uk.minutes === 0) console.log('[SCHEDULER] No active appointment_reminder templates found');
       return;
     }
 
-    const reminderTime = templates[0].reminder_time || '09:00';
-    this.scheduledTime = reminderTime;
-    this.nextRun = this.calculateNextRun(reminderTime);
-
-    // Exact match: HH:MM === HH:MM
-    if (currentTime === reminderTime) {
-      console.log(`[SCHEDULER] TIME MATCH! ${currentTime} === ${reminderTime} - processing reminders...`);
-      await this.processAppointmentReminders();
+    // Build a summary of scheduled times for heartbeat
+    const scheduleSummary = templates.map(t => `${t.email_account || 'primary'}@${t.reminder_time}`).join(', ');
+    if (uk.minutes % 15 === 0) {
+      console.log(`[SCHEDULER] Heartbeat ${currentTime} UK | ticks: ${this.tickCount} | templates: ${scheduleSummary}`);
     }
+
+    // Fire each template whose reminder_time matches current UK minute
+    for (const template of templates) {
+      const reminderTime = template.reminder_time || '09:00';
+      if (currentTime === reminderTime) {
+        console.log(`[SCHEDULER] TIME MATCH! ${currentTime} → template "${template.name}" (${template.email_account || 'primary'})`);
+        await this.processAppointmentRemindersForTemplate(template);
+      }
+    }
+
+    // Update next-run display using the soonest upcoming template time
+    const nextTemplate = templates
+      .map(t => ({ ...t, time: t.reminder_time || '09:00' }))
+      .sort((a, b) => a.time.localeCompare(b.time))
+      .find(t => t.time > currentTime) || templates[0];
+    this.scheduledTime = nextTemplate.reminder_time || '09:00';
+    this.nextRun = this.calculateNextRun(this.scheduledTime);
   }
 
   calculateNextRun(reminderTime) {
@@ -158,15 +162,14 @@ class Scheduler {
     }
   }
 
-  // Preview appointment reminders - returns lead counts without sending
+  // Preview appointment reminders - returns per-template lead counts without sending
   async previewAppointmentReminders() {
     try {
       const { data: templates, error: templateError } = await supabase
         .from('templates')
         .select('*')
         .eq('type', 'appointment_reminder')
-        .eq('is_active', true)
-        .limit(1);
+        .eq('is_active', true);
 
       if (templateError) {
         return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: templateError.message };
@@ -175,53 +178,47 @@ class Scheduler {
         return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: 'No active template' };
       }
 
-      const template = templates[0];
-      const reminderDays = template.reminder_days || 1;
       const ukNow = getUKTime();
-      const { startISO: startOfDayISO, endISO: endOfDayISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
-
-      const { data: leads, error: leadsError } = await supabase
-        .from('leads')
-        .select('id, name, status, date_booked, booker_id, email, phone, deleted_at')
-        .in('status', ['Booked', 'Confirmed'])
-        .gte('date_booked', startOfDayISO)
-        .lte('date_booked', endOfDayISO)
-        .is('deleted_at', null);
-
-      if (leadsError) {
-        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], error: leadsError.message };
-      }
-      if (!leads || leads.length === 0) {
-        return { total: 0, alreadySent: 0, pending: 0, alreadySentLeads: [], pendingLeads: [], targetDate: targetDateStr };
-      }
-
       const { startISO: todayStartISO } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day);
-      const alreadySentLeads = [];
-      const pendingLeads = [];
 
-      for (const lead of leads) {
-        const { data: existing } = await supabase
-          .from('messages')
-          .select('id')
-          .eq('lead_id', lead.id)
-          .eq('template_id', template.id)
-          .gte('sent_at', todayStartISO)
-          .limit(1);
+      let totalAlreadySent = [], totalPending = [];
 
-        if (existing && existing.length > 0) {
-          alreadySentLeads.push({ id: lead.id, name: lead.name });
-        } else {
-          pendingLeads.push({ id: lead.id, name: lead.name });
+      for (const template of templates) {
+        const reminderDays = template.reminder_days || 1;
+        const templateAccount = template.email_account || 'primary';
+        const { startISO, endISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
+
+        const { data: allLeads } = await supabase
+          .from('leads')
+          .select('id, name, booking_account')
+          .in('status', ['Booked', 'Confirmed'])
+          .gte('date_booked', startISO)
+          .lte('date_booked', endISO)
+          .is('deleted_at', null);
+
+        const leads = (allLeads || []).filter(lead => {
+          const la = lead.booking_account || 'primary';
+          return la === templateAccount;
+        });
+
+        for (const lead of leads) {
+          const { data: existing } = await supabase
+            .from('messages').select('id')
+            .eq('lead_id', lead.id).eq('template_id', template.id)
+            .gte('sent_at', todayStartISO).limit(1);
+
+          const entry = { id: lead.id, name: lead.name, template: template.name, targetDate: targetDateStr };
+          if (existing && existing.length > 0) totalAlreadySent.push(entry);
+          else totalPending.push(entry);
         }
       }
 
       return {
-        total: leads.length,
-        alreadySent: alreadySentLeads.length,
-        pending: pendingLeads.length,
-        alreadySentLeads,
-        pendingLeads,
-        targetDate: targetDateStr
+        total: totalAlreadySent.length + totalPending.length,
+        alreadySent: totalAlreadySent.length,
+        pending: totalPending.length,
+        alreadySentLeads: totalAlreadySent,
+        pendingLeads: totalPending
       };
     } catch (error) {
       console.error('[SCHEDULER] previewAppointmentReminders error:', error.message);
@@ -229,131 +226,108 @@ class Scheduler {
     }
   }
 
-  // Process appointment reminders - called on time match or manual trigger
-  // options.force = true skips duplicate check and sends to all leads
+  // Manual trigger: runs ALL active reminder templates (used by API endpoints)
   async processAppointmentReminders(options = {}) {
-    const { force = false } = options;
-    try {
-      this.lastRun = new Date().toISOString();
-      console.log(`[SCHEDULER] Processing appointment reminders...${force ? ' (FORCE mode - resending to all)' : ''}`);
+    const { data: templates } = await supabase
+      .from('templates')
+      .select('*')
+      .eq('type', 'appointment_reminder')
+      .eq('is_active', true);
 
-      // Get active appointment reminder template
-      const { data: templates, error: templateError } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('type', 'appointment_reminder')
-        .eq('is_active', true)
-        .limit(1);
-
-      if (templateError) {
-        console.error('[SCHEDULER] Error fetching template:', templateError.message);
-        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: templateError.message };
-      }
-
-      if (!templates || templates.length === 0) {
-        console.log('[SCHEDULER] No active appointment_reminder template found');
-        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: 'No template' };
-      }
-
-      const template = templates[0];
-      const reminderDays = template.reminder_days || 1;
-      const reminderTime = template.reminder_time || '09:00';
-
-      console.log(`[SCHEDULER] Template: "${template.name}"`);
-      console.log(`[SCHEDULER] Config: ${reminderDays} day(s) before, send at ${reminderTime}`);
-      console.log(`[SCHEDULER] Channels: email=${template.send_email}, sms=${template.send_sms}`);
-
-      // Calculate target appointment date using UK date (not UTC)
-      const ukNow = getUKTime();
-      const { startISO: startOfDayISO, endISO: endOfDayISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
-
-      console.log(`[SCHEDULER] UK date today: ${ukNow.day}/${ukNow.month}/${ukNow.year}`);
-      console.log(`[SCHEDULER] Looking for appointments on: ${targetDateStr} (${reminderDays} day(s) ahead)`);
-      console.log(`[SCHEDULER] Query range: ${startOfDayISO} to ${endOfDayISO}`);
-
-      // Find leads with appointments on that date
-      const { data: leads, error: leadsError } = await supabase
-        .from('leads')
-        .select('id, name, status, date_booked, booker_id, email, phone, deleted_at')
-        .in('status', ['Booked', 'Confirmed'])
-        .gte('date_booked', startOfDayISO)
-        .lte('date_booked', endOfDayISO)
-        .is('deleted_at', null);
-
-      if (leadsError) {
-        console.error('[SCHEDULER] Error fetching leads:', leadsError.message);
-        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: leadsError.message };
-      }
-
-      if (!leads || leads.length === 0) {
-        console.log(`[SCHEDULER] No leads with appointments on ${targetDateStr}`);
-        return { sent: 0, skipped: 0, errors: 0, skippedLeads: [] };
-      }
-
-      console.log(`[SCHEDULER] Found ${leads.length} leads to process`);
-
-      let sentCount = 0;
-      let skippedCount = 0;
-      let errorCount = 0;
-      const skippedLeads = [];
-
-      for (const lead of leads) {
-        try {
-          // Duplicate check - skip if force mode is on
-          if (!force) {
-            const { startISO: todayStartISO } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day);
-
-            const { data: existing, error: dupError } = await supabase
-              .from('messages')
-              .select('id')
-              .eq('lead_id', lead.id)
-              .eq('template_id', template.id)
-              .gte('sent_at', todayStartISO)
-              .limit(1);
-
-            if (dupError) {
-              console.error(`[SCHEDULER] Duplicate check error for ${lead.name}: ${dupError.message}`);
-              errorCount++;
-              continue;
-            }
-
-            if (existing && existing.length > 0) {
-              skippedCount++;
-              skippedLeads.push({ id: lead.id, name: lead.name });
-              continue;
-            }
-          }
-
-          // Send the reminder
-          console.log(`[SCHEDULER] Sending to: ${lead.name} (${lead.email || 'no email'})`);
-          await MessagingService.sendAppointmentReminder(
-            lead.id,
-            lead.booker_id,
-            lead.date_booked,
-            reminderDays
-          );
-
-          console.log(`[SCHEDULER] Sent OK: ${lead.name}`);
-          sentCount++;
-        } catch (error) {
-          console.error(`[SCHEDULER] FAILED for ${lead.name}: ${error.message}`);
-          errorCount++;
-        }
-      }
-
-      this.nextRun = this.calculateNextRun(reminderTime);
-      console.log('[SCHEDULER] =============================================');
-      console.log(`[SCHEDULER] COMPLETE: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
-      console.log(`[SCHEDULER] Next run: ${this.nextRun}`);
-      console.log('[SCHEDULER] =============================================');
-
-      return { sent: sentCount, skipped: skippedCount, errors: errorCount, skippedLeads };
-    } catch (error) {
-      console.error('[SCHEDULER] processAppointmentReminders crashed:', error.message);
-      console.error('[SCHEDULER] Stack:', error.stack);
-      this.lastError = { time: new Date().toISOString(), message: error.message };
-      return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: error.message };
+    if (!templates || templates.length === 0) {
+      return { sent: 0, skipped: 0, errors: 0, skippedLeads: [], error: 'No template' };
     }
+
+    let totalSent = 0, totalSkipped = 0, totalErrors = 0, allSkipped = [];
+    for (const template of templates) {
+      const result = await this.processAppointmentRemindersForTemplate(template, options);
+      totalSent    += result.sent;
+      totalSkipped += result.skipped;
+      totalErrors  += result.errors;
+      allSkipped    = allSkipped.concat(result.skippedLeads || []);
+    }
+    return { sent: totalSent, skipped: totalSkipped, errors: totalErrors, skippedLeads: allSkipped };
+  }
+
+  // Core per-template processor — called by tick() and processAppointmentReminders()
+  // Matches leads to templates by booking_account so the right brand sends the reminder.
+  async processAppointmentRemindersForTemplate(template, options = {}) {
+    const { force = false } = options;
+    this.lastRun = new Date().toISOString();
+
+    const reminderDays   = template.reminder_days || 1;
+    const reminderTime   = template.reminder_time || '09:00';
+    const templateAccount = template.email_account || 'primary';
+
+    console.log(`[SCHEDULER] ─── Template: "${template.name}" | account: ${templateAccount} | ${reminderDays}d before | ${reminderTime}`);
+
+    const ukNow = getUKTime();
+    const { startISO, endISO, dateStr: targetDateStr } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day, reminderDays);
+    console.log(`[SCHEDULER]   Target date: ${targetDateStr}`);
+
+    // Fetch leads with appointments on the target date
+    const { data: allLeads, error: leadsError } = await supabase
+      .from('leads')
+      .select('id, name, status, date_booked, booker_id, email, phone, deleted_at, booking_account')
+      .in('status', ['Booked', 'Confirmed'])
+      .gte('date_booked', startISO)
+      .lte('date_booked', endISO)
+      .is('deleted_at', null);
+
+    if (leadsError) {
+      console.error('[SCHEDULER] Error fetching leads:', leadsError.message);
+      return { sent: 0, skipped: 0, errors: 0, skippedLeads: [] };
+    }
+
+    // Filter leads by account ownership
+    const leads = (allLeads || []).filter(lead => {
+      const leadAccount = lead.booking_account || 'primary';
+      // Exact match only — no fallback. A Camry lead with no Camry template gets nothing.
+      return leadAccount === templateAccount;
+    });
+
+    console.log(`[SCHEDULER]   ${leads.length} lead(s) matched for this template`);
+
+    let sentCount = 0, skippedCount = 0, errorCount = 0;
+    const skippedLeads = [];
+    const { startISO: todayStartISO } = getUKDateRange(ukNow.year, ukNow.month, ukNow.day);
+
+    for (const lead of leads) {
+      try {
+        if (!force) {
+          const { data: existing } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('lead_id', lead.id)
+            .eq('template_id', template.id)
+            .gte('sent_at', todayStartISO)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            skippedCount++;
+            skippedLeads.push({ id: lead.id, name: lead.name });
+            continue;
+          }
+        }
+
+        console.log(`[SCHEDULER]   Sending to: ${lead.name} (${lead.email || 'no email'})`);
+        await MessagingService.sendAppointmentReminder(
+          lead.id,
+          lead.booker_id,
+          lead.date_booked,
+          reminderDays,
+          { templateId: template.id }
+        );
+        console.log(`[SCHEDULER]   Sent OK: ${lead.name}`);
+        sentCount++;
+      } catch (err) {
+        console.error(`[SCHEDULER]   FAILED for ${lead.name}: ${err.message}`);
+        errorCount++;
+      }
+    }
+
+    console.log(`[SCHEDULER]   Done: ${sentCount} sent, ${skippedCount} skipped, ${errorCount} errors`);
+    return { sent: sentCount, skipped: skippedCount, errors: errorCount, skippedLeads };
   }
 
   // Send immediate reminder for a specific lead

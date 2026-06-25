@@ -587,7 +587,7 @@ router.get('/calendar', auth, async (req, res) => {
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
             is_confirmed, booking_status, has_sale,
-            created_at, updated_at, postcode, notes, image_url
+            created_at, updated_at, postcode, notes, image_url, booking_account
           `)
           .or('date_booked.not.is.null,status.eq.Booked')
           .is('deleted_at', null)
@@ -675,6 +675,32 @@ router.get('/calendar', auth, async (req, res) => {
       }
     }
 
+    // Bulk fetch gmail_account_key for each lead from their most recent booking confirmation
+    if (leads && leads.length > 0) {
+      const leadIds = leads.map(l => l.id);
+      const { data: accountData } = await supabase
+        .from('messages')
+        .select('lead_id, gmail_account_key, templates!inner(type)')
+        .in('lead_id', leadIds)
+        .eq('templates.type', 'booking_confirmation')
+        .not('gmail_account_key', 'is', null)
+        .order('sent_at', { ascending: false });
+
+      if (accountData && accountData.length > 0) {
+        // First row per lead_id is most recent (ordered DESC)
+        const accountMap = {};
+        for (const row of accountData) {
+          if (!accountMap[row.lead_id]) {
+            accountMap[row.lead_id] = row.gmail_account_key;
+          }
+        }
+        leads.forEach(lead => {
+          if (accountMap[lead.id]) lead.gmail_account_key = accountMap[lead.id];
+        });
+        console.log(`✅ Calendar API: Assigned gmail_account_key to ${Object.keys(accountMap).length} leads`);
+      }
+    }
+
     // NOTE: Messages are fetched from the messages table via the messages-list API.
     // We no longer merge messages into booking_history here to avoid processing
     // tens of thousands of duplicate entries on every calendar load.
@@ -691,7 +717,7 @@ router.get('/calendar', auth, async (req, res) => {
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
             is_confirmed, booking_status, has_sale,
-            created_at, updated_at, postcode, notes, image_url
+            created_at, updated_at, postcode, notes, image_url, booking_account
           `)
           .not('date_booked', 'is', null)
           .is('deleted_at', null)
@@ -1122,7 +1148,7 @@ router.post('/', auth, async (req, res) => {
       if (existingLeads && existingLeads.length > 0) {
         // Update the existing lead
         // Remove fields that don't exist in Supabase schema
-        const { isReschedule, sendEmail, sendSms, rescheduleReason, ...cleanBodyData } = bodyWithoutId;
+        const { isReschedule, sendEmail, sendSms, rescheduleReason, templateId: _tplId1, ...cleanBodyData } = bodyWithoutId;
         // Get the existing lead to check if booked_by is already set
         const existingLead = existingLeads[0];
         const updateData = {
@@ -1209,7 +1235,7 @@ router.post('/', auth, async (req, res) => {
     }
     
     // Remove fields that don't exist in Supabase schema
-    const { isReschedule, sendEmail, sendSms, rescheduleReason, ...cleanFilteredBody } = filteredBody;
+    const { isReschedule, sendEmail, sendSms, rescheduleReason, templateId: _tplId2, ...cleanFilteredBody } = filteredBody;
     const finalBody = cleanFilteredBody;
 
     console.log('📊 Server: Creating lead with data:', {
@@ -1290,7 +1316,7 @@ router.post('/', auth, async (req, res) => {
               existingLead.id,
               req.user.id,
               finalBody.date_booked,
-              { sendEmail: sendEmail || false, sendSms: sendSms || false }
+              { sendEmail: sendEmail || false, sendSms: sendSms || false, templateId: finalBody.templateId || null }
             ).then(() => {
               console.log(`📧 Booking confirmation sent (duplicate-update path) for lead ${existingLead.id}`);
             }).catch(e => {
@@ -1493,12 +1519,12 @@ router.post('/', auth, async (req, res) => {
 
     // Trigger booking confirmation (email/SMS) for newly created booked leads - ASYNC (non-blocking)
     if (leadData.status === 'Booked' && leadData.date_booked) {
-      const { sendEmail, sendSms } = filteredBody || {};
+      const { sendEmail, sendSms, templateId: newLeadTemplateId } = filteredBody || {};
       MessagingService.sendBookingConfirmation(
         lead.id,
         leadData.booker,
         leadData.date_booked,
-        { sendEmail, sendSms }
+        { sendEmail, sendSms, templateId: newLeadTemplateId || null }
       ).then(() => {
         console.log(`📧 Booking confirmation sent for new lead ${lead.id}`);
       }).catch(msgErr => {
@@ -1730,7 +1756,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
     // Filter out any invalid values and convert objects to strings
     const filteredUpdateFields = {};
     for (const [key, value] of Object.entries(updateFields)) {
-      if (key === 'sendEmail' || key === 'sendSms') continue;
+      if (key === 'sendEmail' || key === 'sendSms' || key === 'templateId') continue;
       
       // For certain fields, we want to allow null values to clear them
       const allowNullFields = ['booking_status', 'date_booked', 'reschedule_reason'];
@@ -1849,13 +1875,13 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
 
       // Trigger booking confirmation (email + optional SMS per template) - ASYNC (non-blocking)
       if (req.body.date_booked) {
-        const { sendEmail, sendSms } = req.body;
+        const { sendEmail, sendSms, templateId: putTemplateId } = req.body;
         // Fire and forget - don't block calendar update
         MessagingService.sendBookingConfirmation(
           req.params.id,
           currentUser.id,
           req.body.date_booked,
-          { sendEmail, sendSms }
+          { sendEmail, sendSms, templateId: putTemplateId || null }
         ).then(() => {
           console.log(`📧 Booking confirmation sent for lead ${req.params.id}`);
         }).catch(msgErr => {
@@ -1884,13 +1910,13 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
 
       // Also send updated booking confirmation on reschedule - ASYNC (non-blocking)
       if (req.body.date_booked) {
-        const { sendEmail, sendSms } = req.body;
+        const { sendEmail, sendSms, templateId: rescheduleTemplateId } = req.body;
         // Fire and forget - don't block calendar update
         MessagingService.sendBookingConfirmation(
           req.params.id,
           currentUser.id,
           req.body.date_booked,
-          { sendEmail, sendSms }
+          { sendEmail, sendSms, templateId: rescheduleTemplateId || null }
         ).then(() => {
           console.log(`📧 Reschedule confirmation sent for lead ${req.params.id}`);
         }).catch(msgErr => {

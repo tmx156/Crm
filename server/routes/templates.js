@@ -143,7 +143,8 @@ router.get('/', auth, async (req, res) => {
       isActive: template.is_active || false,
       reminderDays: template.reminder_days || 5,
       reminderTime: template.reminder_time || '09:00',
-      emailAccount: template.email_account || 'primary'
+      emailAccount: template.email_account || 'primary',
+      senderName: template.sender_name || ''
     }));
 
     res.json(templatesWithId);
@@ -183,7 +184,8 @@ router.get('/:id', auth, async (req, res) => {
       isActive: template.is_active || false,
       reminderDays: template.reminder_days || 5,
       reminderTime: template.reminder_time || '09:00',
-      emailAccount: template.email_account || 'primary'
+      emailAccount: template.email_account || 'primary',
+      senderName: template.sender_name || ''
     };
 
     res.json(templateWithId);
@@ -211,7 +213,8 @@ router.post('/', auth, async (req, res) => {
       sendSMS,
       isActive,
       category,
-      emailAccount
+      emailAccount,
+      senderName
     } = req.body;
 
     // Validate required fields
@@ -255,7 +258,8 @@ router.post('/', auth, async (req, res) => {
       send_sms: sendSMS !== undefined ? sendSMS : false,
       reminder_days: reminderDays || 5,
       reminder_time: reminderTime || '09:00',
-      email_account: emailAccount || 'primary', // Default to primary account
+      email_account: emailAccount || 'primary',
+      sender_name: senderName || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -324,7 +328,8 @@ router.put('/:id', auth, async (req, res) => {
       sendSMS,
       isActive,
       category,
-      emailAccount
+      emailAccount,
+      senderName
     } = req.body;
 
     // Check if template exists
@@ -383,6 +388,7 @@ router.put('/:id', auth, async (req, res) => {
     if (reminderDays !== undefined) updateData.reminder_days = reminderDays;
     if (reminderTime !== undefined) updateData.reminder_time = reminderTime;
     if (emailAccount !== undefined) updateData.email_account = emailAccount;
+    if (senderName !== undefined) updateData.sender_name = senderName || null;
 
     // Update content field - prioritize SMS body for shorter messages
     if (smsBody !== undefined) {

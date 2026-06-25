@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSettings, FiSave, FiX, FiExternalLink, FiPlay } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSettings, FiSave, FiX, FiExternalLink, FiPlay, FiUser } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -17,6 +17,7 @@ const Templates = () => {
   const [selectedLead, setSelectedLead] = useState('');
   const [variables, setVariables] = useState([]);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [gmailAccounts, setGmailAccounts] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -29,7 +30,9 @@ const Templates = () => {
     sendEmail: true,
     sendSMS: true,
     isActive: true,
-    attachments: []
+    attachments: [],
+    emailAccount: '',
+    senderName: ''
   });
 
   // Utility to group templates by category
@@ -70,10 +73,25 @@ const Templates = () => {
   useEffect(() => {
     fetchTemplates();
     fetchVariables();
+    fetchGmailAccounts();
     if (user?.role === 'admin') {
       fetchLeads();
     }
   }, [user]);
+
+  const fetchGmailAccounts = async () => {
+    try {
+      const response = await fetch('/api/gmail/accounts', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setGmailAccounts(data.accounts || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch Gmail accounts:', e);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -203,7 +221,9 @@ const Templates = () => {
       sendEmail: template.sendEmail,
       sendSMS: template.sendSMS,
       isActive: template.isActive,
-      attachments: Array.isArray(existingAttachments) ? existingAttachments : []
+      attachments: Array.isArray(existingAttachments) ? existingAttachments : [],
+      emailAccount: template.emailAccount || '',
+      senderName: template.senderName || ''
     });
     setShowModal(true);
   };
@@ -384,7 +404,9 @@ const Templates = () => {
       sendEmail: true,
       sendSMS: true,
       isActive: true,
-      attachments: []
+      attachments: [],
+      emailAccount: '',
+      senderName: ''
     });
   };
 
@@ -822,6 +844,42 @@ const Templates = () => {
                               className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                             />
                           </label>
+
+                          {formData.sendEmail && gmailAccounts.length > 0 && (
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                <FiMail className="text-blue-500" />
+                                Send From
+                              </label>
+                              <select
+                                value={formData.emailAccount}
+                                onChange={(e) => setFormData({...formData, emailAccount: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              >
+                                <option value="">Default account</option>
+                                {gmailAccounts.map(email => (
+                                  <option key={email} value={email}>{email}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {formData.sendEmail && (
+                            <div className="p-3 bg-white rounded-lg border border-gray-200">
+                              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                <FiUser className="text-blue-500" />
+                                Sender Name
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.senderName}
+                                onChange={(e) => setFormData({...formData, senderName: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                placeholder="The Editorial Co (default)"
+                              />
+                              <p className="text-xs text-gray-400 mt-1">Leave blank to use "The Editorial Co". Enter a custom name to override what recipients see in their inbox.</p>
+                            </div>
+                          )}
                           
                           <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 transition-all">
                             <div className="flex items-center">

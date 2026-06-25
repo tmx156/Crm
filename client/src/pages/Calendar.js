@@ -55,6 +55,7 @@ const Calendar = () => {
   const [sendEmail, setSendEmail] = useState(true);
   const [leadsWithUnreadEmails, setLeadsWithUnreadEmails] = useState(new Set());
   const [sendSms, setSendSms] = useState(true);
+  const [bookingTemplateId, setBookingTemplateId] = useState('');
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [isBookingInProgress, setIsBookingInProgress] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -215,47 +216,9 @@ const Calendar = () => {
       });
 
       const leads = response.data.leads || [];
-      console.log(`📅 Received ${leads.length} leads from server`);
-      
-      // Debug logging
-      if (leads.length === 0) {
-        console.log('📅 No leads received from server. Full response:', response.data);
-      } else {
-        console.log('📅 Leads received:', leads.map(lead => ({
-          name: lead.name,
-          status: lead.status,
-          date_booked: lead.date_booked
-        })));
-      }
-      
+
       // Validate leads data
-      const validLeads = leads.filter(lead => {
-        // Comprehensive validation
-        if (!lead) {
-          console.warn('⚠️ Skipping null/undefined lead');
-          return false;
-        }
-        
-        if (!lead.id) {
-          console.warn('⚠️ Lead missing ID:', lead);
-          return false;
-        }
-        
-        // Allow leads without booking dates - they'll be handled in the event mapping
-        return true;
-      });
-      
-      // Convert leads to calendar events - include both dated and undated booked leads
-      // Debug: Check image_url presence in leads
-      const leadsWithImages = validLeads.filter(l => l.image_url && l.image_url !== '');
-      console.log(`📸 Calendar: ${leadsWithImages.length} out of ${validLeads.length} leads have image_url`);
-      if (leadsWithImages.length > 0) {
-        console.log('📸 Sample leads with images:', leadsWithImages.slice(0, 3).map(l => ({ name: l.name, image_url: l.image_url, hasImageUrl: !!l.image_url, imageUrlLength: l.image_url?.length })));
-      }
-      
-      // Check if ALL leads have the image_url property (even if empty)
-      const leadsWithImageUrlProperty = validLeads.filter(l => 'image_url' in l);
-      console.log(`📸 Leads with image_url property: ${leadsWithImageUrlProperty.length}/${validLeads.length}`);
+      const validLeads = leads.filter(lead => lead && lead.id);
       
       const serverEvents = validLeads
         .filter(lead => {
@@ -367,14 +330,8 @@ const Calendar = () => {
         return true;
       });
 
-      console.log(`📅 Calendar: Final events array has ${finalEvents.length} unique events`);
-
       // Mark as loaded
       loadedRangesRef.current.add(rangeKey);
-      console.log(`📅 Marked ALL_BOOKINGS as loaded`);
-
-      // Replace all events (we fetched everything, no need to merge)
-      console.log(`📅 Setting ${finalEvents.length} total events`);
       setEvents(finalEvents);
 
       // Check for highlighting after events are set (reduced timeout for performance)
@@ -580,7 +537,6 @@ const Calendar = () => {
           case 'NOTES_UPDATED':
           case 'messages_read':
             // These don't typically affect calendar visibility, so skip refresh
-            console.log('📅 Calendar: Skipping refresh for', update.type);
             break;
           default:
             break;
@@ -590,12 +546,10 @@ const Calendar = () => {
     
     // Reduced polling frequency to prevent overloading
     pollingInterval = setInterval(() => {
-      console.log('📅 Calendar: Polling for updates...');
-      debouncedFetch(); // Use debounced fetch
+      debouncedFetch();
     }, 120000); // Poll every 2 minutes for better performance
 
     return () => {
-      console.log('📅 Calendar: Cleaning up real-time subscriptions and polling...');
       
       // Clean up subscriptions
       if (unsubscribeCalendar) {
@@ -613,7 +567,6 @@ const Calendar = () => {
         clearTimeout(refreshTimeout);
       }
       
-      console.log('📅 Calendar: Cleaned up real-time subscriptions and polling');
     };
   }, [subscribeToCalendarUpdates, subscribeToLeadUpdates, fetchEvents]); // Include fetchEvents in dependencies
 
@@ -703,13 +656,32 @@ const Calendar = () => {
     return <MoreLinkWithEmails num={arg.num} dayMessageCounts={dayMessageCounts} />;
   }, [dayMessageCounts]);
 
+  // Derive a short label from a gmail account email address
+  const getAccountLabel = (email) => {
+    if (!email || email === 'primary') return null;
+    const company = (email.split('@')[1] || '').split('.')[0];
+    const stripped = company.replace(/^the/, '');
+    return (stripped || company).slice(0, 5).toUpperCase();
+  };
+
   // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
   const renderEventContent = useCallback((arg) => {
     const leadId = arg.event.extendedProps?.lead?.id;
     const hasUnreadEmail = leadId && leadsWithUnreadEmails.has(leadId);
     const counts = leadId ? messageCounts[leadId] : null;
+    const accountEmail = arg.event.extendedProps?.lead?.booking_account;
+    const accountLabel = getAccountLabel(accountEmail);
     return (
       <div className="fc-event-main px-1 py-0.5 flex items-center">
+        {accountLabel && (
+          <span
+            className="inline-flex items-center mr-1 px-1 rounded text-white flex-shrink-0 font-bold"
+            style={{ fontSize: '8px', background: 'rgba(255,255,255,0.25)', letterSpacing: '0.05em' }}
+            title={accountEmail}
+          >
+            {accountLabel}
+          </span>
+        )}
         <div className="fc-event-title-container flex-1 overflow-hidden">
           <div className="fc-event-title text-xs truncate">
             {arg.timeText && <span className="font-semibold">{arg.timeText} </span>}
@@ -814,25 +786,6 @@ const Calendar = () => {
     };
     fetchMessages();
 
-    // Fetch model stats on-demand
-    const fetchStats = async () => {
-      try {
-        const res = await axios.get(`/api/leads/${leadId}/model-stats`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const stats = res.data?.model_stats;
-        if (stats && typeof stats === 'object') {
-          setStatsForm(stats);
-        } else if (typeof stats === 'string') {
-          try { setStatsForm(JSON.parse(stats)); } catch { setStatsForm({}); }
-        } else {
-          setStatsForm({});
-        }
-      } catch (e) {
-        setStatsForm({});
-      }
-    };
-    fetchStats();
   }, [showEventModal, selectedEvent?.id]);
 
   // Fetch booking confirmation templates for welcome pack dropdown
@@ -950,10 +903,6 @@ const Calendar = () => {
   };
 
   const handleEventClick = async (clickInfo) => {
-    // Debug logging
-    console.log('📅 Event clicked:', clickInfo.event.title);
-    console.log('📸 Event image_url:', clickInfo.event.extendedProps?.lead?.image_url);
-    console.log('📋 Full event extendedProps:', clickInfo.event.extendedProps);
 
     // Store a stable plain-object snapshot so live updates don't close the modal
     setSelectedEvent(createEventSnapshot(clickInfo.event));
@@ -1116,7 +1065,7 @@ const Calendar = () => {
         finalData: createData
       });
       
-      const response = await axios.post('/api/leads', { ...createData, sendEmail, sendSms });
+      const response = await axios.post('/api/leads', { ...createData, sendEmail, sendSms, ...(bookingTemplateId ? { templateId: bookingTemplateId } : {}) });
       
       if (response.data.success || response.data.lead || response.data) {
         const leadResult = response.data.lead || response.data;
@@ -1256,6 +1205,7 @@ const Calendar = () => {
     });
     setShowLeadFormModal(false);
     setIsBookingInProgress(false);
+    setBookingTemplateId('');
     
     // Refresh calendar events to show the updated booking
     setTimeout(() => {
@@ -2286,6 +2236,21 @@ const Calendar = () => {
                     </label>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">Both are checked by default. Uncheck to prevent sending.</p>
+                  {(sendEmail || sendSms) && welcomePackTemplates.length > 0 && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Booking confirmation template</label>
+                      <select
+                        value={bookingTemplateId}
+                        onChange={(e) => setBookingTemplateId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Default template</option>
+                        {welcomePackTemplates.map(t => (
+                          <option key={t.id || t._id} value={t.id || t._id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4">
@@ -2445,21 +2410,8 @@ const Calendar = () => {
       )}
 
       {/* Event Detail Modal - Wide Layout with Full Details */}
-      {showEventModal && selectedEvent && selectedEvent.start && (() => {
-        // Debug logging for image URL
-        console.log('🖼️ Modal opened - Full selectedEvent:', {
-          id: selectedEvent.id,
-          title: selectedEvent.title,
-          hasExtendedProps: !!selectedEvent.extendedProps,
-          hasLead: !!selectedEvent.extendedProps?.lead,
-          leadKeys: selectedEvent.extendedProps?.lead ? Object.keys(selectedEvent.extendedProps.lead) : [],
-          image_url: selectedEvent.extendedProps?.lead?.image_url,
-          image_url_type: typeof selectedEvent.extendedProps?.lead?.image_url,
-          image_url_length: selectedEvent.extendedProps?.lead?.image_url?.length
-        });
-        return true;
-      })() && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+      {showEventModal && selectedEvent && selectedEvent.start && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="relative w-full max-w-5xl bg-white rounded-lg shadow-2xl max-h-[95vh] overflow-y-auto calendar-modal-scroll flex flex-col">
             {/* Header: Photo and Main Details Top Right */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-3 sm:p-4">
@@ -2469,6 +2421,15 @@ const Calendar = () => {
                   {selectedEvent.extendedProps?.lead?.name || selectedEvent.title}
                   {selectedEvent.extendedProps?.lead?.age && (
                     <span className="text-white/90 font-normal ml-2">({selectedEvent.extendedProps.lead.age})</span>
+                  )}
+                  {getAccountLabel(selectedEvent.extendedProps?.lead?.booking_account) && (
+                    <span
+                      className="inline-flex items-center ml-2 px-2 py-0.5 rounded text-white font-bold align-middle"
+                      style={{ fontSize: '10px', background: 'rgba(255,255,255,0.25)', letterSpacing: '0.05em', verticalAlign: 'middle' }}
+                      title={selectedEvent.extendedProps.lead.booking_account}
+                    >
+                      {getAccountLabel(selectedEvent.extendedProps.lead.booking_account)}
+                    </span>
                   )}
                 </h3>
                 <div className="flex items-center space-x-3">
@@ -3202,100 +3163,97 @@ const Calendar = () => {
                     </div>
                   )}
                   {/* Booking History */}
-                  {selectedEvent.extendedProps?.lead?.bookingHistory && Array.isArray(selectedEvent.extendedProps.lead.bookingHistory) && (
-                    <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-4 mt-4 max-h-48 overflow-y-auto">
-                      <h4 className="text-base font-bold text-green-700 mb-2">📋 Recent Activity</h4>
-                      {selectedEvent.extendedProps.lead.bookingHistory
-                        .filter(h => ['NOTES_UPDATED', 'INITIAL_BOOKING', 'RESCHEDULE', 'STATUS_CHANGE'].includes(h.action))
-                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                        .slice(0, 5)
-                        .map((history, idx) => (
-                          <div key={idx} className="flex items-start space-x-2 mb-2 last:mb-0">
-                            <div className="mt-1">
-                              {history.action === 'NOTES_UPDATED' && <FiFileText className="h-4 w-4 text-blue-500" />}
-                              {history.action === 'INITIAL_BOOKING' && <FiCalendar className="h-4 w-4 text-green-500" />}
-                              {history.action === 'RESCHEDULE' && <FiClock className="h-4 w-4 text-orange-500" />}
-                              {history.action === 'STATUS_CHANGE' && <FiActivity className="h-4 w-4 text-purple-500" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs text-gray-700 font-semibold">
-                                {history.action === 'NOTES_UPDATED' && 'Notes Updated'}
-                                {history.action === 'INITIAL_BOOKING' && 'Appointment Booked'}
-                                {history.action === 'RESCHEDULE' && 'Appointment Rescheduled'}
-                                {history.action === 'STATUS_CHANGE' && 'Status Changed'}
-                                <span className="ml-2 text-gray-400 font-normal">by {history.performedByName}</span>
-                                <span className="ml-2 text-gray-400 font-normal">{new Date(history.timestamp).toLocaleString()}</span>
-                              </div>
-                              
-                              {history.action === 'NOTES_UPDATED' && history.details && (
-                                <div className="text-xs text-gray-600 mt-1">
-                                  <div className="bg-blue-50 p-2 rounded">
-                                    <div className="font-medium text-blue-800">
-                                      {history.details.changeType === 'added' ? 'Notes Added' : 'Notes Modified'}
-                                    </div>
-                                    {history.details.oldNotes && (
-                                      <div className="text-gray-600 mt-1">
-                                        <span className="font-medium">Previous:</span> {history.details.oldNotes.slice(0, 60)}{history.details.oldNotes.length > 60 ? '...' : ''}
-                                      </div>
+                  <div className="mt-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">📋 Booking History</h4>
+                    {selectedEvent.extendedProps?.lead?.bookingHistory && Array.isArray(selectedEvent.extendedProps.lead.bookingHistory) && selectedEvent.extendedProps.lead.bookingHistory.filter(e => e.action && e.action.trim() !== '' && (e.performedByName || e.timestamp)).length > 0 ? (
+                      <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                        {selectedEvent.extendedProps.lead.bookingHistory
+                          .filter(entry => entry.action && entry.action.trim() !== '' && (entry.performedByName || entry.timestamp))
+                          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                          .map((entry, idx) => (
+                            <div key={idx} className="border-l-4 border-blue-500 pl-3 py-2 bg-gray-50 rounded-r-lg">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <span className="text-xs font-semibold text-gray-900">{entry.action}</span>
+                                    {entry.performedByName && (
+                                      <span className="text-xs text-gray-500">by {entry.performedByName}</span>
                                     )}
-                                    <div className="text-gray-800 mt-1">
-                                      <span className="font-medium">New:</span> {history.details.newNotes.slice(0, 60)}{history.details.newNotes.length > 60 ? '...' : ''}
-                                    </div>
                                   </div>
-                                </div>
-                              )}
-                              
-                              {history.action === 'RESCHEDULE' && history.details && (
-                                <div className="text-xs text-gray-600 mt-1">
-                                  <div className="bg-orange-50 p-2 rounded">
-                                    <div><span className="font-medium">From:</span> {new Date(history.details.oldDate).toLocaleString()}</div>
-                                    <div><span className="font-medium">To:</span> {new Date(history.details.newDate).toLocaleString()}</div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      {(!selectedEvent.extendedProps.lead.bookingHistory || !Array.isArray(selectedEvent.extendedProps.lead.bookingHistory) || selectedEvent.extendedProps.lead.bookingHistory.filter(h => ['NOTES_UPDATED', 'INITIAL_BOOKING', 'RESCHEDULE', 'STATUS_CHANGE'].includes(h.action)).length === 0) && (
-                        <div className="text-xs text-gray-400 italic">No recent activity</div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Message History */}
-                  {selectedEvent.extendedProps?.lead?.bookingHistory && Array.isArray(selectedEvent.extendedProps.lead.bookingHistory) && (
-                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 mt-4 max-h-48 overflow-y-auto">
-                      <h4 className="text-base font-bold text-blue-700 mb-2">Message History</h4>
-                      {selectedEvent.extendedProps.lead.bookingHistory
-                        .filter(h => ['EMAIL_SENT','EMAIL_RECEIVED','SMS_SENT','SMS_RECEIVED'].includes(h.action))
-                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                        .map((history, idx) => (
-                          <div key={idx} className="flex items-start space-x-2 mb-2 last:mb-0">
-                            <div className="mt-1">
-                              {['EMAIL_SENT','EMAIL_RECEIVED'].includes(history.action) && <FiMail className={`h-4 w-4 ${history.action==='EMAIL_SENT'?'text-blue-500':'text-green-600'}`} />}
-                              {['SMS_SENT','SMS_RECEIVED'].includes(history.action) && <FiMessageSquare className={`h-4 w-4 ${history.action==='SMS_SENT'?'text-blue-400':'text-green-400'}`} />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs text-gray-700 font-semibold">
-                                {history.action==='EMAIL_SENT' && 'Email Sent'}
-                                {history.action==='EMAIL_RECEIVED' && 'Email Received'}
-                                {history.action==='SMS_SENT' && 'Text Sent'}
-                                {history.action==='SMS_RECEIVED' && 'Text Received'}
-                                <span className="ml-2 text-gray-400 font-normal">{new Date(history.timestamp).toLocaleString()}</span>
+                                  {entry.details && Object.keys(entry.details).length > 0 && (
+                                    <div className="text-xs text-gray-600">
+                                      {entry.action === 'NOTES_UPDATED' ? (
+                                        <div className="bg-blue-50 p-2 rounded">
+                                          <div className="font-medium text-blue-800 mb-1">
+                                            Notes {entry.details.changeType === 'added' ? 'Added' : 'Modified'}
+                                          </div>
+                                          {entry.details.oldNotes && (
+                                            <div className="text-gray-600 mb-1">
+                                              <span className="font-medium">Previous:</span> {entry.details.oldNotes.slice(0, 80)}{entry.details.oldNotes.length > 80 ? '...' : ''}
+                                            </div>
+                                          )}
+                                          <div className="text-gray-800">
+                                            <span className="font-medium">New:</span> {entry.details.newNotes?.slice(0, 80)}{entry.details.newNotes?.length > 80 ? '...' : ''}
+                                          </div>
+                                        </div>
+                                      ) : entry.action === 'REASSIGNMENT' ? (
+                                        <div className="bg-yellow-50 p-2 rounded">
+                                          <span className="font-medium">From:</span> {entry.details.previousBookerName}
+                                          {' → '}
+                                          <span className="font-medium">To:</span> {entry.details.newBookerName}
+                                        </div>
+                                      ) : entry.action === 'RESCHEDULE' ? (
+                                        <div className="bg-orange-50 p-2 rounded">
+                                          {entry.details.oldDate && <div><span className="font-medium">From:</span> {new Date(entry.details.oldDate).toLocaleString()}</div>}
+                                          {entry.details.newDate && <div><span className="font-medium">To:</span> {new Date(entry.details.newDate).toLocaleString()}</div>}
+                                        </div>
+                                      ) : entry.action === 'EMAIL_SENT' || entry.action === 'EMAIL_RECEIVED' ? (
+                                        <div className="bg-blue-50 p-2 rounded">
+                                          {entry.details.subject && <div className="truncate"><span className="font-medium">Subject:</span> {entry.details.subject}</div>}
+                                          {entry.details.body && <div className="truncate text-gray-500">{entry.details.body.slice(0, 80)}{entry.details.body.length > 80 ? '...' : ''}</div>}
+                                        </div>
+                                      ) : entry.action === 'SMS_SENT' || entry.action === 'SMS_RECEIVED' ? (
+                                        <div className="bg-green-50 p-2 rounded">
+                                          {entry.details.body && <div className="truncate">{entry.details.body.slice(0, 80)}{entry.details.body.length > 80 ? '...' : ''}</div>}
+                                        </div>
+                                      ) : (
+                                        Object.entries(entry.details).slice(0, 3).map(([key, value]) => (
+                                          <div key={key} className="truncate">
+                                            <span className="font-medium">{key}:</span> {typeof value === 'object' ? JSON.stringify(value) : String(value ?? 'N/A')}
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-gray-400 ml-3 shrink-0">
+                                  {(() => {
+                                    try {
+                                      if (!entry.timestamp) return '';
+                                      const date = new Date(entry.timestamp);
+                                      if (isNaN(date.getTime())) return '';
+                                      const diffMs = Date.now() - date;
+                                      const diffH = diffMs / 3600000;
+                                      const diffD = diffMs / 86400000;
+                                      if (diffH < 1) return `${Math.max(0, Math.floor(diffMs / 60000))}m ago`;
+                                      if (diffH < 24) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                                      if (diffD < 7) return `${Math.floor(diffD)}d ago`;
+                                      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                                    } catch { return ''; }
+                                  })()}
+                                </div>
                               </div>
-                              {history.details?.subject && (
-                                <div className="text-xs text-gray-500 truncate"><b>Subject:</b> {history.details.subject}</div>
-                              )}
-                              <div className="text-xs text-gray-600 truncate"><b>Message:</b> {history.details?.body?.slice(0, 80)}{history.details?.body?.length > 80 ? '...' : ''}</div>
-                              <div className="text-[10px] text-gray-400">{history.details?.direction==='sent'?'To':'From'}: {history.performedByName}</div>
                             </div>
-                          </div>
-                        ))}
-                      {(!selectedEvent.extendedProps.lead.bookingHistory || !Array.isArray(selectedEvent.extendedProps.lead.bookingHistory) || selectedEvent.extendedProps.lead.bookingHistory.filter(h => ['EMAIL_SENT','EMAIL_RECEIVED','SMS_SENT','SMS_RECEIVED'].includes(h.action)).length === 0) && (
-                        <div className="text-xs text-gray-400 italic">No messages yet</div>
-                      )}
-                    </div>
-                  )}
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-gray-400">
+                        <div className="text-2xl mb-1">📋</div>
+                        <p className="text-xs">No booking history available</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Bottom Action Buttons */}

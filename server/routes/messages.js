@@ -230,9 +230,11 @@ router.post('/send', auth, async (req, res) => {
       template_id: templateId,
       type: template.type || 'both',
       subject: processedTemplate.subject || template.subject,
-      email_body: processedTemplate.emailBody,
-      sms_body: processedTemplate.smsBody,
-      content: processedTemplate.emailBody || processedTemplate.smsBody || processedTemplate.subject,
+      email_body: processedTemplate.email_body || processedTemplate.emailBody || null,
+      sms_body: processedTemplate.sms_body || processedTemplate.smsBody || null,
+      content: processedTemplate.email_body || processedTemplate.emailBody ||
+               processedTemplate.sms_body || processedTemplate.smsBody ||
+               processedTemplate.subject || null,
       recipient_email: lead.email || null,
       recipient_phone: lead.phone || null,
       status: 'pending',
@@ -265,11 +267,16 @@ router.post('/send', auth, async (req, res) => {
     };
 
     try {
+      // Account priority: booking history → template setting → default
+      const bookingAccount = await MessagingService.getLeadBookingAccount(leadId);
+      const emailAccount = bookingAccount || template.email_account || 'primary';
+
       if (adaptedTemplate.sendEmail && lead.email) {
         await MessagingService.sendEmail({
           ...newMessage,
+          email_body: processedTemplate.email_body || processedTemplate.emailBody || newMessage.email_body,
           recipient_email: lead.email
-        });
+        }, emailAccount, template.sender_name || null);
       }
       if (adaptedTemplate.sendSMS && lead.phone) {
         await MessagingService.sendSMS({
@@ -366,10 +373,12 @@ router.post('/:id/resend', auth, async (req, res) => {
         };
 
         if (adaptedTemplate.sendEmail && message.leads?.email) {
+          const bookingAccount = await MessagingService.getLeadBookingAccount(message.lead_id);
+          const emailAccount = bookingAccount || template.email_account || 'primary';
           await MessagingService.sendEmail({
             ...message,
             recipient_email: message.leads.email
-          });
+          }, emailAccount, template.sender_name || null);
         }
         if (adaptedTemplate.sendSMS && message.leads?.phone) {
           await MessagingService.sendSMS({

@@ -12,11 +12,11 @@ const { google } = require('googleapis');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const { getAuthedClient } = require('./gmailClient');
 
-// The sending address — must match the account authorised via OAuth
-const GMAIL_FROM = process.env.GMAIL_USER || process.env.EMAIL_USER;
+// Default sending address — must match an account authorised via OAuth
+const DEFAULT_GMAIL_FROM = process.env.GMAIL_USER || process.env.EMAIL_USER;
 const FROM_NAME = 'The Editorial Co';
 
-console.log(`[Gmail API] Sending as: ${FROM_NAME} <${GMAIL_FROM || 'NOT SET'}>`);
+console.log(`[Gmail API] Default sending account: ${FROM_NAME} <${DEFAULT_GMAIL_FROM || 'NOT SET'}>`);
 
 if (EMAIL_SENDING_DISABLED) {
   console.log('[Gmail API] EMAIL SENDING DISABLED (kill switch active)');
@@ -25,17 +25,16 @@ if (EMAIL_SENDING_DISABLED) {
 /**
  * Send an email via the Gmail API.
  *
- * Signature is intentionally the same as the old SMTP version so every
- * existing caller (messagingService, scheduler, etc.) keeps working.
- *
  * @param {string} to            - Recipient email address
  * @param {string} subject       - Email subject
  * @param {string} body          - Email body (HTML or plain text)
  * @param {Array}  attachments   - Nodemailer-style attachment objects (optional)
- * @param {string} _accountKey   - Kept for backwards compat, ignored (single account)
+ * @param {string} fromEmail     - Sending Gmail address (defaults to GMAIL_USER env var)
  * @returns {Promise<{success: boolean, response?: string, error?: string}>}
  */
-async function sendEmail(to, subject, body, attachments = [], _accountKey = 'primary') {
+async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null) {
+  const GMAIL_FROM = (fromEmail && fromEmail !== 'primary') ? fromEmail : DEFAULT_GMAIL_FROM;
+  const resolvedFromName = fromName || FROM_NAME;
   const emailId = Math.random().toString(36).substring(2, 8);
 
   console.log(`[${emailId}] Sending email: ${subject} -> ${to}`);
@@ -91,7 +90,7 @@ async function sendEmail(to, subject, body, attachments = [], _accountKey = 'pri
 
     // --- Build MIME message with MailComposer ---
     const mailOptions = {
-      from: { name: FROM_NAME, address: GMAIL_FROM },
+      from: { name: resolvedFromName, address: GMAIL_FROM },
       to,
       subject,
       ...(isHtml ? { html: body } : { text: body }),

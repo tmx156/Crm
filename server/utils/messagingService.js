@@ -266,6 +266,28 @@ class MessagingService {
         return null;
       }
 
+      // Determine email account: booking_account on lead locks it in permanently.
+      // On a brand-new lead it won't be set yet, so derive from template and then write it.
+      const bookingAccount = effectiveSendEmail ? await this.getLeadBookingAccount(leadId) : null;
+      const emailAccount = bookingAccount || options.emailAccount || template.email_account || 'primary';
+      if (effectiveSendEmail) {
+        console.log(`📧 Booking confirmation account: ${emailAccount} (source: ${bookingAccount ? 'lead.booking_account' : options.emailAccount ? 'options' : 'template'})`);
+
+        // Lock the owning account on the lead the first time a confirmation is sent.
+        // Resends will skip this because getLeadBookingAccount will already return a value.
+        if (!bookingAccount) {
+          const { error: lockErr } = await supabase
+            .from('leads')
+            .update({ booking_account: emailAccount })
+            .eq('id', leadId);
+          if (lockErr) {
+            console.warn(`⚠️ Could not lock booking_account (run migration?): ${lockErr.message}`);
+          } else {
+            console.log(`📧 Locked booking_account = ${emailAccount} on lead ${leadId}`);
+          }
+        }
+      }
+
       // Create message record using Supabase
       const messageId = uuidv4();
       console.log(`📝 Generated message ID: ${messageId}`);
@@ -274,6 +296,7 @@ class MessagingService {
         .insert({
           id: messageId,
           lead_id: leadId,
+          template_id: template.id || null,
           type: (effectiveSendEmail && effectiveSendSms) ? 'both' : (effectiveSendEmail ? 'email' : 'sms'),
           content: effectiveSendEmail ? processedTemplate.email_body : processedTemplate.sms_body,
           status: 'sent',
@@ -283,6 +306,7 @@ class MessagingService {
           recipient_phone: effectiveSendSms ? lead.phone : null,
           sent_by: userId && userId !== 'system' ? userId : null,
           sent_by_name: user?.name || 'System',
+          gmail_account_key: effectiveSendEmail ? emailAccount : null,
           sent_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -458,9 +482,7 @@ class MessagingService {
 
       // Send actual messages according to effective channels
       if (effectiveSendEmail) {
-        // Use email account from options or template
-        const emailAccount = options.emailAccount || template.email_account || 'primary';
-        await this.sendEmail(message, emailAccount);
+        await this.sendEmail(message, emailAccount, template.sender_name || null);
       }
       if (effectiveSendSms) {
         await this.sendSMS(message);
@@ -474,7 +496,8 @@ class MessagingService {
   }
 
   // Send appointment reminder
-  static async sendAppointmentReminder(leadId, userId, bookingDate, reminderDays = 5) {
+  // options.templateId — use a specific template (passed by scheduler for account matching)
+  static async sendAppointmentReminder(leadId, userId, bookingDate, reminderDays = 5, options = {}) {
     try {
       // Get lead using Supabase
       const { data: lead, error: leadError } = await supabase
@@ -522,28 +545,48 @@ class MessagingService {
         user = { id: null, name: 'System', email: '' };
       }
 
-      // Get appointment reminder template using Supabase
-      const { data: templates, error: templateError } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('type', 'appointment_reminder')
-        .eq('is_active', true)
-        .limit(1);
-
-      if (templateError) {
-        console.error('Error fetching reminder template:', templateError);
-        return null;
+      // Get reminder template — use specific one if scheduler passed templateId
+      let template = null;
+      if (options.templateId) {
+        const { data: specificTpl } = await supabase
+          .from('templates')
+          .select('*')
+          .eq('id', options.templateId)
+          .single();
+        template = specificTpl || null;
+        if (!template) {
+          console.warn(`⚠️ Reminder templateId ${options.templateId} not found — aborting to prevent wrong-brand send`);
+          return null;
+        }
       }
 
-      if (!templates || templates.length === 0) {
-        console.log('No appointment reminder template found');
-        return null;
+      if (!template) {
+        const { data: templates, error: templateError } = await supabase
+          .from('templates')
+          .select('*')
+          .eq('type', 'appointment_reminder')
+          .eq('is_active', true)
+          .limit(1);
+
+        if (templateError) {
+          console.error('Error fetching reminder template:', templateError);
+          return null;
+        }
+
+        if (!templates || templates.length === 0) {
+          console.log('No appointment reminder template found');
+          return null;
+        }
+
+        template = templates[0];
       }
 
-      const template = templates[0];
       const effectiveSendEmail = !!template.send_email;
       const effectiveSendSms = !!template.send_sms;
-      const emailAccount = template.email_account || 'primary';
+      // Account priority: booking history → template setting → default
+      const bookingAccount = await this.getLeadBookingAccount(leadId);
+      const emailAccount = bookingAccount || template.email_account || 'primary';
+      console.log(`📧 Reminder account: ${emailAccount} (source: ${bookingAccount ? 'booking history' : 'template'})`);
 
       // If neither channel selected, do nothing
       if (!effectiveSendEmail && !effectiveSendSms) {
@@ -572,6 +615,7 @@ class MessagingService {
           sent_by: user.id || null,
           sent_by_name: user.name || 'System',
           template_id: template.id || null,
+          gmail_account_key: effectiveSendEmail ? emailAccount : null,
           sent_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -639,7 +683,7 @@ class MessagingService {
 
       // Send actual messages based on template channel settings
       if (effectiveSendEmail) {
-        await this.sendEmail(message, emailAccount);
+        await this.sendEmail(message, emailAccount, template.sender_name || null);
       }
       if (effectiveSendSms) {
         await this.sendSMS(message);
@@ -652,8 +696,57 @@ class MessagingService {
     }
   }
 
+  /**
+   * Returns the Gmail account that owns this lead for all outbound email.
+   * Primary source: leads.booking_account (set once at first booking, never overwritten).
+   * Fallback: oldest booking_confirmation message (for legacy leads).
+   */
+  static async getLeadBookingAccount(leadId) {
+    try {
+      // Primary source: booking_account locked on the lead at first booking time.
+      // This is immune to resends using a different template/account.
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('booking_account')
+        .eq('id', leadId)
+        .maybeSingle();
+
+      if (lead?.booking_account) {
+        return lead.booking_account;
+      }
+
+      // Fallback for legacy leads: use the FIRST booking confirmation message.
+      // Two-step to avoid unreliable PostgREST embedded-filter syntax.
+      const { data: bcTemplates } = await supabase
+        .from('templates')
+        .select('id')
+        .eq('type', 'booking_confirmation');
+
+      const bcIds = (bcTemplates || []).map(t => t.id);
+
+      if (bcIds.length > 0) {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('gmail_account_key')
+          .eq('lead_id', leadId)
+          .in('template_id', bcIds)
+          .not('gmail_account_key', 'is', null)
+          .order('sent_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data?.gmail_account_key) {
+          return data.gmail_account_key;
+        }
+      }
+    } catch (e) {
+      console.warn(`⚠️ getLeadBookingAccount failed for lead ${leadId}:`, e.message);
+    }
+    return null;
+  }
+
   // Send email
-  static async sendEmail(message, emailAccount = 'primary') {
+  static async sendEmail(message, emailAccount = 'primary', senderName = null) {
     const messageId = message.id || 'unknown';
     console.log('\n' + '='.repeat(80));
     console.log(`📧 [EMAIL SEND ATTEMPT]`);
@@ -693,7 +786,8 @@ class MessagingService {
         message.subject,
         message.email_body,
         message.attachments || [],
-        emailAccount // Pass the email account key
+        emailAccount,
+        senderName
       );
       
       const timeTaken = Date.now() - startTime;
