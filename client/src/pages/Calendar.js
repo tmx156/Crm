@@ -803,9 +803,11 @@ const Calendar = () => {
         );
         setWelcomePackTemplates(bookingTemplates);
 
-        // Set default selection to first template if available
-        if (bookingTemplates.length > 0 && !selectedWelcomePackTemplate) {
-          setSelectedWelcomePackTemplate(bookingTemplates[0].id || bookingTemplates[0]._id);
+        if (bookingTemplates.length > 0) {
+          if (!selectedWelcomePackTemplate) {
+            setSelectedWelcomePackTemplate(bookingTemplates[0].id || bookingTemplates[0]._id);
+          }
+          setBookingTemplateId(prev => prev || (bookingTemplates[0].id || bookingTemplates[0]._id));
         }
       }
     } catch (error) {
@@ -2244,7 +2246,6 @@ const Calendar = () => {
                         onChange={(e) => setBookingTemplateId(e.target.value)}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="">Default template</option>
                         {welcomePackTemplates.map(t => (
                           <option key={t.id || t._id} value={t.id || t._id}>{t.name}</option>
                         ))}
@@ -2670,7 +2671,6 @@ const Calendar = () => {
                           onChange={(e) => setSelectedWelcomePackTemplate(e.target.value)}
                           className="flex-1 px-3 py-2 text-sm border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">Select template...</option>
                           {welcomePackTemplates.map((template) => (
                             <option key={template.id || template._id} value={template.id || template._id}>
                               {template.name}

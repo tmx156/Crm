@@ -12,9 +12,13 @@ const { google } = require('googleapis');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const { getAuthedClient } = require('./gmailClient');
 
-// Default sending address — must match an account authorised via OAuth
-const DEFAULT_GMAIL_FROM = process.env.GMAIL_USER || process.env.EMAIL_USER;
-const FROM_NAME = 'The Editorial Co';
+// Default sending address — Camry Models is the primary account
+const DEFAULT_GMAIL_FROM = 'bookings@camrymodels.co.uk';
+const ACCOUNT_NAMES = {
+  'bookings@camrymodels.co.uk': 'Camry Models',
+  'bookings@theeditorialco.co.uk': 'The Editorial Co'
+};
+const FROM_NAME = 'Camry Models';
 
 console.log(`[Gmail API] Default sending account: ${FROM_NAME} <${DEFAULT_GMAIL_FROM || 'NOT SET'}>`);
 
@@ -34,7 +38,7 @@ if (EMAIL_SENDING_DISABLED) {
  */
 async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null) {
   const GMAIL_FROM = (fromEmail && fromEmail !== 'primary') ? fromEmail : DEFAULT_GMAIL_FROM;
-  const resolvedFromName = fromName || FROM_NAME;
+  const resolvedFromName = fromName || ACCOUNT_NAMES[GMAIL_FROM] || FROM_NAME;
   const emailId = Math.random().toString(36).substring(2, 8);
 
   console.log(`[${emailId}] Sending email: ${subject} -> ${to}`);

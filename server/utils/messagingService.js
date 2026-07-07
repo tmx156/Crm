@@ -272,7 +272,7 @@ class MessagingService {
       // Determine email account: booking_account on lead locks it in permanently.
       // On a brand-new lead it won't be set yet, so derive from template and then write it.
       const bookingAccount = effectiveSendEmail ? await this.getLeadBookingAccount(leadId) : null;
-      const emailAccount = bookingAccount || options.emailAccount || template.email_account || 'primary';
+      const emailAccount = bookingAccount || options.emailAccount || template.email_account || 'bookings@camrymodels.co.uk';
       if (effectiveSendEmail) {
         console.log(`📧 Booking confirmation account: ${emailAccount} (source: ${bookingAccount ? 'lead.booking_account' : options.emailAccount ? 'options' : 'template'})`);
 
@@ -589,7 +589,7 @@ class MessagingService {
       const effectiveSendSms = !!template.send_sms;
       // Account priority: booking history → template setting → default
       const bookingAccount = await this.getLeadBookingAccount(leadId);
-      const emailAccount = bookingAccount || template.email_account || 'primary';
+      const emailAccount = bookingAccount || template.email_account || 'bookings@camrymodels.co.uk';
       console.log(`📧 Reminder account: ${emailAccount} (source: ${bookingAccount ? 'booking history' : 'template'})`);
 
       // If neither channel selected, do nothing
@@ -750,7 +750,7 @@ class MessagingService {
   }
 
   // Send email
-  static async sendEmail(message, emailAccount = 'primary', senderName = null) {
+  static async sendEmail(message, emailAccount = 'bookings@camrymodels.co.uk', senderName = null) {
     const messageId = message.id || 'unknown';
     console.log('\n' + '='.repeat(80));
     console.log(`📧 [EMAIL SEND ATTEMPT]`);
