@@ -134,7 +134,7 @@ class MessagingService {
         second: '2-digit',
         timeZone: 'UTC' // Keep UTC time to match calendar
       }) : '',
-      '{companyName}': 'The Editorial Co',
+      '{companyName}': template.email_account === 'bookings@theeditorialco.co.uk' ? 'The Editorial Co' : 'Camry Models',
       '{currentDate}': new Date().toLocaleDateString(),
       '{currentTime}': new Date().toLocaleTimeString()
     };

@@ -1207,7 +1207,7 @@ const Calendar = () => {
     });
     setShowLeadFormModal(false);
     setIsBookingInProgress(false);
-    setBookingTemplateId('');
+    setBookingTemplateId(welcomePackTemplates.length > 0 ? (welcomePackTemplates[0].id || welcomePackTemplates[0]._id) : '');
     
     // Refresh calendar events to show the updated booking
     setTimeout(() => {
