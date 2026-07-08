@@ -13,12 +13,16 @@ const VERBOSE_LOGGING = process.env.VERBOSE_GMAIL_LOGGING === 'true';
 const GMAIL_EMAIL = process.env.GMAIL_EMAIL || process.env.GMAIL_USER || '';
 
 class GmailPoller {
-  constructor(ioInstance) {
-    if (GmailPoller._instance) {
-      if (ioInstance) GmailPoller._instance.io = ioInstance;
-      return GmailPoller._instance;
+  // Keyed by email so each account gets its own independent poller instance
+  static _instances = new Map();
+
+  constructor(email, ioInstance) {
+    if (GmailPoller._instances.has(email)) {
+      const existing = GmailPoller._instances.get(email);
+      if (ioInstance) existing.io = ioInstance;
+      return existing;
     }
-    GmailPoller._instance = this;
+    GmailPoller._instances.set(email, this);
 
     this.supabase = getSupabaseClient();
     this.gmail = null;
@@ -27,17 +31,17 @@ class GmailPoller {
     this.cleanupTimer = null;
     this.io = ioInstance;
     this.processedMessages = new Map();
-    this.processedMessagesFile = path.join(__dirname, '../data/processed_gmail_messages.json');
+    this.processedMessagesFile = path.join(__dirname, `../data/processed_gmail_messages_${email.replace(/[^a-z0-9]/gi, '_')}.json`);
     this.retryAttempts = 3;
     this.retryDelay = 2000;
     this.maxProcessedMessages = 10000;
     this.messageRetentionDays = 30;
     this.pollCount = 0;
-    this.accountEmail = GMAIL_EMAIL;
+    this.accountEmail = email;
 
     this.disabled = false;
     this.loadProcessedMessages().catch(err => {
-      console.error('📧 Failed to load processed messages:', err.message);
+      console.error(`📧 [${email}] Failed to load processed messages:`, err.message);
     });
   }
 
@@ -50,7 +54,7 @@ class GmailPoller {
       const { data: dbMessages, error } = await this.supabase
         .from('processed_gmail_messages')
         .select('gmail_message_id, processed_at')
-        .eq('account_key', 'primary')
+        .eq('account_key', this.accountEmail)
         .gte('processed_at', new Date(Date.now() - this.messageRetentionDays * 24 * 60 * 60 * 1000).toISOString());
 
       if (!error && dbMessages && dbMessages.length > 0) {
@@ -86,7 +90,7 @@ class GmailPoller {
       const records = Array.from(this.processedMessages.entries())
         .slice(-1000)
         .map(([gmail_message_id, timestamp]) => ({
-          account_key: 'primary',
+          account_key: this.accountEmail,
           gmail_message_id,
           processed_at: new Date(timestamp).toISOString()
         }));
@@ -381,7 +385,7 @@ class GmailPoller {
         recipient_email: accountEmail,
         status: 'delivered',
         gmail_message_id: messageId,
-        gmail_account_key: 'primary',
+        gmail_account_key: this.accountEmail,
         attachments: allAttachments.length > 0 ? allAttachments : null,
         sent_at: emailReceivedDate,
         created_at: new Date().toISOString(),
@@ -478,7 +482,27 @@ class GmailPoller {
       .limit(1)
       .maybeSingle();
 
-    return lead || null;
+    if (lead) return lead;
+
+    // googlemail.com and gmail.com are the same mailbox (Google's legacy UK
+    // alias) but senders' From headers inconsistently use either domain, so a
+    // lead stored under one won't match a reply sent from the other.
+    if (emailLower.endsWith('@googlemail.com') || emailLower.endsWith('@gmail.com')) {
+      const altEmail = emailLower.endsWith('@googlemail.com')
+        ? emailLower.replace(/@googlemail\.com$/, '@gmail.com')
+        : emailLower.replace(/@gmail\.com$/, '@googlemail.com');
+
+      const { data: altLead } = await this.supabase
+        .from('leads')
+        .select('*')
+        .ilike('email', altEmail)
+        .limit(1)
+        .maybeSingle();
+
+      if (altLead) return altLead;
+    }
+
+    return null;
   }
 
   async updateLeadHistory(lead, subject, body, emailReceivedDate) {
@@ -579,17 +603,55 @@ class GmailPoller {
   }
 }
 
-function startGmailPoller(socketIoInstance) {
-  const email = GMAIL_EMAIL;
-  if (!email) {
+function startGmailPoller(socketIoInstance, email) {
+  const accountEmail = email || GMAIL_EMAIL;
+  if (!accountEmail) {
     console.error('❌ Gmail poller not started: Set GMAIL_EMAIL or GMAIL_USER in .env');
     return null;
   }
 
-  console.log(`📧 Starting Gmail poller for ${email} (tokens loaded from database)...`);
-  const poller = new GmailPoller(socketIoInstance);
-  poller.start().catch(e => console.error('❌ Gmail poller startup failed:', e.message));
+  console.log(`📧 Starting Gmail poller for ${accountEmail} (tokens loaded from database)...`);
+  const poller = new GmailPoller(accountEmail, socketIoInstance);
+  poller.start().catch(e => console.error(`❌ Gmail poller startup failed for ${accountEmail}:`, e.message));
   return poller;
 }
 
-module.exports = { startGmailPoller, GmailPoller };
+/**
+ * Start one GmailPoller for every account in the gmail_accounts table.
+ * Falls back to the env-var account if the table is empty.
+ */
+async function startAllGmailPollers(socketIoInstance) {
+  const supabase = getSupabaseClient();
+
+  let emails = [];
+  try {
+    const { data, error } = await supabase.from('gmail_accounts').select('email');
+    if (!error && data && data.length > 0) {
+      emails = data.map(r => r.email);
+    }
+  } catch (e) {
+    console.error('❌ Could not query gmail_accounts:', e.message);
+  }
+
+  if (emails.length === 0) {
+    // Fall back to legacy env-var account
+    const fallback = GMAIL_EMAIL;
+    if (fallback) {
+      console.log(`📧 No accounts in gmail_accounts table; falling back to ${fallback}`);
+      emails = [fallback];
+    } else {
+      console.error('❌ No Gmail accounts configured. Add an account via /api/gmail/auth-url');
+      return [];
+    }
+  }
+
+  const pollers = [];
+  for (const email of emails) {
+    const poller = startGmailPoller(socketIoInstance, email);
+    if (poller) pollers.push(poller);
+  }
+  console.log(`📧 Started ${pollers.length} Gmail poller(s): ${emails.join(', ')}`);
+  return pollers;
+}
+
+module.exports = { startGmailPoller, startAllGmailPollers, GmailPoller };

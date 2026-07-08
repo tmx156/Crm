@@ -56,7 +56,7 @@ const gmailAuthRoutes = require('./routes/gmail-auth');
 const webhookRoutes = require('./routes/webhook');
 const usersPublicRoutes = require('./routes/usersPublic');
 const scheduler = require('./utils/scheduler');
-const { startGmailPoller } = require('./utils/gmailPoller');
+const { startAllGmailPollers } = require('./utils/gmailPoller');
 const { startGoogleSheetsSync } = require('./utils/googleSheetsSync');
 const googleSheetsRoutes = require('./routes/google-sheets');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
@@ -698,13 +698,9 @@ Promise.race([
     // BulkSMS poller disabled
     console.log('📡 BulkSMS poller disabled');
 
-    // Gmail API Poller
-    try {
-      console.log('📧 Starting Gmail Poller...');
-      startGmailPoller(io);
-    } catch (e) {
-      console.error('❌ Failed to start Gmail poller:', e?.message || e);
-    }
+    // Gmail API Poller (starts one poller per account in gmail_accounts table)
+    console.log('📧 Starting Gmail Poller(s)...');
+    startAllGmailPollers(io).catch(e => console.error('❌ Failed to start Gmail poller(s):', e?.message || e));
 
     // Google Sheets Sync
     try {

@@ -840,8 +840,10 @@ router.get('/:id([0-9a-fA-F-]{36})/messages', auth, async (req, res) => {
       .eq('lead_id', leadId)
       .order('created_at', { ascending: true });
 
+    // Booking confirmations sent with both channels enabled are stored as
+    // type 'both' rather than 'email'/'sms', so include them in either filter.
     if (type && (type === 'sms' || type === 'email')) {
-      query = query.eq('type', type);
+      query = query.in('type', [type, 'both']);
     }
 
     const { data: messages, error } = await query;
@@ -854,8 +856,8 @@ router.get('/:id([0-9a-fA-F-]{36})/messages', auth, async (req, res) => {
     res.json({
       messages: messages || [],
       total: (messages || []).length,
-      smsCount: (messages || []).filter(m => m.type === 'sms').length,
-      emailCount: (messages || []).filter(m => m.type === 'email').length
+      smsCount: (messages || []).filter(m => m.type === 'sms' || m.type === 'both').length,
+      emailCount: (messages || []).filter(m => m.type === 'email' || m.type === 'both').length
     });
   } catch (error) {
     console.error('Lead messages route error:', error);

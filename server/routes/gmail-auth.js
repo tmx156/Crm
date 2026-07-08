@@ -132,4 +132,24 @@ router.get('/callback', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/gmail/accounts
+ * Returns the list of connected Gmail accounts.
+ */
+router.get('/accounts', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('gmail_accounts')
+      .select('email, updated_at')
+      .order('updated_at', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ accounts: (data || []).map(r => r.email) });
+  } catch (err) {
+    console.error('[Gmail] Error listing accounts:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
