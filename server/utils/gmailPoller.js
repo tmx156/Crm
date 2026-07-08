@@ -645,6 +645,20 @@ async function startAllGmailPollers(socketIoInstance) {
     }
   }
 
+  // Optional allowlist to limit polling to specific accounts (comma-separated),
+  // e.g. GMAIL_POLL_ACCOUNTS=bookings@camrymodels.co.uk
+  const allowlist = (process.env.GMAIL_POLL_ACCOUNTS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowlist.length > 0) {
+    const skipped = emails.filter(e => !allowlist.includes(e.toLowerCase()));
+    emails = emails.filter(e => allowlist.includes(e.toLowerCase()));
+    if (skipped.length > 0) {
+      console.log(`📧 GMAIL_POLL_ACCOUNTS allowlist active; not polling: ${skipped.join(', ')}`);
+    }
+  }
+
   const pollers = [];
   for (const email of emails) {
     const poller = startGmailPoller(socketIoInstance, email);
