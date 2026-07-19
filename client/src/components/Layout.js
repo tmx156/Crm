@@ -25,7 +25,8 @@ import {
   FiTrendingUp,
   FiMessageSquare,
   FiActivity,
-  FiCpu
+  FiCpu,
+  FiBarChart
 } from 'react-icons/fi';
 
 const Layout = ({ children }) => {
@@ -49,10 +50,18 @@ const Layout = ({ children }) => {
   const { socket, isConnected } = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
-  // Add unique refs for each dropdown
+  // Add unique refs for each dropdown. The mobile and desktop sidebars render
+  // their own copies of the same dropdown simultaneously (one hidden via CSS,
+  // not unmounted), so each needs its own ref - sharing one ref means
+  // `.current` only ever points at whichever copy rendered last (desktop),
+  // making the mobile copy's own taps look like "outside clicks" and close
+  // the menu before the navigation click can register.
   const leadsDropdownRef = useRef(null);
+  const leadsDropdownMobileRef = useRef(null);
   const templatesDropdownRef = useRef(null);
+  const templatesDropdownMobileRef = useRef(null);
   const retargetingDropdownRef = useRef(null);
+  const retargetingDropdownMobileRef = useRef(null);
   const notificationsDropdownRef = useRef(null);
   const messagesDropdownRef = useRef(null);
 
@@ -67,12 +76,16 @@ const Layout = ({ children }) => {
   useEffect(() => {
     // Removed auto-close for Leads dropdown - it will stay open until user manually closes it
     const handleClickOutsideTemplates = (event) => {
-      if (templatesDropdownRef.current && !templatesDropdownRef.current.contains(event.target)) {
+      const inDesktop = templatesDropdownRef.current && templatesDropdownRef.current.contains(event.target);
+      const inMobile = templatesDropdownMobileRef.current && templatesDropdownMobileRef.current.contains(event.target);
+      if (!inDesktop && !inMobile) {
         setTemplatesDropdownOpen(false);
       }
     };
     const handleClickOutsideRetargeting = (event) => {
-      if (retargetingDropdownRef.current && !retargetingDropdownRef.current.contains(event.target)) {
+      const inDesktop = retargetingDropdownRef.current && retargetingDropdownRef.current.contains(event.target);
+      const inMobile = retargetingDropdownMobileRef.current && retargetingDropdownMobileRef.current.contains(event.target);
+      if (!inDesktop && !inMobile) {
         setRetargetingDropdownOpen(false);
       }
     };
@@ -652,8 +665,9 @@ const Layout = ({ children }) => {
     { name: 'Daily Diary', href: '/daily-diary', icon: FiBookOpen, adminOnly: true },
     { name: 'Sales', href: '/sales', icon: FiTrendingUp, adminOnly: true },
     { name: 'Finance', href: '/finance', icon: FiDollarSign, adminOnly: true },
-    { name: 'Reports', href: '/reports', icon: FiBarChart2 },
+    { name: 'Reports', href: '/reports', icon: FiBarChart2, adminOnly: true },
     { name: 'Booker Analytics', href: '/booker-analytics', icon: FiActivity, adminOnly: true },
+    { name: 'Lead Analytics', href: '/lead-analytics', icon: FiBarChart, adminOnly: true },
     { name: 'AI Assistant', href: '/ai-assistant', icon: FiCpu, adminOnly: true },
     { name: 'Retargeting', href: '/retargeting', icon: FiTarget, adminOnly: true },
     { name: 'Templates', href: '/templates', icon: FiMail, adminOnly: true },
@@ -737,7 +751,7 @@ const Layout = ({ children }) => {
                 <div key={item.name}>
                   {item.name === 'Leads' ? (
                     // Leads with dropdown
-                    <div className="relative" ref={leadsDropdownRef}>
+                    <div className="relative" ref={leadsDropdownMobileRef}>
                       <button
                         onClick={() => setLeadsDropdownOpen(!leadsDropdownOpen)}
                         className={`group flex items-center justify-between w-full px-2 py-2 text-base font-medium rounded-md ${
@@ -791,7 +805,7 @@ const Layout = ({ children }) => {
                       {item.name}
                     </button>
                   ) : item.name === 'Templates' ? (
-                    <div className="relative" ref={templatesDropdownRef}>
+                    <div className="relative" ref={templatesDropdownMobileRef}>
                       <button
                         onClick={() => setTemplatesDropdownOpen(!templatesDropdownOpen)}
                         className={`group flex items-center justify-between w-full px-2 py-2 text-base font-medium rounded-md ${
@@ -816,10 +830,10 @@ const Layout = ({ children }) => {
                             <button
                               key={cat.key}
                               onClick={() => {
+                                setSidebarOpen(false);
                                 if (cat.key === 'Bookers Templates') {
                                   navigate('/bookers-templates');
                                 } else {
-                                  setSidebarOpen(false);
                                   navigate('/templates', { state: { category: cat.key, navKey: Date.now() + Math.random() } });
                                 }
                               }}
@@ -836,7 +850,7 @@ const Layout = ({ children }) => {
                       )}
                     </div>
                   ) : item.name === 'Retargeting' ? (
-                    <div className="relative" ref={retargetingDropdownRef}>
+                    <div className="relative" ref={retargetingDropdownMobileRef}>
                       <button
                         onClick={() => {
                           if (location.pathname !== '/retargeting') {
@@ -866,6 +880,7 @@ const Layout = ({ children }) => {
                         <div className="mt-1 ml-6 space-y-1">
                           <button
                             onClick={() => {
+                              setSidebarOpen(false);
                               navigate('/retargeting-leads');
                             }}
                             className="group flex items-center w-full px-2 py-2 text-sm rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"
@@ -1055,6 +1070,7 @@ const Layout = ({ children }) => {
                         <div className="mt-1 ml-6 space-y-1">
                           <button
                             onClick={() => {
+                              setSidebarOpen(false);
                               navigate('/retargeting-leads');
                             }}
                             className="group flex items-center w-full px-2 py-2 text-sm rounded-md transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"

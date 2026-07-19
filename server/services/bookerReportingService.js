@@ -168,9 +168,33 @@ class BookerReportingService {
 
       // Get leads for this user and date
       const leads = await dbManager.query('leads', {
-        select: 'id, status, assigned_at, booked_at, last_contacted_at, has_sale, sale_amount, updated_at',
+        select: 'id, status, assigned_at, booked_at, last_contacted_at, updated_at',
         eq: { booker_id: userId }
       });
+
+      // Sales made today are sourced from the sales table by sales.created_at (when the
+      // sale actually closed), not from leads.updated_at — a later reschedule of the
+      // lead's appointment must not move or wipe out a sale that already closed.
+      // Attribution matches the leads query above (booker_id / booked_by owns the lead),
+      // not sales.user_id, which is only "who processed the transaction" and can diverge
+      // from who gets booking credit.
+      const salesInRange = await dbManager.query('sales', {
+        select: 'id, lead_id, amount, created_at',
+        gte: { created_at: startOfDay.toISOString() },
+        lte: { created_at: endOfDay.toISOString() }
+      });
+
+      let salesToday = [];
+      const reportingLeadIds = [...new Set(salesInRange.map(s => s.lead_id).filter(Boolean))];
+      if (reportingLeadIds.length > 0) {
+        const reportingLeads = await dbManager.query('leads', {
+          select: 'id, booked_by, booker_id',
+          in: { id: reportingLeadIds }
+        });
+        const leadBookerMap = {};
+        for (const l of reportingLeads) leadBookerMap[l.id] = l.booked_by || l.booker_id || null;
+        salesToday = salesInRange.filter(s => s.lead_id && leadBookerMap[s.lead_id] === userId);
+      }
 
       // Calculate metrics
       const performance = {
@@ -191,12 +215,8 @@ class BookerReportingService {
         leads_cancelled: leads.filter(l =>
           l.status === 'Cancelled' && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay
         ).length,
-        sales_made: leads.filter(l =>
-          l.has_sale && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay
-        ).length,
-        total_sale_amount: leads
-          .filter(l => l.has_sale && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay)
-          .reduce((sum, l) => sum + parseFloat(l.sale_amount || 0), 0)
+        sales_made: salesToday.length,
+        total_sale_amount: salesToday.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0)
       };
 
       // Calculate conversion rates

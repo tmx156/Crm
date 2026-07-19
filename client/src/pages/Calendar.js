@@ -19,6 +19,39 @@ import LazyImage from '../components/LazyImage';
 import GmailEmailRenderer from '../components/GmailEmailRenderer';
 import { getOptimizedImageUrl } from '../utils/imageUtils';
 
+// Persist the calendar's view/date and any open appointment modal across a page
+// refresh, so reloading doesn't dump the user back to today's month view.
+// This must NOT kick in on a normal in-app navigation (e.g. clicking the
+// "Calendar" nav link after visiting another page) - only on an actual
+// browser reload, which is the only time this component truly starts cold.
+const CALENDAR_VIEW_STATE_KEY = 'calendarViewState';
+const CALENDAR_OPEN_LEAD_KEY = 'calendarOpenLeadId';
+
+const isBrowserReload = () => {
+  try {
+    const [entry] = window.performance?.getEntriesByType?.('navigation') || [];
+    if (entry) return entry.type === 'reload';
+    // Fallback for older browsers without the Navigation Timing L2 API
+    if (window.performance?.navigation) return window.performance.navigation.type === 1;
+  } catch (e) {
+    // ignore
+  }
+  return false;
+};
+
+const getStoredCalendarView = () => {
+  if (!isBrowserReload()) return null;
+  try {
+    const raw = localStorage.getItem(CALENDAR_VIEW_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.view && parsed.date) return parsed;
+  } catch (e) {
+    // Malformed or inaccessible storage - fall back to defaults
+  }
+  return null;
+};
+
 const Calendar = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -36,6 +69,12 @@ const Calendar = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const lastUpdatedRef = useRef(new Date());
   const calendarRef = useRef(null);
+  // Snapshot the persisted view/date once at mount - FullCalendar only reads
+  // initialView/initialDate on first render, so this never needs to change.
+  const initialCalendarStateRef = useRef(getStoredCalendarView());
+  // Ensures the "reopen modal after refresh" restore only happens once per mount,
+  // not on every subsequent real-time refresh.
+  const hasRestoredModalRef = useRef(false);
   const { socket, subscribeToCalendarUpdates, subscribeToLeadUpdates, isConnected, emitCalendarUpdate } = useSocket();
   const [leadForm, setLeadForm] = useState({
     _id: '',
@@ -334,6 +373,34 @@ const Calendar = () => {
       loadedRangesRef.current.add(rangeKey);
       setEvents(finalEvents);
 
+      // If the page was refreshed while an appointment modal was open, reopen it
+      // once the fresh events are in. Guarded to run at most once per mount so
+      // later real-time refreshes never resurrect a modal the user has closed.
+      // Only applies on an actual browser reload - clicking into Calendar via
+      // in-app navigation should always start clean, same as before.
+      if (!hasRestoredModalRef.current) {
+        hasRestoredModalRef.current = true;
+        try {
+          if (!isBrowserReload()) {
+            // Not a reload - forget whatever was open in a previous visit so it
+            // can't wrongly resurface on some unrelated future reload.
+            localStorage.removeItem(CALENDAR_OPEN_LEAD_KEY);
+          } else {
+            const pendingLeadId = localStorage.getItem(CALENDAR_OPEN_LEAD_KEY);
+            if (pendingLeadId) {
+              const match = finalEvents.find(e => e.id === pendingLeadId);
+              if (match) {
+                setSelectedEvent(createEventSnapshot(match));
+                setShowEventModal(true);
+              }
+              localStorage.removeItem(CALENDAR_OPEN_LEAD_KEY);
+            }
+          }
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+
       // Check for highlighting after events are set (reduced timeout for performance)
       setTimeout(() => {
         checkForHighlighting(finalEvents);
@@ -438,7 +505,7 @@ const Calendar = () => {
     const refreshTrigger = localStorage.getItem('calendarRefreshTrigger');
     if (refreshTrigger) {
       console.log('📅 Calendar: Refresh trigger detected, refreshing events');
-      fetchEvents();
+      fetchEvents(true);
       localStorage.removeItem('calendarRefreshTrigger');
     }
     
@@ -500,7 +567,10 @@ const Calendar = () => {
         clearTimeout(refreshTimeout);
       }
       refreshTimeout = setTimeout(() => {
-        fetchEvents();
+        // force=true: without this, fetchEvents() silently no-ops once the
+        // initial 10-year range is cached, so real-time updates from other
+        // users (and the polling fallback below) would never actually refetch.
+        fetchEvents(true);
       }, 5000); // Increased to 5 seconds for better performance
     };
     
@@ -576,7 +646,8 @@ const Calendar = () => {
       clearTimeout(fetchTimeoutRef.current);
     }
     fetchTimeoutRef.current = setTimeout(() => {
-      fetchEvents();
+      // force=true - see debouncedFetch above for why this can't be omitted.
+      fetchEvents(true);
     }, 3000); // Increased to 3 seconds for better performance
   }, [fetchEvents]);
 
@@ -904,6 +975,17 @@ const Calendar = () => {
     };
   };
 
+  // Closes the appointment modal and forgets it so a later refresh doesn't
+  // resurrect a modal the user already dismissed.
+  const closeEventModal = useCallback(() => {
+    setShowEventModal(false);
+    try {
+      localStorage.removeItem(CALENDAR_OPEN_LEAD_KEY);
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, []);
+
   const handleEventClick = async (clickInfo) => {
 
     // Store a stable plain-object snapshot so live updates don't close the modal
@@ -912,6 +994,16 @@ const Calendar = () => {
     setShowAllMessages(false);
     // Don't fetch sale details on modal open - only fetch if needed
     setSelectedSale(null);
+
+    // Remember which appointment is open so a page refresh can reopen it
+    // instead of dropping the user back to the bare month view.
+    try {
+      if (clickInfo.event?.id) {
+        localStorage.setItem(CALENDAR_OPEN_LEAD_KEY, clickInfo.event.id);
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
 
     // REMOVED: Booking history API call - was causing 403 errors and blocking calendar render
     // Booking history is already included in the calendar events response
@@ -1126,13 +1218,13 @@ const Calendar = () => {
         // Force refresh calendar events to ensure consistency with server
         setTimeout(() => {
           console.log('📅 Refreshing calendar after booking to ensure consistency');
-          fetchEvents();
+          fetchEvents(true);
         }, 2000); // Increased delay to 2 seconds
-        
+
         // Additional refresh after 5 seconds to catch any delayed updates
         setTimeout(() => {
           console.log('📅 Second refresh to catch any delayed updates');
-          fetchEvents();
+          fetchEvents(true);
         }, 5000);
       }
     } catch (error) {
@@ -1211,7 +1303,7 @@ const Calendar = () => {
     
     // Refresh calendar events to show the updated booking
     setTimeout(() => {
-      fetchEvents();
+      fetchEvents(true);
     }, 500);
   };
 
@@ -1387,8 +1479,8 @@ const Calendar = () => {
         if (newStatus === 'Cancelled') {
           // Remove the event from calendar completely
           setEvents(prevEvents => prevEvents.filter(event => event.id !== selectedEvent.id));
-          setShowEventModal(false);
-          
+          closeEventModal();
+
           alert(`❌ Successfully cancelled ${leadName}'s appointment. The lead has been moved to "Cancelled" status.`);
         } else {
           // For confirmed bookings, show a special title
@@ -1547,7 +1639,7 @@ const Calendar = () => {
         
         // Remove the event from calendar completely
         setEvents(prevEvents => prevEvents.filter(event => event.id !== selectedEvent.id));
-        setShowEventModal(false);
+        closeEventModal();
         setShowRejectModal(false);
         
         alert(`❌ Successfully rejected ${leadName}. The lead has been moved to "Rejected" status.`);
@@ -1591,7 +1683,7 @@ const Calendar = () => {
     });
 
     // Close the event modal and open the booking form
-    setShowEventModal(false);
+    closeEventModal();
     setSendEmail(true);
     setSendSms(true);
     setShowLeadFormModal(true);
@@ -1991,16 +2083,16 @@ const Calendar = () => {
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          initialDate={new Date()}
+          initialView={initialCalendarStateRef.current?.view || 'dayGridMonth'}
+          initialDate={initialCalendarStateRef.current?.date ? new Date(initialCalendarStateRef.current.date) : new Date()}
           headerToolbar={{
-            left: 'prev,next today',
+            left: window.innerWidth < 640 ? 'prev,next today,dayGridMonth' : 'prev,next today',
             center: 'title',
             right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay'
           }}
           buttonText={{
-            today: window.innerWidth < 640 ? 'Today' : 'Today',
-            month: window.innerWidth < 640 ? 'M' : 'Month',
+            today: 'Today',
+            month: 'Month',
             week: window.innerWidth < 640 ? 'W' : 'Week',
             day: window.innerWidth < 640 ? 'D' : 'Day'
           }}
@@ -2024,6 +2116,14 @@ const Calendar = () => {
           eventDisplay="block"
           datesSet={(dateInfo) => {
             console.log('📅 View initialized:', dateInfo.view.type, dateInfo.startStr, 'to', dateInfo.endStr);
+            try {
+              localStorage.setItem(CALENDAR_VIEW_STATE_KEY, JSON.stringify({
+                view: dateInfo.view.type,
+                date: dateInfo.view.currentStart.toISOString()
+              }));
+            } catch (e) {
+              // ignore storage errors
+            }
           }}
           eventTimeFormat={{
             hour: 'numeric',
@@ -2499,7 +2599,7 @@ const Calendar = () => {
                       <FiChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                     <button
-                      onClick={() => setShowEventModal(false)}
+                      onClick={closeEventModal}
                       className="p-1.5 sm:p-2 rounded-full bg-white/20 backdrop-blur-sm text-white hover:text-gray-900 hover:bg-white/40 transition-all duration-200 shadow-lg"
                       title="Close"
                     >
@@ -3301,7 +3401,7 @@ const Calendar = () => {
           existingSale={selectedSale}
           onSaveSuccess={() => {
             setShowSaleModal(false);
-            setShowEventModal(false);
+            closeEventModal();
             alert(selectedSale ? 'Sale updated successfully!' : 'Sale recorded successfully!');
             handleEventStatusChange('Attended');
             debouncedFetchEvents(); // Use debounced fetch to prevent race conditions

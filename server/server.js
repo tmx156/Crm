@@ -51,10 +51,13 @@ const uploadRoutes = require('./routes/upload');
 const smsRoutes = require('./routes/sms');
 const legacyRoutes = require('./routes/legacy');
 const bookerAnalyticsRoutes = require('./routes/booker-analytics');
+const bookerPerformanceRoutes = require('./routes/booker-performance');
+const leadAnalyticsRoutes = require('./routes/lead-analytics');
 const emailTestRoutes = require('./routes/email-test');
 const gmailAuthRoutes = require('./routes/gmail-auth');
 const webhookRoutes = require('./routes/webhook');
 const usersPublicRoutes = require('./routes/usersPublic');
+const aiAssistantRoutes = require('./routes/ai-assistant');
 const scheduler = require('./utils/scheduler');
 const { startAllGmailPollers } = require('./utils/gmailPoller');
 const { startGoogleSheetsSync } = require('./utils/googleSheetsSync');
@@ -453,10 +456,13 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/legacy', legacyRoutes);
 app.use('/api/booker-analytics', bookerAnalyticsRoutes);
+app.use('/api/booker-performance', bookerPerformanceRoutes);
+app.use('/api/lead-analytics', leadAnalyticsRoutes);
 app.use('/api/email-test', emailTestRoutes);
 app.use('/api/gmail', gmailAuthRoutes);
 app.use('/api/google-sheets', googleSheetsRoutes);
 app.use('/api/webhook', webhookRoutes);
+app.use('/api/ai-assistant', aiAssistantRoutes);
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
 // Scheduler API - manual trigger + status

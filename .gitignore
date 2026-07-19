@@ -123,6 +123,11 @@ server/email_debug_logs/
 !railway-*.md
 !*-setup.md
 
+# Google Service Account credentials
+*service-account*.json
+*service_account*.json
+google-service-account.json
+
 # Sample data
 *.csv
 sample-*

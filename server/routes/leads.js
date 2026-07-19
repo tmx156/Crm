@@ -1132,15 +1132,17 @@ router.post('/', auth, async (req, res) => {
           ...cleanBodyData,
           date_booked: bodyWithoutId.date_booked ? preserveLocalTime(bodyWithoutId.date_booked) : null,
           status: 'Booked',
-          booker_id: req.user.id,
           updated_at: new Date().toISOString(),
           // Convert boolean to integer for database compatibility
           is_confirmed: bodyWithoutId.is_confirmed ? 1 : 0,
           booking_status: bodyWithoutId.booking_status || (isReschedule ? 'Reschedule' : null)
         };
-        // Preserve original booker - only set booked_by if not already set
+        // Preserve original booker - only set booked_by/booker_id if not already set
         if (!existingLead.booked_by) {
           updateData.booked_by = req.user.id;
+        }
+        if (!existingLead.booker_id) {
+          updateData.booker_id = req.user.id;
         }
         
         const updateResult = await dbManager.update('leads', updateData, { id: _id });
@@ -1260,14 +1262,16 @@ router.post('/', auth, async (req, res) => {
           const updateFields = {
             status: 'Booked',
             date_booked: finalBody.date_booked ? preserveLocalTime(finalBody.date_booked) : null,
-            booker_id: req.user.id,
             booked_at: new Date().toISOString(),
             ever_booked: true,
             updated_at: new Date().toISOString()
           };
-          // Preserve original booker - only set booked_by if not already set
+          // Preserve original booker - only set booked_by/booker_id if not already set
           if (!existingLead.booked_by) {
             updateFields.booked_by = req.user.id;
+          }
+          if (!existingLead.booker_id) {
+            updateFields.booker_id = req.user.id;
           }
           
           // Include reschedule-specific fields if this is a reschedule

@@ -3,7 +3,9 @@
     "*.js",
     "routes/",
     "models/",
-    "middleware/"
+    "middleware/",
+    "services/",
+    "utils/"
   ],
   "ignore": [
     "node_modules/",

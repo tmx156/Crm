@@ -517,7 +517,7 @@ async function updateDailyPerformance(userId, date = new Date().toISOString().sp
 
     // Get leads for this user and date
     const leads = await dbManager.query('leads', {
-      select: 'id, status, assigned_at, booked_at, last_contacted_at, has_sale, sales',
+      select: 'id, status, assigned_at, booked_at, last_contacted_at, updated_at',
       eq: { booker_id: userId }
     });
 
@@ -538,13 +538,36 @@ async function updateDailyPerformance(userId, date = new Date().toISOString().sp
       l.status === 'Attended' && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay
     ).length;
 
-    const salesMadeToday = leads.filter(l =>
-      l.has_sale && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay
-    ).length;
+    // Sales made today are sourced from the sales table by sales.created_at (when the
+    // sale actually closed), not from leads.updated_at — a later reschedule of the
+    // lead's appointment must not move or wipe out a sale that already closed.
+    // Attribution matches the leads query above (booker_id / booked_by owns the lead),
+    // not sales.user_id, which is only "who processed the transaction" and can diverge
+    // from who gets booking credit.
+    const salesInRange = await dbManager.query('sales', {
+      select: 'id, lead_id, amount, created_at',
+      gte: { created_at: startOfDay.toISOString() },
+      lte: { created_at: endOfDay.toISOString() }
+    });
 
-    const totalSaleAmountToday = leads
-      .filter(l => l.has_sale && l.updated_at && new Date(l.updated_at) >= startOfDay && new Date(l.updated_at) <= endOfDay)
-      .reduce((sum, l) => sum + parseFloat(l.sales || 0), 0);
+    let salesMadeToday = 0;
+    let totalSaleAmountToday = 0;
+    const salesLeadIds = [...new Set(salesInRange.map(s => s.lead_id).filter(Boolean))];
+    if (salesLeadIds.length > 0) {
+      const salesLeads = await dbManager.query('leads', {
+        select: 'id, booked_by, booker_id',
+        in: { id: salesLeadIds }
+      });
+      const leadBookerMap = {};
+      for (const l of salesLeads) leadBookerMap[l.id] = l.booked_by || l.booker_id || null;
+
+      for (const s of salesInRange) {
+        if (s.lead_id && leadBookerMap[s.lead_id] === userId) {
+          salesMadeToday += 1;
+          totalSaleAmountToday += parseFloat(s.amount || 0);
+        }
+      }
+    }
 
     // Calculate rates
     const conversionRate = leadsAssignedToday > 0 ? (leadsBookedToday / leadsAssignedToday * 100) : 0;
@@ -572,7 +595,7 @@ async function updateDailyPerformance(userId, date = new Date().toISOString().sp
     });
 
     if (existing.length > 0) {
-      await dbManager.update('daily_booker_performance', performanceData, existing[0].id);
+      await dbManager.update('daily_booker_performance', performanceData, { id: existing[0].id });
     } else {
       await dbManager.insert('daily_booker_performance', performanceData);
     }

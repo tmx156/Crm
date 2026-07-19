@@ -50,6 +50,24 @@ const AIAssistant = () => {
     e.preventDefault();
     if (!question.trim() || loading) return;
 
+    // Find the most recent successful exchange so the backend has context for
+    // follow-ups like "give me in percentages" or "what about last week" -
+    // without this, every question was answered with zero memory of the chat.
+    let previousQuestion = null;
+    let previousData = null;
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+      if (chatHistory[i].type === 'ai' && chatHistory[i].data) {
+        previousData = chatHistory[i].data;
+        for (let j = i - 1; j >= 0; j--) {
+          if (chatHistory[j].type === 'user') {
+            previousQuestion = chatHistory[j].content;
+            break;
+          }
+        }
+        break;
+      }
+    }
+
     const userMessage = {
       type: 'user',
       content: question,
@@ -61,7 +79,7 @@ const AIAssistant = () => {
     setLoading(true);
 
     try {
-      const res = await axios.post('/api/ai-assistant/query', { question });
+      const res = await axios.post('/api/ai-assistant/query', { question, previousQuestion, previousData });
       
       const aiMessage = {
         type: 'ai',

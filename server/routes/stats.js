@@ -687,9 +687,9 @@ router.get('/team-performance', auth, async (req, res) => {
     }
     const users = await dbManager.query('users', usersQuery);
 
-    const teamPerformance = [];
-
-    for (const user of users) {
+    // Fetched in parallel rather than one user at a time - sequential awaits
+    // here previously took ~1.5-2s+ for a full team on every call.
+    const teamPerformance = await Promise.all(users.map(async (user) => {
       // ✅ DAILY ACTIVITY FIX: Get bookings made today (using booked_at), not appointments scheduled for today
       const bookingsQuery = {
         select: 'id, name, phone, date_booked, status, has_sale, created_at, booked_at',
@@ -746,8 +746,8 @@ router.get('/team-performance', auth, async (req, res) => {
         lastBooking: bookingDetails.length > 0 ? bookingDetails[bookingDetails.length - 1].dateBooked : null
       };
 
-      teamPerformance.push(performance);
-    }
+      return performance;
+    }));
 
     // Sort by bookings made descending (more relevant for dashboard)
     teamPerformance.sort((a, b) => b.bookingsMade - a.bookingsMade);

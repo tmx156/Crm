@@ -20,32 +20,6 @@ const supabase = createClient(
  * Available CRM API Endpoints for AI Assistant
  */
 const CRM_ENDPOINTS = {
-  // Reports & Analytics
-  comprehensiveReport: {
-    path: '/api/stats/comprehensive-report',
-    method: 'GET',
-    params: ['startDate', 'endDate', 'userId'],
-    description: 'Get comprehensive KPI report with bookings, sales, revenue'
-  },
-  dailyBreakdown: {
-    path: '/api/stats/daily-breakdown-report',
-    method: 'GET',
-    params: ['startDate', 'endDate', 'userId'],
-    description: 'Get daily breakdown of leads, bookings, sales by day'
-  },
-  monthlyBreakdown: {
-    path: '/api/stats/monthly-breakdown-report',
-    method: 'GET',
-    params: ['startDate', 'endDate', 'userId'],
-    description: 'Get weekly/monthly breakdown of performance'
-  },
-  salesFromBookings: {
-    path: '/api/stats/sales-from-bookings',
-    method: 'GET',
-    params: ['startDate', 'endDate', 'userId'],
-    description: 'Get detailed list of sales from bookings'
-  },
-
   // Daily Analytics
   dailyAnalytics: {
     path: '/api/stats/daily-analytics',
@@ -94,6 +68,14 @@ const CRM_ENDPOINTS = {
     method: 'GET',
     params: ['userId', 'userRole'],
     description: 'Get analytics for specific user'
+  },
+
+  // Demographic Analytics
+  leadAnalyticsSummary: {
+    path: '/api/lead-analytics/summary',
+    method: 'GET',
+    params: ['startDate', 'endDate'],
+    description: 'Get real leads/sales/revenue/conversion-rate breakdown by age bracket and postcode area (joins leads and sales tables)'
   }
 };
 
@@ -163,14 +145,32 @@ async function resolveUserLookups(filters) {
 }
 
 /**
- * Helper: Get leaderboard data (fast pre-built queries)
+ * Helper: Compute a {startDate, endDate} range for a named timeframe.
+ * Shared by getLeaderboard and calculateKPI so both use identical date math.
+ * Weeks run Monday-Sunday (UK convention), not Sunday-Saturday.
  */
-async function getLeaderboard(metric, timeframe = 'week') {
+function computeDateRange(timeframe = 'week') {
   const now = new Date();
   let startDate, endDate;
 
-  // Calculate date range
+  // getDay(): 0=Sun..6=Sat, so days-since-Monday = (day + 6) % 7.
+  const mondayOf = (date) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
   switch (timeframe) {
+    case 'yesterday': {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      startDate = new Date(yesterday);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(yesterday);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+    }
     case 'today':
       startDate = new Date(now);
       startDate.setHours(0, 0, 0, 0);
@@ -178,15 +178,27 @@ async function getLeaderboard(metric, timeframe = 'week') {
       endDate.setHours(23, 59, 59, 999);
       break;
     case 'week':
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - now.getDay()); // Sunday
-      startDate.setHours(0, 0, 0, 0);
+      startDate = mondayOf(now);
       endDate = new Date(now);
       endDate.setHours(23, 59, 59, 999);
       break;
+    case 'last_week': {
+      const thisMonday = mondayOf(now);
+      startDate = new Date(thisMonday);
+      startDate.setDate(thisMonday.getDate() - 7);
+      endDate = new Date(thisMonday);
+      endDate.setDate(thisMonday.getDate() - 1); // last Sunday
+      endDate.setHours(23, 59, 59, 999);
+      break;
+    }
     case 'month':
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+    case 'last_month':
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0); // last day of previous month
       endDate.setHours(23, 59, 59, 999);
       break;
     default:
@@ -194,6 +206,15 @@ async function getLeaderboard(metric, timeframe = 'week') {
       startDate.setDate(now.getDate() - 7);
       endDate = new Date(now);
   }
+
+  return { startDate, endDate };
+}
+
+/**
+ * Helper: Get leaderboard data (fast pre-built queries)
+ */
+async function getLeaderboard(metric, timeframe = 'week') {
+  const { startDate, endDate } = computeDateRange(timeframe);
 
   try {
     if (metric === 'most_bookings') {
@@ -203,10 +224,8 @@ async function getLeaderboard(metric, timeframe = 'week') {
         .select('id, name, email, role')
         .in('role', ['booker', 'admin']);
 
-      // Get bookings for each user
-      const leaderboard = [];
-
-      for (const user of users) {
+      // Get bookings for each user (fetched in parallel, not one-by-one)
+      const leaderboard = await Promise.all(users.map(async (user) => {
         // Count bookings made by this user (using booked_at timestamp)
         const { data: bookings } = await supabase
           .from('leads')
@@ -231,7 +250,7 @@ async function getLeaderboard(metric, timeframe = 'week') {
           totalRevenue = sales.reduce((sum, sale) => sum + (parseFloat(sale.amount) || 0), 0);
         }
 
-        leaderboard.push({
+        return {
           userId: user.id,
           name: user.name,
           email: user.email,
@@ -241,8 +260,8 @@ async function getLeaderboard(metric, timeframe = 'week') {
           totalRevenue: totalRevenue,
           averageSale: sales.length > 0 ? totalRevenue / sales.length : 0,
           conversionRate: bookings.length > 0 ? Math.round((sales.length / bookings.length) * 100) : 0
-        });
-      }
+        };
+      }));
 
       // Sort by bookings made (descending)
       leaderboard.sort((a, b) => b.bookingsMade - a.bookingsMade);
@@ -263,10 +282,8 @@ async function getLeaderboard(metric, timeframe = 'week') {
         .select('id, name, email, role')
         .in('role', ['booker', 'admin']);
 
-      // Get revenue for each user
-      const leaderboard = [];
-
-      for (const user of users) {
+      // Get revenue for each user (fetched in parallel, not one-by-one)
+      const leaderboard = await Promise.all(users.map(async (user) => {
         // Get leads assigned to this user
         const { data: leads } = await supabase
           .from('leads')
@@ -290,15 +307,15 @@ async function getLeaderboard(metric, timeframe = 'week') {
           totalRevenue = sales.reduce((sum, sale) => sum + (parseFloat(sale.amount) || 0), 0);
         }
 
-        leaderboard.push({
+        return {
           userId: user.id,
           name: user.name,
           bookingsMade: leads.length,
           salesMade: salesCount,
           totalRevenue: totalRevenue,
           averageSale: salesCount > 0 ? totalRevenue / salesCount : 0
-        });
-      }
+        };
+      }));
 
       // Sort by revenue (descending)
       leaderboard.sort((a, b) => b.totalRevenue - a.totalRevenue);
@@ -321,59 +338,49 @@ async function getLeaderboard(metric, timeframe = 'week') {
 
 /**
  * Helper: Calculate KPI metrics
+ *
+ * Uses Supabase's exact `count` (head: true) rather than fetching rows -
+ * fetching rows silently truncates at Supabase's default 1000-row page size,
+ * which previously made show_up_rate compute against 1000 of 6000+ real rows.
+ * Counting server-side avoids that cap entirely and is cheaper besides.
  */
-async function calculateKPI(metric, filters = {}) {
-  const startDate = filters.startDate || new Date(new Date().setDate(new Date().getDate() - 7)).toISOString();
-  const endDate = filters.endDate || new Date().toISOString();
+async function calculateKPI(metric, timeframe = 'week') {
+  const { startDate, endDate } = computeDateRange(timeframe);
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  const exactCount = async (build) => {
+    const { count, error } = await build(supabase.from('leads').select('*', { count: 'exact', head: true }));
+    if (error) throw new Error(error.message);
+    return count || 0;
+  };
 
   try {
     switch (metric) {
       case 'booking_rate': {
-        // Get leads assigned
-        const { data: assigned } = await supabase
-          .from('leads')
-          .select('id, assigned_at')
-          .gte('assigned_at', startDate)
-          .lte('assigned_at', endDate);
+        const assignedCount = await exactCount(q => q.gte('assigned_at', startIso).lte('assigned_at', endIso));
+        const bookedCount = await exactCount(q => q.not('booked_at', 'is', null).gte('assigned_at', startIso).lte('assigned_at', endIso));
 
-        // Get bookings made
-        const { data: booked } = await supabase
-          .from('leads')
-          .select('id, booked_at')
-          .not('booked_at', 'is', null)
-          .gte('assigned_at', startDate)
-          .lte('assigned_at', endDate);
-
-        const rate = assigned.length > 0 ? Math.round((booked.length / assigned.length) * 100) : 0;
-        return { metric: 'Booking Rate', value: `${rate}%`, assigned: assigned.length, booked: booked.length };
+        const rate = assignedCount > 0 ? Math.round((bookedCount / assignedCount) * 100) : 0;
+        return { metric: 'Booking Rate', value: `${rate}%`, assigned: assignedCount, booked: bookedCount, timeframe, startDate: startIso, endDate: endIso };
       }
 
       case 'show_up_rate': {
-        // Get all bookings
-        const { data: booked } = await supabase
-          .from('leads')
-          .select('id, status, booked_at')
-          .not('booked_at', 'is', null);
+        // Scoped by date_booked (the appointment date), matching how "this
+        // week's appointments" is defined elsewhere in this file.
+        const bookedCount = await exactCount(q => q.not('booked_at', 'is', null).gte('date_booked', startIso).lte('date_booked', endIso));
+        const attendedCount = await exactCount(q => q.not('booked_at', 'is', null).in('status', ['Attended', 'Complete']).gte('date_booked', startIso).lte('date_booked', endIso));
 
-        // Get attended
-        const attended = booked.filter(lead => ['Attended', 'Complete'].includes(lead.status));
-
-        const rate = booked.length > 0 ? Math.round((attended.length / booked.length) * 100) : 0;
-        return { metric: 'Show Up Rate', value: `${rate}%`, booked: booked.length, attended: attended.length };
+        const rate = bookedCount > 0 ? Math.round((attendedCount / bookedCount) * 100) : 0;
+        return { metric: 'Show Up Rate', value: `${rate}%`, booked: bookedCount, attended: attendedCount, timeframe, startDate: startIso, endDate: endIso };
       }
 
       case 'sales_conversion_rate': {
-        // Get attended leads
-        const { data: attended } = await supabase
-          .from('leads')
-          .select('id, has_sale, status')
-          .in('status', ['Attended', 'Complete']);
+        const attendedCount = await exactCount(q => q.in('status', ['Attended', 'Complete']).gte('date_booked', startIso).lte('date_booked', endIso));
+        const salesCount = await exactCount(q => q.in('status', ['Attended', 'Complete']).eq('has_sale', 1).gte('date_booked', startIso).lte('date_booked', endIso));
 
-        // Get sales count
-        const salesCount = attended.filter(lead => lead.has_sale === 1).length;
-
-        const rate = attended.length > 0 ? Math.round((salesCount / attended.length) * 100) : 0;
-        return { metric: 'Sales Conversion Rate', value: `${rate}%`, attended: attended.length, sales: salesCount };
+        const rate = attendedCount > 0 ? Math.round((salesCount / attendedCount) * 100) : 0;
+        return { metric: 'Sales Conversion Rate', value: `${rate}%`, attended: attendedCount, sales: salesCount, timeframe, startDate: startIso, endDate: endIso };
       }
 
       default:
@@ -386,6 +393,198 @@ async function calculateKPI(metric, filters = {}) {
 }
 
 /**
+ * Helper: fetch every row matching a filter, paginating past Supabase's
+ * default 1000-row page size. Shared by the multi-metric handlers below,
+ * which need true totals (not a truncated sample) to sum/bucket correctly.
+ */
+async function fetchAllPaginated(table, selectCols, applyFilters) {
+  let all = [];
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    let query = supabase.from(table).select(selectCols);
+    query = applyFilters(query);
+    const { data, error } = await query.range(from, from + batchSize - 1);
+    if (error) throw new Error(`Database query failed: ${error.message}`);
+    all = all.concat(data || []);
+    if (!data || data.length < batchSize) break;
+    from += batchSize;
+  }
+  return all;
+}
+
+/**
+ * Helper: Comprehensive report - every key metric for one period, combined.
+ * All counts use Supabase's exact `count` (no row truncation risk); the two
+ * metrics that need real row values (avg age, revenue) use fetchAllPaginated
+ * rather than a single unpaginated fetch, for the same reason.
+ */
+async function getComprehensiveReport(timeframe = 'week') {
+  const { startDate, endDate } = computeDateRange(timeframe);
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  const exactCount = async (build) => {
+    const { count, error } = await build(supabase.from('leads').select('*', { count: 'exact', head: true }));
+    if (error) throw new Error(error.message);
+    return count || 0;
+  };
+
+  const [assignedCount, bookedCount, appointmentsCount, attendedCount, ageRows, salesRows] = await Promise.all([
+    exactCount(q => q.gte('assigned_at', startIso).lte('assigned_at', endIso)),
+    exactCount(q => q.not('booked_at', 'is', null).gte('booked_at', startIso).lte('booked_at', endIso)),
+    exactCount(q => q.not('booked_at', 'is', null).gte('date_booked', startIso).lte('date_booked', endIso)),
+    exactCount(q => q.not('booked_at', 'is', null).in('status', ['Attended', 'Complete']).gte('date_booked', startIso).lte('date_booked', endIso)),
+    fetchAllPaginated('leads', 'age', q => q.gte('assigned_at', startIso).lte('assigned_at', endIso).gte('age', 0).lte('age', 100)),
+    fetchAllPaginated('sales', 'amount', q => q.gte('created_at', startIso).lte('created_at', endIso)),
+  ]);
+
+  const avgAge = ageRows.length > 0 ? ageRows.reduce((s, r) => s + (parseFloat(r.age) || 0), 0) / ageRows.length : null;
+  const salesCount = salesRows.length;
+  const revenue = salesRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+  const bookingRate = assignedCount > 0 ? Math.round((bookedCount / assignedCount) * 100) : 0;
+  const showUpRate = appointmentsCount > 0 ? Math.round((attendedCount / appointmentsCount) * 100) : 0;
+  const conversionRate = attendedCount > 0 ? Math.round((salesCount / attendedCount) * 100) : 0;
+
+  return {
+    metric: 'Comprehensive Report',
+    timeframe,
+    startDate: startIso,
+    endDate: endIso,
+    leadsAssigned: assignedCount,
+    bookingsMade: bookedCount,
+    appointmentsScheduled: appointmentsCount,
+    appointmentsAttended: attendedCount,
+    salesMade: salesCount,
+    totalRevenue: Math.round(revenue * 100) / 100,
+    averageSaleValue: salesCount > 0 ? Math.round((revenue / salesCount) * 100) / 100 : 0,
+    averageLeadAge: avgAge !== null ? Math.round(avgAge * 10) / 10 : null,
+    bookingRate: `${bookingRate}%`,
+    showUpRate: `${showUpRate}%`,
+    conversionRate: `${conversionRate}%`
+  };
+}
+
+/**
+ * Helper: Daily or weekly breakdown across a period. Fetches every matching
+ * row ONCE (paginated) and buckets in memory, rather than one DB round trip
+ * per day/week - keeps this to 3 queries total regardless of range length.
+ */
+async function getBreakdown(timeframe, granularity = 'day') {
+  const { startDate, endDate } = computeDateRange(timeframe);
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  const [bookedLeads, assignedLeads, sales] = await Promise.all([
+    fetchAllPaginated('leads', 'id, booked_at, date_booked, status, has_sale', q =>
+      q.not('booked_at', 'is', null).gte('booked_at', startIso).lte('booked_at', endIso)),
+    fetchAllPaginated('leads', 'id, assigned_at', q =>
+      q.gte('assigned_at', startIso).lte('assigned_at', endIso)),
+    fetchAllPaginated('sales', 'id, lead_id, amount, created_at', q =>
+      q.gte('created_at', startIso).lte('created_at', endIso)),
+  ]);
+
+  // Local (not UTC) calendar date string - toISOString() shifts the date in
+  // any non-UTC timezone (e.g. BST is UTC+1, so a UK midnight becomes the
+  // previous day in UTC), which silently bucketed everything one day early.
+  const localDateStr = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // Weeks bucket to their Monday (UK convention), matching computeDateRange.
+  const bucketKey = (dateStr) => {
+    const d = new Date(dateStr);
+    if (granularity === 'week') {
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    }
+    return localDateStr(d);
+  };
+
+  const buckets = new Map();
+  const getBucket = (key) => {
+    if (!buckets.has(key)) {
+      buckets.set(key, { period: key, leadsAssigned: 0, bookingsMade: 0, salesMade: 0, revenue: 0 });
+    }
+    return buckets.get(key);
+  };
+
+  // Pre-populate every period in the range, so a day/week with zero activity
+  // shows as 0 instead of silently not appearing at all. For weekly buckets,
+  // start from the Monday-snapped key so stepping by 7 days stays aligned
+  // with how real data gets bucketed above (bucketKey() also snaps to Monday).
+  const step = granularity === 'week' ? 7 : 1;
+  let cursor = granularity === 'week' ? new Date(bucketKey(startDate)) : new Date(startDate);
+  for (; cursor <= endDate; cursor.setDate(cursor.getDate() + step)) {
+    getBucket(bucketKey(cursor));
+  }
+
+  for (const lead of assignedLeads) getBucket(bucketKey(lead.assigned_at)).leadsAssigned++;
+  for (const lead of bookedLeads) getBucket(bucketKey(lead.booked_at)).bookingsMade++;
+  for (const sale of sales) {
+    const bucket = getBucket(bucketKey(sale.created_at));
+    bucket.salesMade++;
+    bucket.revenue += parseFloat(sale.amount) || 0;
+  }
+
+  const breakdown = Array.from(buckets.values())
+    .map(b => ({ ...b, revenue: Math.round(b.revenue * 100) / 100 }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+
+  return {
+    metric: granularity === 'week' ? 'Weekly Breakdown' : 'Daily Breakdown',
+    timeframe,
+    startDate: startIso,
+    endDate: endIso,
+    breakdown
+  };
+}
+
+/**
+ * Helper: Sales that came from bookings (i.e. the underlying lead has a
+ * booked_at timestamp), vs. total sales in the period. Sales and leads live
+ * in separate tables with no PostgREST embed configured between them here,
+ * so this joins them manually in batches, the same pattern lead-analytics.js
+ * already uses for the same reason.
+ */
+async function getSalesFromBookings(timeframe = 'week') {
+  const { startDate, endDate } = computeDateRange(timeframe);
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  const sales = await fetchAllPaginated('sales', 'id, lead_id, amount, created_at', q =>
+    q.gte('created_at', startIso).lte('created_at', endIso));
+
+  const leadIds = [...new Set(sales.map(s => s.lead_id).filter(Boolean))];
+  const leadLookup = {};
+  for (let i = 0; i < leadIds.length; i += 200) {
+    const chunk = leadIds.slice(i, i + 200);
+    const { data, error } = await supabase.from('leads').select('id, name, booked_at').in('id', chunk);
+    if (error) throw new Error(error.message);
+    for (const lead of data || []) leadLookup[lead.id] = lead;
+  }
+
+  const fromBookings = sales.filter(s => s.lead_id && leadLookup[s.lead_id]?.booked_at);
+  const totalRevenue = sales.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const revenueFromBookings = fromBookings.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+  return {
+    metric: 'Sales From Bookings',
+    timeframe,
+    startDate: startIso,
+    endDate: endIso,
+    totalSales: sales.length,
+    totalRevenue: Math.round(totalRevenue * 100) / 100,
+    salesFromBookings: fromBookings.length,
+    revenueFromBookings: Math.round(revenueFromBookings * 100) / 100,
+    percentageFromBookings: sales.length > 0 ? Math.round((fromBookings.length / sales.length) * 100) : 0
+  };
+}
+
+/**
  * Helper: Execute Supabase query from structure
  */
 async function executeQuery(queryStructure) {
@@ -394,90 +593,101 @@ async function executeQuery(queryStructure) {
   // Resolve any user lookups
   const resolvedFilters = await resolveUserLookups(filters);
 
+  // Reject multi-metric selects this executor can't actually run (CASE WHEN,
+  // column aliasing, more than one aggregate combined in one select) instead
+  // of silently matching the plain isCountQuery substring check below and
+  // returning one unrelated total for a question that asked for several
+  // different numbers at once (e.g. "comprehensive report" style questions
+  // asking for bookings + sales + revenue + average age all together).
+  if (select && (/case\s+when/i.test(select) || /\bas\s+\w+/i.test(select) || (select.match(/count\(|sum\(|avg\(|min\(|max\(/gi) || []).length > 1)) {
+    throw new Error(`This question needs several different metrics combined in one query ("${select}"), which isn't supported yet. Try asking about one metric at a time (e.g. bookings, sales, or attendance separately).`);
+  }
+
+  // Check if this is a "group by column, count(*)" query, e.g. "age, count(*)"
+  // Must be checked before isCountQuery below - otherwise the substring match
+  // on "count(" would swallow the grouping intent and silently collapse this
+  // into a single ungrouped total (which then feeds a hallucinated breakdown
+  // downstream, since the requesting question expected a breakdown by column).
+  const groupByMatch = select && select.match(/^\s*(\w+)\s*,\s*count\(\*\)\s*$/i);
+
   // Check if this is a count query
-  const isCountQuery = select && (select.toLowerCase().includes('count(') || select === 'count');
+  const isCountQuery = !groupByMatch && select && (select.toLowerCase().includes('count(') || select === 'count');
 
   // Check if this is an aggregate query (sum, avg, etc.)
-  const aggregateMatch = select && select.toLowerCase().match(/(sum|avg|min|max)\s*\(\s*(\w+)\s*\)/);
+  const aggregateMatch = !groupByMatch && select && select.toLowerCase().match(/(sum|avg|min|max)\s*\(\s*(\w+)\s*\)/);
   const isAggregateQuery = !!aggregateMatch;
 
-  // Start building query
-  let query;
-  if (isCountQuery) {
-    // For count queries, use Supabase's count feature
-    query = supabase.from(table).select('*', { count: 'exact', head: true });
-  } else if (isAggregateQuery) {
-    // For aggregate queries, fetch all data and calculate in-memory
-    const column = aggregateMatch[2];
-    query = supabase.from(table).select(column);
-  } else {
-    // For regular queries, use the select as provided
-    query = supabase.from(table).select(select || '*');
-  }
-  
-  // Apply filters
-  if (resolvedFilters && Array.isArray(resolvedFilters)) {
-    for (const filter of resolvedFilters) {
-      const { column, operator, value } = filter;
-      
-      switch (operator) {
-        case 'eq':
-          query = query.eq(column, value);
-          break;
-        case 'neq':
-          query = query.neq(column, value);
-          break;
-        case 'gt':
-          query = query.gt(column, value);
-          break;
-        case 'gte':
-          query = query.gte(column, value);
-          break;
-        case 'lt':
-          query = query.lt(column, value);
-          break;
-        case 'lte':
-          query = query.lte(column, value);
-          break;
-        case 'like':
-          query = query.like(column, value);
-          break;
-        case 'ilike':
-          query = query.ilike(column, value);
-          break;
-        case 'in':
-          query = query.in(column, value);
-          break;
+  // Apply the parsed filter list to a fresh Supabase query builder for the
+  // given select. Extracted so both the paginated fetch (group-by/aggregate)
+  // and the single-shot fetch (plain row queries) build identical filters.
+  const buildFilteredQuery = (selectCols, options) => {
+    let q = supabase.from(table).select(selectCols, options);
+    if (resolvedFilters && Array.isArray(resolvedFilters)) {
+      for (const filter of resolvedFilters) {
+        const { column, operator, value } = filter;
+        switch (operator) {
+          case 'eq': q = q.eq(column, value); break;
+          case 'neq': q = q.neq(column, value); break;
+          case 'gt': q = q.gt(column, value); break;
+          case 'gte': q = q.gte(column, value); break;
+          case 'lt': q = q.lt(column, value); break;
+          case 'lte': q = q.lte(column, value); break;
+          case 'like': q = q.like(column, value); break;
+          case 'ilike': q = q.ilike(column, value); break;
+          case 'in': q = q.in(column, value); break;
+        }
       }
     }
-  }
-  
-  // Apply ordering (not needed for count/aggregate queries)
-  if (order && !isCountQuery && !isAggregateQuery) {
-    query = query.order(order.column, { ascending: order.ascending });
+    return q;
+  };
+
+  // Fetch every matching row for a column, paginating past Supabase's default
+  // 1000-row page size. Required for group-by/aggregate queries - fetching a
+  // single unpaginated page silently truncates on any table bigger than 1000
+  // rows (leads alone has 12,000+), producing a confidently wrong number
+  // instead of an error.
+  const fetchAllRows = async (selectCols) => {
+    let all = [];
+    let from = 0;
+    const batchSize = 1000;
+    while (true) {
+      const { data, error } = await buildFilteredQuery(selectCols).range(from, from + batchSize - 1);
+      if (error) throw new Error(`Database query failed: ${error.message}`);
+      all = all.concat(data || []);
+      if (!data || data.length < batchSize) break;
+      from += batchSize;
+    }
+    return all;
+  };
+
+  // For group-by queries, count occurrences per distinct value in-memory
+  if (groupByMatch) {
+    const groupColumn = groupByMatch[1];
+    const rows = await fetchAllRows(groupColumn);
+    const counts = new Map();
+    for (const row of rows) {
+      const key = row[groupColumn] === null || row[groupColumn] === undefined ? 'Unknown' : row[groupColumn];
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    let grouped = Array.from(counts.entries()).map(([value, cnt]) => ({ [groupColumn]: value, count: cnt }));
+    grouped.sort((a, b) => b.count - a.count);
+    if (limit) grouped = grouped.slice(0, limit);
+    return grouped;
   }
 
-  // Apply limit (not needed for count/aggregate queries)
-  if (limit && !isCountQuery && !isAggregateQuery) {
-    query = query.limit(limit);
-  }
-
-  // Execute query
-  const { data, error, count } = await query;
-
-  if (error) {
-    throw new Error(`Database query failed: ${error.message}`);
-  }
-
-  // For count queries, return the count as data
+  // For count queries, use Supabase's exact count feature (not subject to
+  // the 1000-row page cap since no rows are actually returned)
   if (isCountQuery) {
+    const { count, error } = await buildFilteredQuery('*', { count: 'exact', head: true });
+    if (error) throw new Error(`Database query failed: ${error.message}`);
     return [{ count: count || 0 }];
   }
 
-  // For aggregate queries, calculate in-memory
+  // For aggregate queries, fetch every matching row and calculate in-memory
   if (isAggregateQuery) {
     const aggregateType = aggregateMatch[1].toLowerCase();
     const column = aggregateMatch[2];
+    const data = await fetchAllRows(column);
 
     if (!data || data.length === 0) {
       return [{ [aggregateType]: 0 }];
@@ -508,6 +718,15 @@ async function executeQuery(queryStructure) {
     }];
   }
 
+  // Regular row query - order/limit are applied at the DB level as requested
+  // (the limit here is a deliberate "top N rows" ask, not an all-rows scan,
+  // so no pagination is needed)
+  let query = buildFilteredQuery(select || '*');
+  if (order) query = query.order(order.column, { ascending: order.ascending });
+  if (limit) query = query.limit(limit);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Database query failed: ${error.message}`);
   return data;
 }
 
@@ -518,7 +737,7 @@ async function executeQuery(queryStructure) {
  */
 router.post('/query', auth, adminAuth, async (req, res) => {
   try {
-    const { question } = req.body;
+    const { question, previousQuestion, previousData } = req.body;
     
     if (!question || typeof question !== 'string') {
       return res.status(400).json({ error: 'Question is required' });
@@ -546,7 +765,8 @@ router.post('/query', auth, adminAuth, async (req, res) => {
         const response = await geminiService.formatResponse(
           question,
           leaderboardData,
-          `Leaderboard for ${leaderboardQuery.metric} in ${leaderboardQuery.timeframe}`
+          `Leaderboard for ${leaderboardQuery.metric} in ${leaderboardQuery.timeframe}`,
+          { previousQuestion, previousData }
         );
 
         return res.json({
@@ -558,6 +778,49 @@ router.post('/query', auth, adminAuth, async (req, res) => {
         });
       } catch (error) {
         console.error(`❌ Leaderboard query failed: ${error.message}`);
+        // Fall through to other methods
+      }
+    }
+
+    // Step 1b: Check if this needs a multi-metric handler (comprehensive
+    // report, daily/weekly breakdown, sales-from-bookings) - these combine
+    // several numbers or group by period, which the generic single-table SQL
+    // fallback further down cannot do.
+    const multiMetricQuery = geminiService.detectMultiMetricQuery(question);
+
+    if (multiMetricQuery) {
+      console.log(`📈 Detected multi-metric query: ${multiMetricQuery.type} (${multiMetricQuery.timeframe})`);
+
+      try {
+        let multiMetricData;
+        let explanation;
+        if (multiMetricQuery.type === 'comprehensive') {
+          multiMetricData = await getComprehensiveReport(multiMetricQuery.timeframe);
+          explanation = `Comprehensive report for ${multiMetricQuery.timeframe}`;
+        } else if (multiMetricQuery.type === 'breakdown') {
+          multiMetricData = await getBreakdown(multiMetricQuery.timeframe, multiMetricQuery.granularity);
+          explanation = `${multiMetricQuery.granularity === 'week' ? 'Weekly' : 'Daily'} breakdown for ${multiMetricQuery.timeframe}`;
+        } else if (multiMetricQuery.type === 'salesFromBookings') {
+          multiMetricData = await getSalesFromBookings(multiMetricQuery.timeframe);
+          explanation = `Sales from bookings for ${multiMetricQuery.timeframe}`;
+        }
+
+        const response = await geminiService.formatResponse(
+          question,
+          multiMetricData,
+          explanation,
+          { previousQuestion, previousData }
+        );
+
+        return res.json({
+          question,
+          response,
+          data: multiMetricData,
+          queryType: multiMetricQuery.type,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error(`❌ Multi-metric query failed: ${error.message}`);
         // Fall through to other methods
       }
     }
@@ -580,6 +843,16 @@ router.post('/query', auth, adminAuth, async (req, res) => {
         params.endDate = today;
       }
 
+      if (endpointQuery.needsWideDateRange) {
+        // Demographic/breakdown questions ("which age group buys most") aren't
+        // asking about a specific week - default to a full year so the answer
+        // reflects real overall patterns, not a thin 7-day slice.
+        const yearAgo = new Date();
+        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+        params.startDate = yearAgo.toISOString().split('T')[0];
+        params.endDate = today;
+      }
+
       if (endpointQuery.needsDate) {
         params.date = today;
       }
@@ -593,7 +866,8 @@ router.post('/query', auth, adminAuth, async (req, res) => {
         const response = await geminiService.formatResponse(
           question,
           endpointData,
-          `Fetched data from ${endpointQuery.endpoint} endpoint`
+          `Fetched data from ${endpointQuery.endpoint} endpoint`,
+          { previousQuestion, previousData }
         );
 
         return res.json({
@@ -611,17 +885,18 @@ router.post('/query', auth, adminAuth, async (req, res) => {
     }
 
     // Step 2: Check if this is a KPI query
-    const kpiMetric = geminiService.detectKPIQuery(question);
+    const kpiQuery = geminiService.detectKPIQuery(question);
 
-    if (kpiMetric) {
+    if (kpiQuery) {
       // Handle KPI calculation
-      console.log(`📊 Detected KPI query: ${kpiMetric}`);
-      const kpiData = await calculateKPI(kpiMetric);
+      console.log(`📊 Detected KPI query: ${kpiQuery.metric} (${kpiQuery.timeframe})`);
+      const kpiData = await calculateKPI(kpiQuery.metric, kpiQuery.timeframe);
 
       const response = await geminiService.formatResponse(
         question,
         kpiData,
-        `Calculated ${kpiData.metric}`
+        `Calculated ${kpiData.metric}`,
+        { previousQuestion, previousData }
       );
 
       return res.json({
@@ -633,8 +908,10 @@ router.post('/query', auth, adminAuth, async (req, res) => {
       });
     }
 
-    // Step 1: Convert question to query structure
-    const queryStructure = await geminiService.convertToSQL(question);
+    // Step 1: Convert question to query structure (passing the prior exchange
+    // so follow-ups like "give me in percentages" or "what about last week"
+    // can be resolved instead of answered with zero context)
+    const queryStructure = await geminiService.convertToSQL(question, { previousQuestion, previousData });
     console.log('📊 Generated query structure:', JSON.stringify(queryStructure, null, 2));
 
     // Step 2: Execute query
@@ -645,7 +922,8 @@ router.post('/query', auth, adminAuth, async (req, res) => {
     const response = await geminiService.formatResponse(
       question,
       data,
-      queryStructure.explanation
+      queryStructure.explanation,
+      { previousQuestion, previousData }
     );
 
     res.json({
