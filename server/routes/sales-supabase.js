@@ -123,9 +123,9 @@ router.post('/', auth, async (req, res) => {
       return res.status(403).json({ error: 'Only viewers and admins can create sales' });
     }
 
-    // Verify lead exists
+    // Verify lead exists (select * so FB CAPI gets postcode + stored fbc/fbp for matching)
     const leadResult = await dbManager.query('leads', {
-      select: 'id, name, email, phone, date_booked',
+      select: '*',
       eq: { id: leadId }
     });
 

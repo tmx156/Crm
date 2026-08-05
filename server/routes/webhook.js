@@ -121,6 +121,24 @@ router.post('/leads', webhookAuth, async (req, res) => {
       clientIpAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
       clientUserAgent: req.headers['user-agent'] || null,
     };
+
+    // Persist click/browser IDs on the lead so later Schedule/Purchase CAPI events
+    // can be matched back to the original ad click. Guarded: the fbc/fbp/fb_client_ip/
+    // fb_user_agent columns may not exist yet — skip silently until the migration runs.
+    if (fbOptions.fbc || fbOptions.fbp || fbOptions.clientIpAddress || fbOptions.clientUserAgent) {
+      serviceRoleClient
+        .from('leads')
+        .update({
+          fbc: fbOptions.fbc,
+          fbp: fbOptions.fbp,
+          fb_client_ip: fbOptions.clientIpAddress || null,
+          fb_user_agent: fbOptions.clientUserAgent,
+        })
+        .eq('id', lead.id)
+        .then(({ error }) => {
+          if (error) console.warn('[FB CAPI] Could not store fbc/fbp on lead (run add_fb_tracking_columns migration):', error.message);
+        });
+    }
     fbCapi.trackLead(lead, fbOptions).catch(err => {
       console.error('[FB CAPI] Unhandled error in trackLead (webhook):', err.message);
     });

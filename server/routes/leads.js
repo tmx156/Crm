@@ -1198,6 +1198,13 @@ router.post('/', auth, async (req, res) => {
           createLeadSnapshot(updatedLeadData)
         );
 
+        // Send Schedule event to Facebook Conversions API (booking via lead details)
+        if (updatedLeadData.date_booked) {
+          fbCapi.trackBooking(updatedLeadData, updatedLeadData.date_booked).catch(err => {
+            console.error('[FB CAPI] Unhandled error in trackBooking (_id update):', err.message);
+          });
+        }
+
         return res.json({
           success: true,
           lead: updatedLeadData,
@@ -1361,6 +1368,13 @@ router.post('/', auth, async (req, res) => {
             },
             createLeadSnapshot(updatedLead)
           );
+
+          // Send Schedule event to Facebook Conversions API (booking via duplicate-detection)
+          if (updatedLead.date_booked) {
+            fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
+              console.error('[FB CAPI] Unhandled error in trackBooking (duplicate-update):', err.message);
+            });
+          }
 
           return res.status(200).json({
             message: 'Existing lead updated successfully',
@@ -1832,7 +1846,10 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       }
     }
     // Send Schedule event to Facebook whenever a lead gets a booking date
-    const isBeingBooked = req.body.status === 'Booked' && updatedLead.date_booked && (oldStatus !== 'Booked' || isReschedule);
+    // Covers: status flips to Booked, explicit reschedules, and date-only changes
+    // on already-booked leads (calendar drags that don't send status in the body)
+    const isBeingBooked = updatedLead.status === 'Booked' && updatedLead.date_booked &&
+      (oldStatus !== 'Booked' || isReschedule || isDateChange);
     if (isBeingBooked) {
       fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
         console.error('[FB CAPI] Unhandled error in trackBooking (update):', err.message);
@@ -4598,6 +4615,13 @@ router.patch('/:id/quick-status', auth, async (req, res) => {
     if (updateError) {
       console.error('Quick status update error:', updateError);
       return res.status(500).json({ message: 'Failed to update lead' });
+    }
+
+    // Send Schedule event to Facebook Conversions API when quick status books a lead
+    if (statusMapping.status === 'Booked' && oldStatus !== 'Booked' && updatedLead.date_booked) {
+      fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
+        console.error('[FB CAPI] Unhandled error in trackBooking (quick status):', err.message);
+      });
     }
 
     // Add to booking history

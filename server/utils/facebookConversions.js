@@ -36,18 +36,27 @@ function buildUserData(lead, options = {}) {
   }
 
   if (lead.postcode) {
-    userData.zp = [hashValue(lead.postcode)];
+    // Meta expects zip lowercase with no spaces ("L1 8JQ" -> "l18jq")
+    userData.zp = [hashValue(lead.postcode.replace(/\s+/g, ''))];
   }
 
   userData.country = [hashValue('gb')];
 
-  // fbc/fbp for matching server events to ad clicks
-  if (options.fbc) userData.fbc = options.fbc;
-  if (options.fbp) userData.fbp = options.fbp;
+  // Stable cross-event identifier boosts match rate across Lead/Schedule/Purchase
+  if (lead.id) userData.external_id = [hashValue(lead.id)];
+
+  // fbc/fbp for matching server events to ad clicks — prefer explicit options,
+  // fall back to values captured on the lead record at webhook time
+  const fbc = options.fbc || lead.fbc;
+  const fbp = options.fbp || lead.fbp;
+  if (fbc) userData.fbc = fbc;
+  if (fbp) userData.fbp = fbp;
 
   // Client IP and user agent improve match quality
-  if (options.clientIpAddress) userData.client_ip_address = options.clientIpAddress;
-  if (options.clientUserAgent) userData.client_user_agent = options.clientUserAgent;
+  const ip = options.clientIpAddress || lead.fb_client_ip;
+  const ua = options.clientUserAgent || lead.fb_user_agent;
+  if (ip) userData.client_ip_address = ip;
+  if (ua) userData.client_user_agent = ua;
 
   return userData;
 }
