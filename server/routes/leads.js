@@ -1198,8 +1198,9 @@ router.post('/', auth, async (req, res) => {
           createLeadSnapshot(updatedLeadData)
         );
 
-        // Send Schedule event to Facebook Conversions API (booking via lead details)
-        if (updatedLeadData.date_booked) {
+        // Send Schedule event to Facebook Conversions API (booking via lead details).
+        // First-time bookings only — a reschedule is not a new booking.
+        if (updatedLeadData.date_booked && !isIdReschedule) {
           fbCapi.trackBooking(updatedLeadData, updatedLeadData.date_booked).catch(err => {
             console.error('[FB CAPI] Unhandled error in trackBooking (_id update):', err.message);
           });
@@ -1369,8 +1370,9 @@ router.post('/', auth, async (req, res) => {
             createLeadSnapshot(updatedLead)
           );
 
-          // Send Schedule event to Facebook Conversions API (booking via duplicate-detection)
-          if (updatedLead.date_booked) {
+          // Send Schedule event to Facebook Conversions API (booking via duplicate-detection).
+          // First-time bookings only — a reschedule is not a new booking.
+          if (updatedLead.date_booked && !isDupReschedule) {
             fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
               console.error('[FB CAPI] Unhandled error in trackBooking (duplicate-update):', err.message);
             });
@@ -1845,11 +1847,12 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
         console.error('Failed to update daily performance:', perfError.message);
       }
     }
-    // Send Schedule event to Facebook whenever a lead gets a booking date
-    // Covers: status flips to Booked, explicit reschedules, and date-only changes
-    // on already-booked leads (calendar drags that don't send status in the body)
+    // Send Schedule event to Facebook only for a genuine first-time booking.
+    // Reschedules and date changes are deliberately excluded: they are not new
+    // bookings, and counting them made the Ads Manager Schedule number impossible
+    // to reconcile against the CRM.
     const isBeingBooked = updatedLead.status === 'Booked' && updatedLead.date_booked &&
-      (oldStatus !== 'Booked' || isReschedule || isDateChange);
+      oldStatus !== 'Booked';
     if (isBeingBooked) {
       fbCapi.trackBooking(updatedLead, updatedLead.date_booked).catch(err => {
         console.error('[FB CAPI] Unhandled error in trackBooking (update):', err.message);
