@@ -4,6 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { auth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
+const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const supabaseStorage = require('../utils/supabaseStorage');
@@ -723,7 +724,13 @@ router.post('/:id/test/:leadId', auth, async (req, res) => {
 
     const effectiveSendEmail = !!template.send_email;
     const effectiveSendSms = !!template.send_sms;
-    const emailAccount = template.email_account || 'primary';
+    // The template's "Send From" wins when one is chosen; left on
+    // "Match customer's brand" it follows the lead's own account.
+    const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+      leadId: lead.id,
+      preferredAccount: template.email_account
+    });
+    console.log(`📧 Template test-send account: ${emailAccount} (source: ${accountSource})`);
 
     if (!effectiveSendEmail && !effectiveSendSms) {
       return res.status(400).json({ message: 'Template has both email and SMS disabled' });
@@ -742,6 +749,8 @@ router.post('/:id/test/:leadId', auth, async (req, res) => {
         subject: processedTemplate.subject,
         recipient_email: effectiveSendEmail ? lead.email : null,
         recipient_phone: effectiveSendSms ? lead.phone : null,
+        // Record the sending account so later sends to this lead can follow it
+        gmail_account_key: effectiveSendEmail ? emailAccount : null,
         status: 'pending',
         sent_by: req.user.id,
         sent_by_name: req.user.name || 'Admin',

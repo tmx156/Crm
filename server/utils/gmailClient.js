@@ -5,13 +5,48 @@ const { getSupabaseClient } = require('../config/supabase-client');
 const supabase = getSupabaseClient();
 
 /**
- * Build an OAuth2 client (no tokens yet).
+ * Find the OAuth client credentials that own a given Gmail address.
+ * Falls back to the primary client when the address isn't claimed by an
+ * entry in GMAIL_OAUTH_CLIENTS.
+ *
+ * @param {string|null} email
+ * @returns {{name: string, clientId: string, clientSecret: string, redirectUri: string}}
  */
-function makeOAuth2Client() {
+function resolveOAuthClient(email) {
+  if (email) {
+    const lower = email.toLowerCase();
+    const match = (config.google.extraClients || []).find(c => c.accounts.includes(lower));
+    if (match) return match;
+  }
+  return {
+    name: 'primary',
+    clientId: config.google.clientId,
+    clientSecret: config.google.clientSecret,
+    redirectUri: config.google.redirectUri
+  };
+}
+
+/** Look up an OAuth client set by its GMAIL_OAUTH_CLIENTS name. */
+function getOAuthClientByName(name) {
+  if (!name || name === 'primary') return resolveOAuthClient(null);
+  return (config.google.extraClients || []).find(c => c.name === name) || null;
+}
+
+/**
+ * Build an OAuth2 client (no tokens yet).
+ *
+ * @param {string|object|null} account - Gmail address the client is for, or an
+ *   already-resolved credentials object. Omit for the primary client.
+ */
+function makeOAuth2Client(account = null) {
+  const creds = (account && typeof account === 'object')
+    ? account
+    : resolveOAuthClient(account);
+
   return new google.auth.OAuth2(
-    config.google.clientId,
-    config.google.clientSecret,
-    config.google.redirectUri
+    creds.clientId,
+    creds.clientSecret,
+    creds.redirectUri
   );
 }
 
@@ -36,7 +71,7 @@ async function getAuthedClient(email) {
     );
   }
 
-  const oauth2 = makeOAuth2Client();
+  const oauth2 = makeOAuth2Client(email);
   oauth2.setCredentials({
     access_token: row.access_token,
     refresh_token: row.refresh_token,
@@ -66,4 +101,4 @@ async function getAuthedClient(email) {
   return oauth2;
 }
 
-module.exports = { makeOAuth2Client, getAuthedClient };
+module.exports = { makeOAuth2Client, getAuthedClient, resolveOAuthClient, getOAuthClientByName };

@@ -8,6 +8,7 @@ const dbManager = require('../database-connection-manager');
 const { auth, adminAuth } = require('../middleware/auth');
 const { analyseLeads, fetchLegacyLeads } = require('../utils/leadAnalysis');
 const MessagingService = require('../utils/messagingService');
+const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 const { sendSMS, sendAppointmentReminder, sendStatusUpdate, sendCustomMessage } = require('../utils/smsService');
 const { v4: uuidv4 } = require('uuid'); // Added for UUID generation
 const fbCapi = require('../utils/facebookConversions');
@@ -1670,13 +1671,20 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       }
     }
     
-    // ✅ DAILY ACTIVITY FIX: Don't clear date_booked on cancellation
-    // This preserves the original appointment time for historical tracking
-    // Cancelled bookings will remain visible in daily activities with their original time
-    if (req.body.status === 'Cancelled') {
-      // Keep date_booked intact - only change status to 'Cancelled'
-      // Calendar won't show it because it filters by status
-      console.log(`📅 Lead cancelled but preserving original date_booked for tracking`);
+    // Preserve the appointment date through a cancellation.
+    //
+    // Clearing it destroys the only record of which day the slot was on. That removed the
+    // cancellation from every report keyed on appointment date - it vanished from the
+    // booker's on-calendar count and from the show-rate denominator, silently inflating
+    // every booker's turn-up rate, and it dropped out of "bookings made" too. 1,342 leads
+    // (19% of all bookings ever taken) were wiped this way and their dates are gone for good.
+    //
+    // Enforced here rather than trusted to callers: the calendar's cancel button and older
+    // clients still post date_booked: null, and the field is on the allow-null list further
+    // down, so an explicit null would otherwise be written straight through.
+    if (req.body.status === 'Cancelled' && !req.body.date_booked && oldDateBooked) {
+      req.body.date_booked = oldDateBooked;
+      console.log(`📅 Cancellation: preserved original date_booked for ${lead.name} (${oldDateBooked})`);
     }
     // Update the lead - filter out problematic fields and ensure valid data types
     const { _id, ...updateData } = req.body;
@@ -4432,6 +4440,13 @@ router.post('/:id/send-email', auth, async (req, res) => {
       });
       template = templates[0] || null;
     }
+    // Send from the account this conversation already lives on, so a lead who
+    // came in through Antara is never answered by Camry.
+    const { account: fromAccount, source: accountSource } = await resolveReplyAccount({
+      leadId: lead.id
+    });
+    console.log(`📧 Send-email account: ${fromAccount} (source: ${accountSource})`);
+
     // Insert message into database first to get an ID
     const messageData = {
       id: uuidv4(),
@@ -4442,11 +4457,12 @@ router.post('/:id/send-email', auth, async (req, res) => {
       email_body: body,
       recipient_email: lead.email,
       recipient_phone: lead.phone,
+      gmail_account_key: fromAccount,
       sent_by: req.user.id,
       status: 'pending',
       created_at: new Date().toISOString()
     };
-    
+
     await dbManager.insert('messages', messageData);
 
     // Construct message object for MessagingService with database ID
@@ -4467,7 +4483,7 @@ router.post('/:id/send-email', auth, async (req, res) => {
     };
     
     // Send email using MessagingService
-    const result = await MessagingService.sendEmail(message);
+    const result = await MessagingService.sendEmail(message, fromAccount);
     
     // Add EMAIL_SENT to booking history
     await addBookingHistoryEntry(
@@ -4881,7 +4897,13 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
 
           const effectiveSendEmail = !!template.send_email;
           const effectiveSendSms = !!template.send_sms;
-          const emailAccount = template.email_account || 'primary';
+          // The template's "Send From" wins when one is chosen; left on
+          // "Match customer's brand" it follows the lead's own account.
+          const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+            leadId: id,
+            preferredAccount: template.email_account
+          });
+          console.log(`📧 Wrong-number account: ${emailAccount} (source: ${accountSource})`);
 
           if (effectiveSendEmail || effectiveSendSms) {
             // Create message record
@@ -4898,6 +4920,8 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
                 subject: effectiveSendEmail ? processedTemplate.subject : null,
                 recipient_email: effectiveSendEmail ? lead.email : null,
                 recipient_phone: effectiveSendSms ? lead.phone : null,
+                // Record the sending account so later sends follow this brand
+                gmail_account_key: effectiveSendEmail ? emailAccount : null,
                 sent_by: req.user.id,
                 sent_by_name: req.user.name || 'System',
                 template_id: template.id,
@@ -5157,7 +5181,13 @@ router.post('/:id/no-answer', auth, async (req, res) => {
 
           const effectiveSendEmail = !!template.send_email;
           const effectiveSendSms = !!template.send_sms;
-          const emailAccount = template.email_account || 'primary';
+          // The template's "Send From" wins when one is chosen; left on
+          // "Match customer's brand" it follows the lead's own account.
+          const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+            leadId: id,
+            preferredAccount: template.email_account
+          });
+          console.log(`📧 No-answer account: ${emailAccount} (source: ${accountSource})`);
 
           if (effectiveSendEmail || effectiveSendSms) {
             // Create message record
@@ -5174,6 +5204,8 @@ router.post('/:id/no-answer', auth, async (req, res) => {
                 subject: effectiveSendEmail ? processedTemplate.subject : null,
                 recipient_email: effectiveSendEmail ? lead.email : null,
                 recipient_phone: effectiveSendSms ? lead.phone : null,
+                // Record the sending account so later sends follow this brand
+                gmail_account_key: effectiveSendEmail ? emailAccount : null,
                 sent_by: req.user.id,
                 sent_by_name: req.user.name || 'System',
                 template_id: template.id,

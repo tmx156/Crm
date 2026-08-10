@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { google } = require('googleapis');
-const { makeOAuth2Client } = require('../utils/gmailClient');
+const { makeOAuth2Client, getOAuthClientByName, resolveOAuthClient } = require('../utils/gmailClient');
 const config = require('../config');
 const { getSupabaseClient } = require('../config/supabase-client');
 
@@ -12,25 +12,43 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googl
 /**
  * GET /api/gmail/auth-url
  * Returns the Google OAuth consent URL. Open it in a browser to authorise.
+ *
+ * Query params:
+ *   client - name of an entry in GMAIL_OAUTH_CLIENTS. Use this when the account
+ *            being added lives in a different Google Cloud project than the
+ *            primary one. Defaults to the primary client.
  */
 router.get('/auth-url', (req, res) => {
   try {
-    console.log('[Gmail] Generating auth URL...');
+    const clientName = req.query.client || 'primary';
+    const creds = getOAuthClientByName(clientName);
+
+    if (!creds) {
+      return res.status(400).json({
+        error: `Unknown OAuth client "${clientName}". Configured: ` +
+          ['primary', ...(config.google.extraClients || []).map(c => c.name)].join(', ')
+      });
+    }
+
+    console.log(`[Gmail] Generating auth URL using "${creds.name}" client...`);
     console.log('[Gmail] Config check:', {
-      clientId: config.google.clientId ? 'Set' : 'Not set',
-      clientSecret: config.google.clientSecret ? 'Set' : 'Not set',
-      redirectUri: config.google.redirectUri
+      clientId: creds.clientId ? 'Set' : 'Not set',
+      clientSecret: creds.clientSecret ? 'Set' : 'Not set',
+      redirectUri: creds.redirectUri
     });
-    
-    const oauth2 = makeOAuth2Client();
+
+    const oauth2 = makeOAuth2Client(creds);
     const url = oauth2.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: SCOPES
+      scope: SCOPES,
+      // Carried through the redirect so the callback exchanges the code with
+      // the same client that issued it.
+      state: creds.name
     });
-    
+
     console.log('[Gmail] Auth URL generated successfully');
-    res.json({ url });
+    res.json({ url, client: creds.name });
   } catch (err) {
     console.error('[Gmail] Error generating auth URL:', err.message);
     res.status(500).json({ error: err.message });
@@ -43,15 +61,16 @@ router.get('/auth-url', (req, res) => {
  * Exchanges the code for tokens and stores them in Supabase.
  */
 router.get('/callback', async (req, res) => {
-  const { code, error: oauthError, error_description } = req.query;
-  
-  console.log('[Gmail] Callback received:', { 
-    hasCode: !!code, 
+  const { code, state, error: oauthError, error_description } = req.query;
+
+  console.log('[Gmail] Callback received:', {
+    hasCode: !!code,
+    client: state || 'primary',
     hasError: !!oauthError,
     error: oauthError,
     error_description: error_description
   });
-  
+
   if (oauthError) {
     return res.status(400).send(`OAuth Error: ${oauthError} - ${error_description || 'No description'}`);
   }
@@ -59,8 +78,9 @@ router.get('/callback', async (req, res) => {
   if (!code) return res.status(400).send('Missing code parameter');
 
   try {
-    const oauth2 = makeOAuth2Client();
-    console.log('[Gmail] Exchanging code for tokens...');
+    const creds = getOAuthClientByName(state) || getOAuthClientByName('primary');
+    const oauth2 = makeOAuth2Client(creds);
+    console.log(`[Gmail] Exchanging code for tokens using "${creds.name}" client...`);
     const { tokens } = await oauth2.getToken(code);
     console.log('[Gmail] Tokens received:', { 
       hasAccessToken: !!tokens.access_token,
@@ -124,7 +144,24 @@ router.get('/callback', async (req, res) => {
     }
 
     console.log(`[Gmail] OAuth tokens stored for ${email}`);
-    res.send(`Gmail account ${email} connected successfully. You can close this tab.`);
+
+    // A refresh token only works with the client that issued it. If this
+    // account isn't mapped to that client, every later refresh would be
+    // attempted with the primary client and fail with invalid_grant.
+    let warning = '';
+    const owningClient = resolveOAuthClient(email);
+    if (owningClient.name !== creds.name) {
+      warning =
+        `Authorised with the "${creds.name}" OAuth client, but ${email} currently ` +
+        `resolves to "${owningClient.name}". Add "${email}" to the "${creds.name}" ` +
+        `entry's accounts list in GMAIL_OAUTH_CLIENTS and restart, or token refresh will fail.`;
+      console.warn(`[Gmail] ⚠️ ${warning}`);
+    }
+
+    res.send(
+      `Gmail account ${email} connected successfully. You can close this tab.` +
+      (warning ? `<br><br><strong>Warning:</strong> ${warning}` : '')
+    );
   } catch (err) {
     console.error('[Gmail] OAuth callback error:', err.message);
     console.error('[Gmail] Full error:', err);

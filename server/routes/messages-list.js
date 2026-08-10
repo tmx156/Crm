@@ -1318,7 +1318,7 @@ router.post('/reply', auth, async (req, res) => {
     // Try to find the message in the messages table first
     const { data: messageData, error: messageError } = await supabase
       .from('messages')
-      .select('lead_id, type, sms_body, content, subject')
+      .select('lead_id, type, sms_body, content, subject, gmail_account_key')
       .eq('id', messageId)
       .single();
 
@@ -1403,12 +1403,23 @@ router.post('/reply', auth, async (req, res) => {
 
       // Import email service
       const { sendEmail } = require('../utils/emailService');
+      const { resolveReplyAccount } = require('../utils/emailAccountResolver');
+
+      // Reply from the account this conversation belongs to, not the default —
+      // a lead who emailed Antara must be answered by Antara.
+      const { account: fromAccount, source: accountSource } = await resolveReplyAccount({
+        leadId,
+        originalMessage
+      });
+      console.log(`📧 Reply account: ${fromAccount} (source: ${accountSource})`);
 
       // Send email
       result = await sendEmail(
         leadData.email,
         `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
-        reply
+        reply,
+        [],
+        fromAccount
       );
 
       if (!result.success) {
@@ -1427,6 +1438,8 @@ router.post('/reply', auth, async (req, res) => {
         content: reply,
         subject: `Re: ${originalMessage?.subject || 'Your Inquiry'}`,
         recipient_email: leadData.email,
+        // Record the sending account so later replies stay on this thread's account
+        gmail_account_key: fromAccount,
         sent_by: user.id,
         sent_by_name: user.name,
         status: 'sent',

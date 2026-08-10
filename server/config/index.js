@@ -6,6 +6,42 @@ require('dotenv').config({ path: require('path').join(__dirname, '../../.env') }
  * This ensures credentials are not hardcoded in multiple places
  */
 
+/**
+ * Parse GMAIL_OAUTH_CLIENTS. Bad JSON must not take the server down — the
+ * primary OAuth client keeps working, so warn loudly and carry on.
+ */
+function parseExtraOAuthClients() {
+  const raw = process.env.GMAIL_OAUTH_CLIENTS;
+  if (!raw || !raw.trim()) return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    console.error('⚠️ GMAIL_OAUTH_CLIENTS is not valid JSON, ignoring:', e.message);
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    console.error('⚠️ GMAIL_OAUTH_CLIENTS must be a JSON array, ignoring');
+    return [];
+  }
+
+  return parsed
+    .filter(c => {
+      if (c && c.name && c.clientId && c.clientSecret) return true;
+      console.error('⚠️ GMAIL_OAUTH_CLIENTS entry missing name/clientId/clientSecret, skipping');
+      return false;
+    })
+    .map(c => ({
+      name: String(c.name),
+      clientId: c.clientId,
+      clientSecret: c.clientSecret,
+      redirectUri: c.redirectUri || process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback',
+      accounts: (Array.isArray(c.accounts) ? c.accounts : []).map(a => String(a).toLowerCase())
+    }));
+}
+
 const config = {
   // Environment
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -45,7 +81,17 @@ const config = {
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || null,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback',
+    // Extra OAuth clients, for Gmail accounts that live in a different Google
+    // Cloud project than the primary one. A refresh token only works with the
+    // client that issued it, so each account must always be refreshed through
+    // the client it was authorised with.
+    //
+    // GMAIL_OAUTH_CLIENTS is a JSON array:
+    //   [{"name":"secondary","clientId":"...","clientSecret":"...",
+    //     "redirectUri":"https://host/api/gmail/callback",
+    //     "accounts":["someone@example.com"]}]
+    extraClients: parseExtraOAuthClients()
   },
 
   // Google Sheets Sync

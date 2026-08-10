@@ -14,10 +14,22 @@ const { getAuthedClient } = require('./gmailClient');
 
 // Default sending address — Camry Models is the primary account
 const DEFAULT_GMAIL_FROM = 'bookings@camrymodels.co.uk';
+
+// Display name per sending address. Extra accounts can be added without a code
+// change via GMAIL_ACCOUNT_NAMES, a comma-separated list of "email=Display Name".
 const ACCOUNT_NAMES = {
   'bookings@camrymodels.co.uk': 'Camry Models',
-  'bookings@theeditorialco.co.uk': 'The Editorial Co'
+  'bookings@antaramodels.co.uk': 'Antara Models'
 };
+
+for (const pair of (process.env.GMAIL_ACCOUNT_NAMES || '').split(',')) {
+  const idx = pair.indexOf('=');
+  if (idx === -1) continue;
+  const email = pair.slice(0, idx).trim().toLowerCase();
+  const name = pair.slice(idx + 1).trim();
+  if (email && name) ACCOUNT_NAMES[email] = name;
+}
+
 const FROM_NAME = 'Camry Models';
 
 console.log(`[Gmail API] Default sending account: ${FROM_NAME} <${DEFAULT_GMAIL_FROM || 'NOT SET'}>`);
@@ -38,7 +50,7 @@ if (EMAIL_SENDING_DISABLED) {
  */
 async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null) {
   const GMAIL_FROM = (fromEmail && fromEmail !== 'primary') ? fromEmail : DEFAULT_GMAIL_FROM;
-  const resolvedFromName = fromName || ACCOUNT_NAMES[GMAIL_FROM] || FROM_NAME;
+  const resolvedFromName = fromName || ACCOUNT_NAMES[GMAIL_FROM.toLowerCase()] || FROM_NAME;
   const emailId = Math.random().toString(36).substring(2, 8);
 
   console.log(`[${emailId}] Sending email: ${subject} -> ${to}`);
@@ -140,8 +152,19 @@ async function sendEmail(to, subject, body, attachments = [], fromEmail = null, 
   }
 }
 
+/**
+ * Display name for a sending address, e.g. "Antara Models".
+ * Falls back to the default brand when the address isn't mapped.
+ */
+function getAccountDisplayName(email) {
+  if (!email || typeof email !== 'string') return FROM_NAME;
+  return ACCOUNT_NAMES[email.toLowerCase()] || FROM_NAME;
+}
+
 module.exports = {
   sendEmail,
+  getAccountDisplayName,
+  ACCOUNT_NAMES,
   // Legacy exports kept so nothing breaks at require-time
   transporter: null,
   createTransporter: () => null,

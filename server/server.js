@@ -698,8 +698,16 @@ Promise.race([
     console.log(`🔌 WebSocket server ready for real-time sync`);
     console.log(`🗄️  Connected to Supabase database`);
 
-    // Start the appointment reminder scheduler
-    scheduler.start();
+    // Start the appointment reminder scheduler.
+    // Set DISABLE_SCHEDULER=true on any instance that must NOT send reminders —
+    // e.g. a local dev server running alongside production. Two schedulers on
+    // the same database can both pass the "already sent today" check in the
+    // same second and send a customer two reminders.
+    if (String(process.env.DISABLE_SCHEDULER).toLowerCase() === 'true') {
+      console.log('⏸️  Appointment reminder scheduler DISABLED (DISABLE_SCHEDULER=true)');
+    } else {
+      scheduler.start();
+    }
 
     // BulkSMS poller disabled
     console.log('📡 BulkSMS poller disabled');

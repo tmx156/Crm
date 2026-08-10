@@ -222,7 +222,12 @@ const Templates = () => {
       sendSMS: template.sendSMS,
       isActive: template.isActive,
       attachments: Array.isArray(existingAttachments) ? existingAttachments : [],
-      emailAccount: template.emailAccount || '',
+      // The API returns the legacy 'primary' sentinel for templates with no
+      // account chosen. Map it back to '' so the dropdown shows
+      // "Match customer's brand" instead of an unmatched value.
+      emailAccount: (template.emailAccount && template.emailAccount !== 'primary')
+        ? template.emailAccount
+        : '',
       senderName: template.senderName || ''
     });
     setShowModal(true);
@@ -856,11 +861,16 @@ const Templates = () => {
                                 onChange={(e) => setFormData({...formData, emailAccount: e.target.value})}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                               >
-                                <option value="">Default account</option>
+                                <option value="">Match customer's brand (recommended)</option>
                                 {gmailAccounts.map(email => (
-                                  <option key={email} value={email}>{email}</option>
+                                  <option key={email} value={email}>Always send from {email}</option>
                                 ))}
                               </select>
+                              <p className="mt-2 text-xs text-gray-500">
+                                {formData.emailAccount
+                                  ? `Every send uses ${formData.emailAccount}, whichever brand the customer belongs to.`
+                                  : 'Sends from whichever account the customer already deals with, so one template works for every brand.'}
+                              </p>
                             </div>
                           )}
 
@@ -875,9 +885,9 @@ const Templates = () => {
                                 value={formData.senderName}
                                 onChange={(e) => setFormData({...formData, senderName: e.target.value})}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                placeholder="The Editorial Co (default)"
+                                placeholder="Camry Models (default)"
                               />
-                              <p className="text-xs text-gray-400 mt-1">Leave blank to use "The Editorial Co". Enter a custom name to override what recipients see in their inbox.</p>
+                              <p className="text-xs text-gray-400 mt-1">Leave blank to use the sending account's default name. Enter a custom name to override what recipients see in their inbox.</p>
                             </div>
                           )}
                           

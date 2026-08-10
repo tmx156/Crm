@@ -1,6 +1,6 @@
 // const Database = require('better-sqlite3'); // Removed - using Supabase only
 const path = require('path');
-const { sendEmail: sendActualEmail } = require('./emailService');
+const { sendEmail: sendActualEmail, getAccountDisplayName } = require('./emailService');
 const { sendSMS: sendActualSMS } = require('./smsService');
 const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid'); // Use uuid package for reliable ID generation
@@ -134,7 +134,9 @@ class MessagingService {
         second: '2-digit',
         timeZone: 'UTC' // Keep UTC time to match calendar
       }) : '',
-      '{companyName}': template.email_account === 'bookings@theeditorialco.co.uk' ? 'The Editorial Co' : 'Camry Models',
+      // Derived from the sending account so each brand signs its own mail.
+      // 'primary'/blank falls back to the default brand.
+      '{companyName}': getAccountDisplayName(template.email_account),
       '{currentDate}': new Date().toLocaleDateString(),
       '{currentTime}': new Date().toLocaleTimeString()
     };
@@ -563,14 +565,22 @@ class MessagingService {
         }
       }
 
+      // Which account did this lead's booking confirmation go out on? The
+      // reminder must stay on that same account.
+      const bookingAccount = await this.getLeadBookingAccount(leadId);
+      const leadAccount = (bookingAccount || 'primary').toLowerCase();
+
       if (!template) {
+        // Pick the reminder template belonging to this lead's account. There is
+        // deliberately NO cross-brand fallback: sending a Camry-worded reminder
+        // from Antara is worse than sending nothing. One reminder template per
+        // account is required.
         const { data: templates, error: templateError } = await supabase
           .from('templates')
           .select('*')
           .eq('type', 'appointment_reminder')
           .eq('is_active', true)
-          .order('created_at', { ascending: true })
-          .limit(1);
+          .order('created_at', { ascending: true });
 
         if (templateError) {
           console.error('Error fetching reminder template:', templateError);
@@ -582,15 +592,26 @@ class MessagingService {
           return null;
         }
 
-        template = templates[0];
+        template = templates.find(
+          t => (t.email_account || 'primary').toLowerCase() === leadAccount
+        ) || null;
+
+        if (!template) {
+          console.warn(
+            `⚠️ No active appointment_reminder template for account "${leadAccount}" — ` +
+            `not sending, to avoid a wrong-brand reminder. ` +
+            `Available: ${templates.map(t => `${t.name}=${t.email_account || 'primary'}`).join(', ')}`
+          );
+          return null;
+        }
       }
 
       const effectiveSendEmail = !!template.send_email;
       const effectiveSendSms = !!template.send_sms;
-      // Account priority: booking history → template setting → default
-      const bookingAccount = await this.getLeadBookingAccount(leadId);
+      // Booking account wins over the template's own setting, so the reminder
+      // always leaves from the account that sent the booking confirmation.
       const emailAccount = bookingAccount || template.email_account || 'bookings@camrymodels.co.uk';
-      console.log(`📧 Reminder account: ${emailAccount} (source: ${bookingAccount ? 'booking history' : 'template'})`);
+      console.log(`📧 Reminder account: ${emailAccount} (source: ${bookingAccount ? 'booking confirmation' : 'template'})`);
 
       // If neither channel selected, do nothing
       if (!effectiveSendEmail && !effectiveSendSms) {

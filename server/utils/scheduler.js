@@ -196,9 +196,10 @@ class Scheduler {
           .lte('date_booked', endISO)
           .is('deleted_at', null);
 
+        const templateAccountKey = templateAccount.toLowerCase();
         const leads = (allLeads || []).filter(lead => {
-          const la = lead.booking_account || 'primary';
-          return la === templateAccount;
+          const la = (lead.booking_account || 'primary').toLowerCase();
+          return la === templateAccountKey;
         });
 
         for (const lead of leads) {
@@ -280,10 +281,11 @@ class Scheduler {
     }
 
     // Filter leads by account ownership
+    const templateAccountKey = templateAccount.toLowerCase();
     const leads = (allLeads || []).filter(lead => {
-      const leadAccount = lead.booking_account || 'primary';
+      const leadAccount = (lead.booking_account || 'primary').toLowerCase();
       // Exact match only — no fallback. A Camry lead with no Camry template gets nothing.
-      return leadAccount === templateAccount;
+      return leadAccount === templateAccountKey;
     });
 
     console.log(`[SCHEDULER]   ${leads.length} lead(s) matched for this template`);
@@ -367,4 +369,10 @@ class Scheduler {
 }
 
 const scheduler = new Scheduler();
+
+// Default export stays the singleton so existing `require('./scheduler')` calls
+// are unchanged. The date helpers are attached so audits can reuse the real
+// logic rather than reimplementing (and drifting from) it.
 module.exports = scheduler;
+module.exports.getUKTime = getUKTime;
+module.exports.getUKDateRange = getUKDateRange;
