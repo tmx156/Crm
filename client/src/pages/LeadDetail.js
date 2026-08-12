@@ -732,10 +732,11 @@ const LeadDetail = () => {
     const originalDateBooked = lead.dateBooked;
 
     try {
+      // Keep the booking date on cancellation - it is the only record of which day the
+      // slot was on, and the booker reports key off it (see PUT /api/leads/:id).
       const response = await axios.put(`/api/leads/${lead.id}`, {
         ...lead,
-        status: 'Cancelled',
-        dateBooked: null // Remove the booking date
+        status: 'Cancelled'
       });
 
       if (response.data.success || response.data.lead) {

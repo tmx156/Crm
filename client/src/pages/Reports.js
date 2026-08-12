@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -19,12 +20,12 @@ const OUTCOME_COLORS = {
   Showed: '#10B981',
   Cancelled: '#EF4444',
   'No Show': '#F59E0B',
-  Pending: '#94A3B8'
+  'Still to come': '#94A3B8'
 };
 
 const EMPTY_METRICS = {
   bookingsMade: 0, onCalendar: 0, cancelled: 0, showed: 0,
-  noShow: 0, pending: 0, showRate: null, salesCount: 0, revenue: 0
+  noShow: 0, pending: 0, counted: 0, rescheduled: 0, cancelledDateWiped: 0, showRate: null, salesCount: 0, revenue: 0
 };
 
 function toISODate(d) {
@@ -62,9 +63,15 @@ function getLastWeekDates() {
 }
 
 function getThisMonthDates() {
+  // Whole calendar month, matching This Week's Mon-to-Sun behaviour. Ending at today
+  // instead hid the rest of the month's diary - 280 of August's 517 appointments were
+  // invisible on the 12th - and made the two presets follow opposite rules.
+  // Appointments still to come are reported separately and excluded from the show rate,
+  // so including them costs nothing.
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { startDate: toISODate(first), endDate: toISODate(now) };
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { startDate: toISODate(first), endDate: toISODate(last) };
 }
 
 function formatCurrency(amount) {
@@ -100,6 +107,13 @@ const Reports = () => {
   const [floatingCustomOpen, setFloatingCustomOpen] = useState(false);
   const floatingBookerRef = useRef(null);
   const floatingCustomRef = useRef(null);
+  // The booker dropdown's panel is portaled to <body> so it can't be clipped by the
+  // toolbar row's horizontal scroll container - these track its trigger button (to
+  // position it) and the portaled panel itself (so outside-click detection still
+  // recognizes clicks inside it, even though it's no longer a DOM descendant).
+  const floatingBookerButtonRef = useRef(null);
+  const floatingBookerMenuRef = useRef(null);
+  const [floatingBookerMenuPos, setFloatingBookerMenuPos] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -161,8 +175,10 @@ const Reports = () => {
   useEffect(() => {
     if (!floatingBookerOpen && !floatingCustomOpen) return undefined;
     const handlePointerDown = (e) => {
-      if (floatingBookerOpen && floatingBookerRef.current && !floatingBookerRef.current.contains(e.target)) {
-        setFloatingBookerOpen(false);
+      if (floatingBookerOpen) {
+        const inButton = floatingBookerRef.current && floatingBookerRef.current.contains(e.target);
+        const inMenu = floatingBookerMenuRef.current && floatingBookerMenuRef.current.contains(e.target);
+        if (!inButton && !inMenu) setFloatingBookerOpen(false);
       }
       if (floatingCustomOpen && floatingCustomRef.current && !floatingCustomRef.current.contains(e.target)) {
         setFloatingCustomOpen(false);
@@ -205,7 +221,7 @@ const Reports = () => {
     { name: 'Showed', value: scope.showed },
     { name: 'Cancelled', value: scope.cancelled },
     { name: 'No Show', value: scope.noShow },
-    { name: 'Pending', value: scope.pending }
+    { name: 'Still to come', value: scope.pending }
   ].filter(d => d.value > 0)), [scope]);
 
   const bookerShareData = useMemo(() => {
@@ -264,6 +280,21 @@ const Reports = () => {
     setFloatingCustomOpen(false);
   };
 
+  // Opens the booker dropdown as a portal positioned under its trigger button,
+  // clamped so it never overflows off the right edge of the viewport.
+  const toggleFloatingBookerMenu = () => {
+    if (!floatingBookerOpen) {
+      const btn = floatingBookerButtonRef.current;
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const panelWidth = 208; // matches the panel's w-52
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+        setFloatingBookerMenuPos({ top: rect.bottom + 8, left });
+      }
+    }
+    setFloatingBookerOpen(o => !o);
+  };
+
   const kpiCards = [
     { label: 'Bookings Made', value: scope.bookingsMade, icon: FiBookOpen, color: 'blue' },
     { label: 'On Calendar', value: scope.onCalendar, icon: FiCalendar, color: 'indigo' },
@@ -271,7 +302,8 @@ const Reports = () => {
     { label: 'Showed', value: scope.showed, icon: FiCheckCircle, color: 'green' },
     { label: 'Show Rate', value: formatPercent(scope.showRate), icon: FiTarget, color: 'pink' },
     { label: 'No Show', value: scope.noShow, icon: FiAlertTriangle, color: 'orange' },
-    { label: 'Pending', value: scope.pending, icon: FiClock, color: 'gray' },
+    { label: 'Still to come', value: scope.pending, icon: FiClock, color: 'gray' },
+    { label: 'Rescheduled', value: scope.rescheduled, sub: 'not scored here', icon: FiRefreshCw, color: 'purple' },
     { label: 'Sales', value: scope.salesCount, icon: FiDollarSign, color: 'yellow' },
     { label: 'Revenue', value: formatCurrency(scope.revenue), icon: FiDollarSign, color: 'emerald' }
   ];
@@ -285,7 +317,8 @@ const Reports = () => {
     orange: 'from-orange-50 to-orange-100 text-orange-900 text-orange-700 text-orange-600',
     gray: 'from-gray-50 to-gray-100 text-gray-900 text-gray-700 text-gray-600',
     yellow: 'from-yellow-50 to-yellow-100 text-yellow-900 text-yellow-700 text-yellow-600',
-    emerald: 'from-emerald-50 to-emerald-100 text-emerald-900 text-emerald-700 text-emerald-600'
+    emerald: 'from-emerald-50 to-emerald-100 text-emerald-900 text-emerald-700 text-emerald-600',
+    purple: 'from-purple-50 to-purple-100 text-purple-900 text-purple-700 text-purple-600'
   };
 
   if (!isAdmin) {
@@ -341,39 +374,19 @@ const Reports = () => {
 
               <div className="w-px h-5 bg-gray-200 flex-shrink-0" />
 
-              {/* Booker dropdown */}
+              {/* Booker dropdown - trigger stays inline in this scrolling row, but its
+                  panel is portaled to <body> (see below) so the row's horizontal scroll
+                  can never clip or double-scroll it. */}
               <div className="relative flex-shrink-0" ref={floatingBookerRef}>
                 <button
-                  onClick={() => setFloatingBookerOpen(o => !o)}
+                  ref={floatingBookerButtonRef}
+                  onClick={toggleFloatingBookerMenu}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                 >
                   <FiUsers className="h-3.5 w-3.5" />
                   <span className="max-w-[110px] truncate">{scopeName}</span>
                   <FiChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${floatingBookerOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {floatingBookerOpen && (
-                  <div className="absolute right-0 sm:left-0 sm:right-auto mt-2 w-52 max-h-72 overflow-y-auto bg-white rounded-xl shadow-xl ring-1 ring-black/5 py-1.5 z-30">
-                    <button
-                      onClick={() => { setSelectedBooker('all'); setFloatingBookerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                        selectedBooker === 'all' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      All Bookers
-                    </button>
-                    {sortedBookers.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => { setSelectedBooker(b.id); setFloatingBookerOpen(false); }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                          selectedBooker === b.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        {b.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <button
@@ -416,6 +429,38 @@ const Reports = () => {
           </div>
         </div>
       </div>
+
+      {/* Booker dropdown panel - portaled to <body> so the toolbar row's horizontal
+          scroll container can never clip or double-scroll it (position is computed
+          in toggleFloatingBookerMenu from the trigger button's own position). */}
+      {floatingBookerOpen && floatingBookerMenuPos && createPortal(
+        <div
+          ref={floatingBookerMenuRef}
+          style={{ top: floatingBookerMenuPos.top, left: floatingBookerMenuPos.left }}
+          className="fixed w-52 max-h-72 overflow-y-auto bg-white rounded-xl shadow-xl ring-1 ring-black/5 py-1.5 z-50"
+        >
+          <button
+            onClick={() => { setSelectedBooker('all'); setFloatingBookerOpen(false); }}
+            className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+              selectedBooker === 'all' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            All Bookers
+          </button>
+          {sortedBookers.map(b => (
+            <button
+              key={b.id}
+              onClick={() => { setSelectedBooker(b.id); setFloatingBookerOpen(false); }}
+              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                selectedBooker === b.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
 
       {/* Scroll-to-top companion FAB */}
       <button
@@ -557,6 +602,7 @@ const Reports = () => {
                   </div>
                   <div className={`text-2xl font-bold ${cls[2]}`}>{card.value}</div>
                   <div className={`text-xs font-medium mt-1 ${cls[3]}`}>{card.label}</div>
+                  {card.sub && <div className="text-[10px] mt-0.5 text-gray-500">{card.sub}</div>}
                 </div>
               );
             })}
@@ -694,8 +740,12 @@ const Reports = () => {
                       <span className="font-semibold text-orange-600">{row.noShow}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Pending</span>
+                      <span className="text-gray-500">Still to come</span>
                       <span className="font-semibold text-gray-600">{row.pending}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Rescheduled</span>
+                      <span className="font-semibold text-purple-600">{row.rescheduled}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Sales</span>
@@ -718,7 +768,8 @@ const Reports = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Showed</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Show Rate</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No Show</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pending</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Still to come</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rescheduled</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sales</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
                   </tr>
@@ -734,6 +785,7 @@ const Reports = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-pink-600 font-semibold">{formatPercent(row.showRate)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-orange-600 font-semibold">{row.noShow}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 font-semibold">{row.pending}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-purple-600 font-semibold">{row.rescheduled}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-yellow-600 font-semibold">{row.salesCount}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-emerald-600 font-semibold">{formatCurrency(row.revenue)}</td>
                     </tr>

@@ -1429,12 +1429,13 @@ const Calendar = () => {
         ...selectedEvent.extendedProps.lead
       };
 
-      // For cancellation, clear the booking date and set to Cancelled
+      // For cancellation, set the status but KEEP the booking date - it is the only
+      // record of which day the slot was on, and clearing it removed the cancellation
+      // from the booker reports entirely (see the guard in PUT /api/leads/:id).
       if (newStatus === 'Cancelled') {
         updateData = {
           ...updateData,
-          status: 'Cancelled', // Set to Cancelled status
-          date_booked: null, // Clear the booking date
+          status: 'Cancelled',
           cancellation_reason: 'Appointment cancelled via calendar'
         };
       } else if (newStatus === 'Confirmed') {
