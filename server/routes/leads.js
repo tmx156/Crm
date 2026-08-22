@@ -1232,33 +1232,83 @@ router.post('/', auth, async (req, res) => {
       finalData: filteredBody
     });
 
-    // Check for existing leads with the same name and phone to prevent duplicates using Supabase
-    if (finalBody.name && finalBody.phone) {
-      // Normalize phone number for better duplicate detection
-      const normalizedPhone = finalBody.phone.replace(/[\s\-\(\)]/g, '');
-      const normalizedName = finalBody.name.trim().toLowerCase();
-      
-      console.log(`📊 Duplicate check: Looking for "${normalizedName}" with phone "${normalizedPhone}"`);
-      
-      // Use Supabase to check for duplicates
-      const existingLeads = await dbManager.query('leads', {
-        select: 'id, name, phone, status, date_booked',
-        is: { deleted_at: null },
-        // Note: Supabase doesn't support complex WHERE clauses like SQLite, so we'll filter in JavaScript
-        // This is a limitation we'll need to work around
+    // Check for an existing record of this customer before creating another one.
+    //
+    // This check used to fetch every lead and filter them in JavaScript. The fetch had no
+    // pagination, and PostgREST caps an unbounded select at 1000 rows and returns no error
+    // when it truncates - so with 15,190 leads it was deciding "no duplicate" from 6.6% of
+    // the table. Replaying it against 19 known duplicate pairs, 17 were missed purely
+    // because the original was not in the rows that came back. It now asks the database for
+    // the candidates instead of downloading the table, which is both correct and cheaper.
+    if (finalBody.name && (finalBody.phone || finalBody.email)) {
+      // Last 10 digits: the same number is stored here as 07…, +447…, 447… and with
+      // assorted spaces and brackets, and the old comparison treated every one of those as
+      // a different customer.
+      const phoneDigits = String(finalBody.phone || '').replace(/\D/g, '');
+      const phoneKey = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : null;
+      const emailKey = String(finalBody.email || '').trim().toLowerCase() || null;
+
+      // A phone number identifies a household - couples and families book on one number
+      // constantly - so contact details alone would merge two different people. The
+      // forename settles it: a second record for the same customer always keeps it, while
+      // household members differ on it. Titles are stripped so "Miss Susan Savage" matches
+      // "Susan Savage", and this also matches on the forename alone, so "Elizabeth" is
+      // recognised as "Elizabeth Donnelly" - two of the 19 were missed on exactly that.
+      const TITLES = new Set(['mr', 'mrs', 'miss', 'ms', 'dr', 'mx', 'prof']);
+      const forenameOf = (n) => {
+        const t = String(n || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/)
+          .filter(x => x && !TITLES.has(x));
+        return t[0] || null;
+      };
+      const newForename = forenameOf(finalBody.name);
+
+      console.log(`📊 Duplicate check: "${newForename}" phone=${phoneKey || '-'} email=${emailKey || '-'}`);
+
+      // booked_at/booked_by/booker_id are selected because the rebooking branch below
+      // preserves them when already set. Without them on the row those checks always saw
+      // undefined and overwrote both, handing the booking credit and the booking date to
+      // whoever happened to rebook the customer.
+      // Queried through dbManager so this runs on the same service-role connection as the
+      // rest of the route. The module-level `supabase` client here is built with the anon
+      // key and is subject to row-level security, which would quietly return fewer rows -
+      // the same silent-undercount failure this fix exists to remove.
+      const CANDIDATE_FIELDS = 'id, name, phone, email, status, date_booked, booked_at, booked_by, booker_id';
+      const candidates = [];
+      if (phoneKey) {
+        candidates.push(...(await dbManager.query('leads', {
+          select: CANDIDATE_FIELDS,
+          is: { deleted_at: null },
+          ilike: { phone: `%${phoneKey}%` },
+          limit: 200
+        }) || []));
+      }
+      if (emailKey) {
+        candidates.push(...(await dbManager.query('leads', {
+          select: CANDIDATE_FIELDS,
+          is: { deleted_at: null },
+          ilike: { email: emailKey },
+          limit: 200
+        }) || []));
+      }
+
+      const seen = new Set();
+      const duplicateLeads = candidates.filter(lead => {
+        if (seen.has(lead.id)) return false;
+        const leadDigits = String(lead.phone || '').replace(/\D/g, '');
+        const leadPhoneKey = leadDigits.length >= 10 ? leadDigits.slice(-10) : null;
+        const leadEmailKey = String(lead.email || '').trim().toLowerCase() || null;
+        const contactMatch =
+          (phoneKey && leadPhoneKey === phoneKey) ||
+          (emailKey && leadEmailKey === emailKey);
+        if (!contactMatch) return false;
+        // An unreadable name on either side is not evidence of a different person - fall
+        // back to the contact match rather than letting a blank create a duplicate.
+        const lf = forenameOf(lead.name);
+        if (newForename && lf && lf !== newForename) return false;
+        seen.add(lead.id);
+        return true;
       });
-      
-      // Filter for duplicates in JavaScript (not ideal but necessary for now)
-      const duplicateLeads = existingLeads.filter(lead => {
-        const leadName = lead.name ? lead.name.trim().toLowerCase() : '';
-        const leadPhone = lead.phone ? lead.phone.replace(/[\s\-\(\)]/g, '') : '';
-        return leadName === normalizedName && (
-          lead.phone === finalBody.phone || 
-          leadPhone === normalizedPhone || 
-          leadPhone === finalBody.phone.replace(/[\s\-\(\)]/g, '')
-        );
-      });
-      
+
       if (duplicateLeads.length > 0) {
         console.log(`📊 Duplicate detection: Found ${duplicateLeads.length} existing leads for ${finalBody.name} (${finalBody.phone})`);
         
@@ -1271,10 +1321,17 @@ router.post('/', auth, async (req, res) => {
           const updateFields = {
             status: 'Booked',
             date_booked: finalBody.date_booked ? preserveLocalTime(finalBody.date_booked) : null,
-            booked_at: new Date().toISOString(),
             ever_booked: true,
             updated_at: new Date().toISOString()
           };
+          // Preserve the original booking timestamp, exactly as booked_by is preserved
+          // below. Restamping it moves the booking out of the week it was actually taken
+          // and into the week it was rebooked, so an already-published week silently loses
+          // a booking and the current week gains one nobody made. Only stamp it when the
+          // lead has never been booked before.
+          if (!existingLead.booked_at) {
+            updateFields.booked_at = new Date().toISOString();
+          }
           // Preserve original booker - only set booked_by/booker_id if not already set
           if (!existingLead.booked_by) {
             updateFields.booked_by = req.user.id;

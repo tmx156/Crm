@@ -25,7 +25,8 @@ const OUTCOME_COLORS = {
 
 const EMPTY_METRICS = {
   bookingsMade: 0, onCalendar: 0, cancelled: 0, showed: 0,
-  noShow: 0, pending: 0, counted: 0, rescheduled: 0, cancelledDateWiped: 0, showRate: null, salesCount: 0, revenue: 0
+  noShow: 0, pending: 0, counted: 0, rescheduled: 0, cancelledDateWiped: 0, unrecorded: 0,
+  rebookingShells: 0, reshoots: 0, showRate: null, salesCount: 0, revenue: 0
 };
 
 function toISODate(d) {
@@ -301,9 +302,20 @@ const Reports = () => {
     { label: 'Cancelled', value: scope.cancelled, icon: FiXCircle, color: 'red' },
     { label: 'Showed', value: scope.showed, icon: FiCheckCircle, color: 'green' },
     { label: 'Show Rate', value: formatPercent(scope.showRate), icon: FiTarget, color: 'pink' },
-    { label: 'No Show', value: scope.noShow, icon: FiAlertTriangle, color: 'orange' },
+    // The blank half of No Show is called out because it is not the same claim. A recorded
+    // No Show means someone watched the slot go by empty; a blank means the diary was never
+    // filled in. Both count against the show rate, but only one is evidence about the customer.
+    {
+      label: 'No Show',
+      value: scope.noShow,
+      sub: scope.unrecorded > 0 ? `${scope.unrecorded} never written up` : undefined,
+      icon: FiAlertTriangle,
+      color: 'orange'
+    },
     { label: 'Still to come', value: scope.pending, icon: FiClock, color: 'gray' },
-    { label: 'Rescheduled', value: scope.rescheduled, sub: 'not scored here', icon: FiRefreshCw, color: 'purple' },
+    // Counted in the outcomes above, not alongside them: moving an appointment is neutral,
+    // so it is scored in the week it now sits in exactly like any other appointment.
+    { label: 'Rescheduled', value: scope.rescheduled, sub: 'moved into this period', icon: FiRefreshCw, color: 'purple' },
     { label: 'Sales', value: scope.salesCount, icon: FiDollarSign, color: 'yellow' },
     { label: 'Revenue', value: formatCurrency(scope.revenue), icon: FiDollarSign, color: 'emerald' }
   ];
@@ -608,6 +620,35 @@ const Reports = () => {
             })}
           </div>
 
+          {/* Suppressed duplicates. Stated openly rather than quietly dropped: these records
+              exist in the CRM and someone comparing this page against a lead list will find
+              them, so the page has to account for the difference itself. */}
+          {(scope.rebookingShells > 0 || scope.reshoots > 0) && (
+            <div className="space-y-1.5 -mt-2">
+              {scope.rebookingShells > 0 && (
+                <div className="flex items-start gap-2 text-xs text-gray-500">
+                  <FiRefreshCw className="h-3.5 w-3.5 mt-0.5 flex-none text-gray-400" />
+                  <span>
+                    {scope.rebookingShells} cancelled {scope.rebookingShells === 1 ? 'record' : 'records'} excluded
+                    as {scope.rebookingShells === 1 ? 'a duplicate' : 'duplicates'} — the customer was rebooked within
+                    two weeks, so the appointment was moved rather than lost. Counting both halves would charge a
+                    cancellation and an extra booking for one appointment.
+                  </span>
+                </div>
+              )}
+              {scope.reshoots > 0 && (
+                <div className="flex items-start gap-2 text-xs text-gray-500">
+                  <FiCheckCircle className="h-3.5 w-3.5 mt-0.5 flex-none text-gray-400" />
+                  <span>
+                    {scope.reshoots} reshoot {scope.reshoots === 1 ? 'visit' : 'visits'} excluded — {scope.reshoots === 1 ? 'this customer' : 'these customers'} had
+                    already bought, and the turn-up is credited to the week of the sale rather than the day
+                    they came back to be shot again.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Charts row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card">
@@ -744,7 +785,7 @@ const Reports = () => {
                       <span className="font-semibold text-gray-600">{row.pending}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Rescheduled</span>
+                      <span className="text-gray-500" title="Moved in from another period. Already counted in the outcomes above.">Rescheduled</span>
                       <span className="font-semibold text-purple-600">{row.rescheduled}</span>
                     </div>
                     <div className="flex justify-between">
@@ -769,7 +810,7 @@ const Reports = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Show Rate</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No Show</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Still to come</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rescheduled</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="Moved in from another period. Already counted in the outcome columns.">Rescheduled</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sales</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
                   </tr>
