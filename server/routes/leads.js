@@ -18,6 +18,19 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Real columns on public.leads. Updates are filtered against this so an unknown
+// key (a derived field the client echoed back, or a one-off like
+// cancellation_reason) cannot make Postgres reject the whole statement.
+// Keep in sync with server/migrations/00_full_schema.sql.
+const LEAD_COLUMNS = new Set([
+  'id', 'name', 'phone', 'email', 'postcode', 'age', 'image_url', 'parent_phone',
+  'booker_id', 'created_by_user_id', 'updated_by_user_id', 'booked_by', 'status',
+  'date_booked', 'is_confirmed', 'has_sale', 'booking_status', 'booking_history',
+  'notes', 'tags', 'booked_at', 'ever_booked', 'assigned_at', 'deleted_at',
+  'reject_reason', 'rejected_at', 'booking_account', 'model_stats', 'retargeting',
+  'created_at', 'updated_at'
+]);
+
 // IMPORTANT: Diary updates should only be triggered by registered users manually
 // All upload processes create leads with status 'New' and no dateBooked to prevent
 // automatic diary updates. Only manual status changes by users should update the diary.
@@ -1685,6 +1698,13 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
                     key === 'bookingStatus' ? 'booking_status' :
                     key === 'modelStats' ? 'model_stats' :
                     key;
+
+      // Only persist real columns. The calendar spreads the whole lead object it
+      // holds in state (which carries derived fields like `booker`, plus one-off
+      // fields such as `cancellation_reason`), and Postgres rejects the entire
+      // update if any unknown column is present — the write silently fails and
+      // the UI keeps stale state. Dropping unknown keys keeps the update valid.
+      if (!LEAD_COLUMNS.has(dbKey)) continue;
 
       // Convert Date objects to ISO strings
       if (value instanceof Date) {
