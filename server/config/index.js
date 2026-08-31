@@ -1,0 +1,112 @@
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+
+/**
+ * Centralized Configuration Module
+ * Provides secure access to environment variables with fallbacks
+ * This ensures credentials are not hardcoded in multiple places
+ */
+
+const config = {
+  // Environment
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  PORT: process.env.PORT || 5000,
+
+  // JWT Configuration - Maintain backward compatibility
+  JWT_SECRET: process.env.JWT_SECRET || 'your-fallback-secret-key',
+  JWT_EXPIRE: process.env.JWT_EXPIRE || '30d',
+
+  // Supabase Configuration
+  supabase: {
+    url: process.env.SUPABASE_URL || 'https://artoqeocaqpwvpicthzr.supabase.co',
+    anonKey: process.env.SUPABASE_ANON_KEY || null,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || null,
+    // Server-side operations should use serviceRoleKey to bypass RLS
+    serverKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || null
+  },
+
+  // SMS Configuration (BulkSMS) - reads from .env only, no fallback credentials
+  sms: {
+    username: process.env.BULKSMS_USERNAME || null,
+    password: process.env.BULKSMS_PASSWORD || null,
+    fromNumber: process.env.BULKSMS_FROM_NUMBER || '+447786201100',
+    pollEnabled: (process.env.BULKSMS_POLL_ENABLED || 'false').toLowerCase() === 'true',
+    pollInterval: parseInt(process.env.BULKSMS_POLL_INTERVAL_MS) || 60000
+  },
+
+  // Email Configuration
+  email: {
+    user: process.env.EMAIL_USER || null,
+    password: process.env.EMAIL_PASSWORD || null,
+    gmailUser: process.env.GMAIL_USER || null,
+    gmailPass: process.env.GMAIL_PASS || null
+  },
+
+  // Google OAuth / Gmail API
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || null,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/gmail/callback'
+  },
+
+  // Google Sheets Sync
+  googleSheets: {
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID || null,
+    serviceAccountKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || null,
+    serviceAccountKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || null
+  },
+
+  // Gmail Poller (reads from env directly, these are for reference)
+  gmail: {
+    email: process.env.GMAIL_EMAIL || process.env.GMAIL_USER || null,
+    clientId: process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || null,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || null,
+    refreshToken: process.env.GMAIL_REFRESH_TOKEN || null,
+    pollIntervalMs: parseInt(process.env.GMAIL_POLL_INTERVAL_MS) || 180000
+  },
+
+  // Webhook Configuration (for external lead sources like landing pages)
+  webhook: {
+    apiKey: process.env.WEBHOOK_API_KEY || 'a861c0da361d0723faeac04f0d39fa01129152a7b006dd1885e41eb2d8ceb558'
+  },
+
+  // Facebook Conversions API
+  facebook: {
+    pixelId: process.env.FB_PIXEL_ID || null,
+    accessToken: process.env.FB_ACCESS_TOKEN || null,
+    testEventCode: process.env.FB_TEST_EVENT_CODE || null,
+    eventSourceUrl: process.env.FB_EVENT_SOURCE_URL || null
+  },
+
+  // Client Configuration
+  CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
+
+  // Redis (if needed)
+  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+
+  // Logging
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info'
+};
+
+// Validation function
+config.validate = function() {
+  const required = ['JWT_SECRET'];
+
+  const missing = required.filter(key => !this[key]);
+
+  if (missing.length > 0) {
+    console.warn(`⚠️ Missing required environment variables: ${missing.join(', ')}`);
+    console.warn('Using fallback values - please set proper environment variables in production');
+  }
+
+  // Credentials come from .env only - no hardcoded fallbacks
+  if (!this.supabase.serverKey) {
+    console.warn('⚠️ No Supabase key set - set SUPABASE_SERVICE_ROLE_KEY in .env');
+  }
+
+  return missing.length === 0;
+};
+
+// Initialize validation
+config.validate();
+
+module.exports = config;

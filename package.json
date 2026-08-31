@@ -1,0 +1,42 @@
+{
+  "name": "modelling-studio-crm",
+  "version": "1.0.0",
+  "description": "Complete CRM system for modelling portfolio studio",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-deps": "npm install && cd server && npm install && cd ../client && npm install",
+    "start": "cd server && npm start",
+    "railway:build": "npm run install-deps && npm run build",
+    "railway:start": "cd server && npm start"
+  },
+  "keywords": [
+    "crm",
+    "modelling",
+    "portfolio",
+    "studio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "axios": "^1.10.0",
+    "bcryptjs": "^3.0.2",
+    "googleapis": "^171.4.0",
+    "ngrok": "^5.0.0-beta.2",
+    "node-fetch": "^3.3.2",
+    "sharp": "^0.34.3"
+  }
+}

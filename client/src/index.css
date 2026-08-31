@@ -1,0 +1,522 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Professional Base Styles */
+@layer base {
+  :root {
+    --border-color: #e5e7eb;
+    --hover-bg: #f9fafb;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  /* Professional Cards */
+  .card-modern {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200;
+  }
+  
+  /* Professional Buttons */
+  .btn-modern {
+    @apply px-4 py-2 rounded-md font-medium shadow-sm hover:shadow transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply btn-modern bg-slate-700 text-white hover:bg-slate-800 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2;
+  }
+  
+  .btn-secondary {
+    @apply btn-modern bg-white text-gray-700 border border-gray-300 hover:bg-gray-50;
+  }
+  
+  .btn-accent {
+    @apply btn-modern bg-accent-blue text-white hover:bg-blue-600;
+  }
+  
+  /* Professional Status Badges */
+  .status-badge {
+    @apply px-2 py-1 text-xs font-medium rounded;
+  }
+  
+  .status-new {
+    @apply bg-blue-100 text-blue-700 border border-blue-200;
+  }
+  
+  .status-booked {
+    @apply bg-green-100 text-green-700 border border-green-200;
+  }
+  
+  .status-attended {
+    @apply bg-purple-100 text-purple-700 border border-purple-200;
+  }
+  
+  .status-cancelled {
+    @apply bg-red-100 text-red-700 border border-red-200;
+  }
+  
+  .status-assigned {
+    @apply bg-amber-100 text-amber-700 border border-amber-200;
+  }
+  
+  .status-reschedule {
+    @apply bg-orange-100 text-orange-700 border border-orange-200;
+  }
+  
+  .status-rejected {
+    @apply bg-gray-100 text-gray-700 border border-gray-200;
+  }
+  
+  /* Professional Cards */
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200;
+  }
+  
+  /* Professional Table Styles */
+  .table-modern {
+    @apply w-full overflow-hidden rounded-lg border border-gray-200;
+  }
+  
+  .table-row {
+    @apply border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150;
+  }
+  
+  .table-header {
+    @apply bg-gray-50 text-gray-600 text-xs font-semibold uppercase tracking-wider;
+  }
+  
+  /* Professional Input Fields */
+  .input-modern {
+    @apply w-full px-3 py-2 rounded-md bg-white border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-all duration-200;
+  }
+  
+  .select-modern {
+    @apply input-modern cursor-pointer;
+  }
+  
+  /* Sidebar Navigation */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 hover:text-slate-900 transition-all duration-150;
+  }
+  
+  .nav-item-active {
+    @apply nav-item bg-slate-100 text-slate-900 font-semibold;
+  }
+  
+  /* Calendar Specific */
+  .calendar-event {
+    @apply rounded-lg px-2 py-1 text-xs font-semibold shadow-sm backdrop-blur-sm border-l-4 hover:shadow-lg transition-all duration-200;
+  }
+  
+  /* Animations */
+  .pulse-glow {
+    @apply animate-pulse;
+  }
+  
+  .float-animation {
+    @apply animate-bounce;
+  }
+}
+
+/* Professional Calendar Styles */
+.fc {
+  @apply font-sans;
+}
+
+.fc-theme-standard .fc-scrollgrid {
+  @apply border border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  @apply border-gray-300;
+}
+
+.fc-col-header-cell {
+  @apply bg-gray-50 border-b-2 border-gray-300;
+}
+
+.fc-col-header-cell-cushion {
+  @apply text-xs font-bold text-gray-700 uppercase tracking-wider py-3;
+}
+
+.fc-daygrid-day {
+  @apply bg-white hover:bg-gray-50 transition-colors duration-150 border border-gray-200;
+}
+
+.fc-daygrid-day-number {
+  @apply text-gray-800 font-semibold text-sm;
+}
+
+.fc-daygrid-day.fc-day-today {
+  @apply bg-slate-50 border-2 border-slate-400;
+}
+
+.fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  @apply text-slate-900 font-bold;
+}
+
+.fc-event {
+  @apply border-0 rounded px-1 shadow-sm hover:shadow-md transition-all duration-150 cursor-pointer text-xs font-medium;
+}
+
+.fc-daygrid-event {
+  @apply px-2 py-1 my-0.5;
+}
+
+.fc-event-title {
+  @apply font-semibold text-white;
+}
+
+.fc-daygrid-day-events {
+  @apply space-y-0.5;
+}
+
+/* Day/Week view: compact events */
+.fc-timegrid-event {
+  @apply py-0 my-0;
+}
+
+/* "+" indicator on time slot hover to show user they can add a booking */
+.fc .fc-timegrid-slot-lane,
+.fc .fc-timegrid-slot-label {
+  height: 35px !important;
+}
+
+.fc .fc-timegrid-slot-lane {
+  position: relative;
+}
+
+/* Show + only on slots that have bookings */
+.fc .fc-timegrid-slot-lane.has-event::after {
+  content: '+';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #3b82f6;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Mobile: widen slots so + isn't covered by events */
+@media (max-width: 640px) {
+  .fc .fc-timegrid-slot-lane {
+    padding-right: 48px;
+  }
+  .fc .fc-timegrid-col-events {
+    margin-right: 48px !important;
+  }
+  .fc .fc-timegrid-slot-lane.has-event::after {
+    right: 14px;
+  }
+}
+
+.fc-button {
+  @apply bg-slate-700 text-white border-0 rounded-md px-3 py-1.5 font-medium shadow-sm hover:bg-slate-800 transition-all duration-150;
+}
+
+.fc-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.fc-button-active {
+  @apply bg-slate-900 shadow-inner;
+}
+
+.fc-toolbar-title {
+  @apply text-xl font-bold text-slate-900;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  @apply w-2 h-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-400 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-500;
+}
+
+/* Calendar Modal Scrollbar - Pinky Red & Prominent */
+.calendar-modal-scroll::-webkit-scrollbar {
+  width: 12px;
+}
+
+.calendar-modal-scroll::-webkit-scrollbar-track {
+  background: #fce7f3;
+  border-radius: 10px;
+}
+
+.calendar-modal-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ec4899 0%, #db2777 100%);
+  border-radius: 10px;
+  border: 2px solid #fce7f3;
+  box-shadow: 0 2px 4px rgba(236, 72, 153, 0.3);
+}
+
+.calendar-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #db2777 0%, #be185d 100%);
+  box-shadow: 0 4px 8px rgba(236, 72, 153, 0.5);
+  cursor: pointer;
+}
+
+.calendar-modal-scroll::-webkit-scrollbar-thumb:active {
+  background: #be185d;
+}
+
+/* Loading Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  @apply bg-gradient-to-r from-transparent via-white/20 to-transparent bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite];
+}
+
+/* Mobile Responsive Utilities */
+@layer utilities {
+  /* Touch-friendly sizes */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Mobile text sizing */
+  .text-mobile-xs {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-mobile-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-mobile-base {
+    @apply text-base sm:text-lg;
+  }
+
+  .text-mobile-lg {
+    @apply text-lg sm:text-xl;
+  }
+
+  .text-mobile-xl {
+    @apply text-xl sm:text-2xl;
+  }
+
+  /* Mobile padding */
+  .mobile-padding {
+    @apply px-3 py-2 sm:px-4 sm:py-3;
+  }
+
+  /* Mobile card */
+  .mobile-card {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+
+  /* Hide on mobile */
+  .hide-mobile {
+    @apply hidden sm:block;
+  }
+
+  /* Show only on mobile */
+  .show-mobile {
+    @apply block sm:hidden;
+  }
+
+  /* Mobile grid */
+  .mobile-grid {
+    @apply grid-cols-1 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* Mobile spacing */
+  .mobile-gap {
+    @apply gap-3 sm:gap-4 md:gap-6;
+  }
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 640px) {
+  /* Ensure tables are scrollable on mobile */
+  .table-modern {
+    @apply overflow-x-auto;
+  }
+
+  /* Smaller button text on mobile */
+  .btn-modern {
+    @apply text-sm px-3 py-1.5;
+  }
+
+  /* Compact cards on mobile */
+  .card {
+    @apply p-4;
+  }
+
+  /* Smaller calendar text */
+  .fc-toolbar-title {
+    @apply text-base;
+  }
+
+  .fc-button {
+    @apply px-2 py-1 text-xs;
+  }
+
+  /* Smaller status badges */
+  .status-badge {
+    @apply text-xs px-1.5 py-0.5;
+  }
+
+  /* Compact input fields */
+  .input-modern, .select-modern {
+    @apply text-sm px-2 py-1.5;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .fc-toolbar-title {
+    @apply text-lg;
+  }
+}
+
+/* FullCalendar Mobile Responsive Styles */
+@media (max-width: 640px) {
+  /* Toolbar */
+  .fc .fc-toolbar {
+    @apply flex-col gap-2;
+  }
+
+  .fc .fc-toolbar-chunk {
+    @apply w-full flex justify-center;
+  }
+
+  .fc .fc-toolbar-title {
+    @apply text-sm font-bold;
+  }
+
+  /* Buttons - make them smaller and touch-friendly */
+  .fc .fc-button {
+    @apply px-2 py-1 text-xs;
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  .fc .fc-button-group {
+    @apply flex gap-1;
+  }
+
+  /* Hide view switcher on very small screens */
+  .fc .fc-toolbar-chunk:last-child {
+    @apply hidden;
+  }
+
+  /* Day headers */
+  .fc .fc-col-header-cell-cushion {
+    @apply text-xs py-2;
+  }
+
+  /* Day numbers */
+  .fc .fc-daygrid-day-number {
+    @apply text-xs p-1;
+  }
+
+  /* Events - make more compact */
+  .fc .fc-daygrid-event {
+    @apply text-xs py-0.5 px-1 my-0;
+  }
+
+  .fc .fc-event-title {
+    @apply text-xs;
+  }
+
+  /* Week/Day view times */
+  .fc .fc-timegrid-slot-label {
+    @apply text-xs;
+  }
+
+  .fc .fc-timegrid-event {
+    @apply text-xs;
+  }
+
+  /* Reduce cell padding */
+  .fc .fc-daygrid-day-frame {
+    @apply min-h-[60px];
+  }
+
+  /* More events link */
+  .fc .fc-daygrid-more-link {
+    @apply text-xs;
+  }
+}
+
+/* Tablet calendar adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .fc .fc-toolbar-title {
+    @apply text-base;
+  }
+
+  .fc .fc-button {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .fc .fc-daygrid-event {
+    @apply text-sm;
+  }
+}
+
+/* Always make calendar responsive */
+.fc {
+  @apply w-full overflow-x-auto;
+}
+
+.fc-view-harness {
+  @apply overflow-x-auto;
+}
+
+/* Mobile-friendly modal styles - only for modals using these classes */
+.modal-overlay:not(.custom-modal) {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center;
+  @apply p-2 sm:p-4 overflow-y-auto;
+}
+
+.modal-content:not(.custom-modal) {
+  @apply bg-white rounded-lg sm:rounded-xl shadow-2xl;
+  @apply w-full max-w-4xl mx-auto my-auto;
+  @apply max-h-[95vh] overflow-y-auto;
+  @apply p-4 sm:p-6 lg:p-8;
+}
+
+@media (max-width: 640px) {
+  .modal-content:not(.custom-modal) {
+    @apply rounded-lg max-h-[98vh] p-3;
+  }
+
+  .modal-overlay:not(.custom-modal) {
+    @apply p-1;
+  }
+}

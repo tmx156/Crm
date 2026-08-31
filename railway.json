@@ -1,0 +1,36 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "buildCommand": "npm run railway:build",
+    "startCommand": "npm run railway:start"
+  },
+  "deploy": {
+    "restartPolicyType": "ON_FAILURE",
+    "numReplicas": 1,
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 300
+  },
+  "networking": {
+    "outboundConnections": {
+      "allowed": [
+        {
+          "host": "smtp.gmail.com",
+          "ports": [465, 587]
+        },
+        {
+          "host": "imap.gmail.com", 
+          "ports": [993]
+        },
+        {
+          "host": "tnltvfzltdeilanxhlvy.supabase.co",
+          "ports": [443]
+        }
+      ]
+    }
+  },
+  "environment": {
+    "NODE_ENV": "production",
+    "NODE_OPTIONS": "--max-old-space-size=2048",
+    "CI": "false"
+  }
+}
