@@ -3,6 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const dbManager = require('../database-connection-manager');
 const MessagingService = require('../utils/messagingService');
+const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 const fbCapi = require('../utils/facebookConversions');
 
 // Function to send sale receipt via email and SMS
@@ -40,6 +41,15 @@ const sendSaleReceipt = async (sale, lead, customEmail, customPhone, sendEmail =
 
     // Send email receipt if enabled
     if (sendEmail && (customEmail || lead.email)) {
+      // Same rule as the sale communications below: honour the template's account and
+      // otherwise follow the brand this customer has been dealing with, rather than
+      // letting sendEmail fall back to its default parameter.
+      const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+        leadId: lead.id,
+        preferredAccount: template.email_account
+      });
+      console.log(`📧 Sale receipt account: ${emailAccount} (source: ${accountSource})`);
+
       const emailMessageData = {
         id: `email-receipt-${sale.id}-${Date.now()}`,
         lead_id: lead.id,
@@ -50,6 +60,8 @@ const sendSaleReceipt = async (sale, lead, customEmail, customPhone, sendEmail =
         email_body: processedTemplate.content,
         recipient_email: customEmail || lead.email,
         recipient_phone: customPhone || lead.phone,
+        // Record the sending account so later sends to this lead can follow it
+        gmail_account_key: emailAccount,
         sent_by: 'system',
         status: 'pending',
         created_at: new Date().toISOString(),
@@ -58,7 +70,7 @@ const sendSaleReceipt = async (sale, lead, customEmail, customPhone, sendEmail =
 
       const emailResult = await dbManager.insert('messages', emailMessageData);
       if (emailResult && emailResult.length > 0) {
-        await MessagingService.sendEmail(emailResult[0]);
+        await MessagingService.sendEmail(emailResult[0], emailAccount, template.sender_name || null);
         console.log(`📧 Receipt email sent for sale ${sale.id} to ${emailMessageData.recipient_email}`);
       }
     }
@@ -1090,6 +1102,16 @@ router.post('/bulk-communication', auth, async (req, res) => {
           smsLength: processedTemplate.sms_body?.length || 0
         });
 
+        // Send from the account the template names, falling back to whichever account this
+        // customer has actually been dealing with. Without this the send fell through to
+        // MessagingService.sendEmail's default parameter, so a template explicitly set to
+        // Antara still went out as Camry.
+        const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+          leadId: sale.lead_id,
+          preferredAccount: template.email_account
+        });
+        console.log(`📧 Sale communication account: ${emailAccount} (source: ${accountSource})`);
+
         // Create message record using Supabase (like calendar system)
         const messageId = require('uuid').v4();
         const { data: messageResult, error: messageError } = await supabase
@@ -1105,6 +1127,8 @@ router.post('/bulk-communication', auth, async (req, res) => {
             sms_body: customTemplate.send_sms ? processedTemplate.sms_body : null,
             recipient_email: customTemplate.send_email ? lead.email : null,
             recipient_phone: customTemplate.send_sms ? lead.phone : null,
+            // Record the sending account so later sends to this lead can follow it
+            gmail_account_key: customTemplate.send_email ? emailAccount : null,
             sent_by: req.user.id,
             sent_by_name: req.user.name,
             status: 'pending',
@@ -1152,7 +1176,7 @@ router.post('/bulk-communication', auth, async (req, res) => {
             };
             
             console.log(`📧 Sending email to ${lead.email}...`);
-            const emailResult = await MessagingService.sendEmail(message);
+            const emailResult = await MessagingService.sendEmail(message, emailAccount, template.sender_name || null);
             emailSent = emailResult;
             
             if (emailResult) {
