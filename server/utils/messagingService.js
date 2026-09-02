@@ -125,7 +125,7 @@ class MessagingService {
       '{userEmail}': user.email || '',
       '{bookerName}': bookerInfo ? bookerInfo.name : 'N/A',
       '{bookerEmail}': bookerInfo ? bookerInfo.email : 'N/A',
-      '{bookingDate}': bookingDate ? new Date(bookingDate).toLocaleDateString('en-GB') : '',
+      '{bookingDate}': bookingDate ? new Date(bookingDate).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : '',
       '{bookingTime}': bookingDate ? new Date(bookingDate).toLocaleTimeString('en-GB', { 
         hour: '2-digit', 
         minute: '2-digit', 

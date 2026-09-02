@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { formatBookingDate, formatBookingTime } from '../utils/bookingTime';
 
 const DailyDiary = () => {
   const { user } = useAuth();
@@ -430,8 +431,8 @@ const DailyDiary = () => {
                             <div className="font-medium text-gray-900">{booking.name}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(booking.date_booked).toLocaleDateString('en-GB')} at{' '}
-                            {new Date(booking.date_booked).toLocaleTimeString('en-GB', {
+                            {formatBookingDate(booking.date_booked)} at{' '}
+                            {formatBookingTime(booking.date_booked, 'en-GB', {
                               hour: '2-digit',
                               minute: '2-digit'
                             })}

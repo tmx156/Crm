@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import OptimizedCalendar from './OptimizedCalendar';
 import VirtualizedEventHistory from './VirtualizedEventHistory';
+import { formatBookingDateTime } from '../utils/bookingTime';
 
 /**
  * Calendar Performance Optimization Integration
@@ -114,7 +115,7 @@ const CalendarPerformanceOptimizations = ({
                       <label className="text-sm font-medium text-gray-500">Booked Date</label>
                       <p className="text-sm text-gray-900">
                         {selectedEvent.lead.date_booked
-                          ? new Date(selectedEvent.lead.date_booked).toLocaleString()
+                          ? formatBookingDateTime(selectedEvent.lead.date_booked)
                           : 'Not scheduled'
                         }
                       </p>

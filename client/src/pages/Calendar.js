@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
+import { parseBookingDate, toBookingDateString, formatBookingDateTime } from '../utils/bookingTime';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -235,8 +236,8 @@ const Calendar = () => {
 
           if (lead.date_booked && lead.date_booked !== null && lead.date_booked !== 'null') {
             // Lead has a booking date
-            startDate = new Date(lead.date_booked);
-            if (isNaN(startDate.getTime())) {
+            startDate = parseBookingDate(lead.date_booked);
+            if (!startDate || isNaN(startDate.getTime())) {
               console.warn(`Invalid date for lead ${lead.name}: ${lead.date_booked}`);
               return null;
             }
@@ -1009,7 +1010,7 @@ const Calendar = () => {
     
     // Create ISO string that preserves local time (avoiding UTC conversion)
     // This is the key fix - we manually construct the ISO string to avoid timezone shifts
-    const localISOString = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`;
+    const localISOString = toBookingDateString(localDateTime);
     
     // Debug logging to show the time handling
     console.log('🕐 Time Debug:', {
@@ -1223,7 +1224,7 @@ const Calendar = () => {
       try {
         const leadData = {
           ...event.extendedProps.lead,
-          date_booked: event.start.toISOString(),
+          date_booked: toBookingDateString(event.start),
           status: 'Booked'
         };
         
@@ -3205,8 +3206,8 @@ const Calendar = () => {
                                         </div>
                                       ) : entry.action === 'RESCHEDULE' ? (
                                         <div className="bg-orange-50 p-2 rounded">
-                                          {entry.details.oldDate && <div><span className="font-medium">From:</span> {new Date(entry.details.oldDate).toLocaleString()}</div>}
-                                          {entry.details.newDate && <div><span className="font-medium">To:</span> {new Date(entry.details.newDate).toLocaleString()}</div>}
+                                          {entry.details.oldDate && <div><span className="font-medium">From:</span> {formatBookingDateTime(entry.details.oldDate)}</div>}
+                                          {entry.details.newDate && <div><span className="font-medium">To:</span> {formatBookingDateTime(entry.details.newDate)}</div>}
                                         </div>
                                       ) : entry.action === 'EMAIL_SENT' || entry.action === 'EMAIL_RECEIVED' ? (
                                         <div className="bg-blue-50 p-2 rounded">

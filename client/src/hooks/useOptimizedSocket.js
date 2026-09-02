@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { recordCustomMetric } from '../utils/PerformanceMonitor';
+import { parseBookingDate } from '../utils/bookingTime';
 
 // Optimized Socket Hook for Calendar Updates
 export const useOptimizedSocket = (calendarRef, setEvents) => {
@@ -96,7 +97,7 @@ export const useOptimizedSocket = (calendarRef, setEvents) => {
           const updatedEvent = {
             ...oldEvent,
             title: lead.name || oldEvent.title,
-            start: lead.date_booked || oldEvent.start,
+            start: parseBookingDate(lead.date_booked) || oldEvent.start,
             backgroundColor: getEventColor(lead.status, lead.has_sale),
             borderColor: getEventColor(lead.status, lead.has_sale),
             extendedProps: {
@@ -132,7 +133,7 @@ export const useOptimizedSocket = (calendarRef, setEvents) => {
         .map(lead => ({
           id: lead.id,
           title: lead.name || 'Unnamed Lead',
-          start: lead.date_booked,
+          start: parseBookingDate(lead.date_booked),
           backgroundColor: getEventColor(lead.status, lead.has_sale),
           borderColor: getEventColor(lead.status, lead.has_sale),
           textColor: '#ffffff',

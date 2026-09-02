@@ -53,6 +53,16 @@ const preserveLocalTime = (dateString) => {
   return dateString;
 };
 
+// Booking times are stored as UK wall clock carrying a UTC label (see
+// client/src/utils/bookingTime.js), so they must always be read back in UTC —
+// formatting them in the server's local zone shifts the appointment.
+const formatBookingDateTime = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-GB', { timeZone: 'UTC' });
+};
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -1901,7 +1911,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
           oldIsConfirmed: lead.is_confirmed,
           newIsConfirmed: req.body.is_confirmed,
           reason: req.body.reschedule_reason || 'Appointment rescheduled',
-          notes: `Appointment rescheduled from ${new Date(oldDateBooked).toLocaleString()} to ${new Date(req.body.date_booked).toLocaleString()}. Status reset: ${lead.booking_status || 'none'} → ${req.body.booking_status || 'none'}`
+          notes: `Appointment rescheduled from ${formatBookingDateTime(oldDateBooked)} to ${formatBookingDateTime(req.body.date_booked)}. Status reset: ${lead.booking_status || 'none'} → ${req.body.booking_status || 'none'}`
         },
         createLeadSnapshot(updatedLead)
       );
@@ -1933,7 +1943,7 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
           newStatus: 'Cancelled',
           oldDate: oldDateBooked,
           reason: req.body.cancellation_reason || 'Appointment cancelled via calendar',
-          notes: `Appointment cancelled and lead moved to Cancelled - was scheduled for ${oldDateBooked ? new Date(oldDateBooked).toLocaleString() : 'unknown date'}`
+          notes: `Appointment cancelled and lead moved to Cancelled - was scheduled for ${oldDateBooked ? formatBookingDateTime(oldDateBooked) : 'unknown date'}`
         },
         createLeadSnapshot(updatedLead)
       );
@@ -2801,7 +2811,7 @@ router.get('/calendar-public', async (req, res) => {
           status: lead.status,
           date_booked: lead.date_booked,
           booker_id: lead.booker_id,
-          time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
         }
       };
     }) || [];

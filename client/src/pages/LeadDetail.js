@@ -6,6 +6,7 @@ import TagSystem from '../components/TagSystem';
 import PhotoModal from '../components/PhotoModal';
 import LazyImage from '../components/LazyImage';
 import { getOptimizedImageUrl, preloadImages } from '../utils/imageUtils';
+import { parseBookingDate, bookingDateStringFromParts, bookingTimeInputValue, formatBookingDateTime } from '../utils/bookingTime';
 
 const LeadDetail = () => {
   const { id } = useParams();
@@ -499,14 +500,20 @@ const LeadDetail = () => {
     return currentIndex < allLeads.length - 1 && allLeads.length > 0;
   };
 
+  // The leads API returns snake_case columns. This page was written against
+  // `lead.dateBooked`, which is never present on the response — booking dates
+  // rendered as "Invalid Date" and the reschedule modal opened blank.
+  const bookingDateOf = (l) => l?.date_booked ?? l?.dateBooked ?? null;
+
   // Template placeholder replacement
   const replacePlaceholders = (message) => {
-    const defaultDate = new Date(lead.dateBooked).toLocaleDateString('en-US', { 
+    const bookingDateTime = parseBookingDate(bookingDateOf(lead)) || new Date(NaN);
+    const defaultDate = bookingDateTime.toLocaleDateString('en-US', { 
       weekday: 'long', 
       month: 'long', 
       day: 'numeric' 
     });
-    const defaultTime = new Date(lead.dateBooked).toLocaleTimeString('en-US', { 
+    const defaultTime = bookingDateTime.toLocaleTimeString('en-US', { 
       hour: 'numeric', 
       minute: '2-digit',
       hour12: true 
@@ -679,7 +686,7 @@ const LeadDetail = () => {
               leadName: lead.name,
               oldStatus: oldStatus,
               newStatus: newStatus,
-              dateBooked: lead.dateBooked,
+              dateBooked: bookingDateOf(lead),
               timestamp: new Date().toISOString()
             });
           }
@@ -729,7 +736,7 @@ const LeadDetail = () => {
     }
 
     const oldStatus = lead.status;
-    const originalDateBooked = lead.dateBooked;
+    const originalDateBooked = bookingDateOf(lead);
 
     try {
       const response = await axios.put(`/api/leads/${lead.id}`, {
@@ -774,8 +781,8 @@ const LeadDetail = () => {
       alert('Cannot reschedule a cancelled appointment. Please change the status first.');
       return;
     }
-    setNewDate(lead.dateBooked ? lead.dateBooked.split('T')[0] : '');
-    setNewTime(lead.dateBooked ? new Date(lead.dateBooked).toISOString().substr(11, 5) : '');
+    setNewDate(bookingDateOf(lead) ? String(bookingDateOf(lead)).split('T')[0] : '');
+    setNewTime(bookingTimeInputValue(bookingDateOf(lead)));
     setRescheduleModalOpen(true);
   };
 
@@ -783,7 +790,7 @@ const LeadDetail = () => {
     setRescheduleLoading(true);
     setRescheduleError('');
     try {
-      const isoDateTime = newDate && newTime ? new Date(`${newDate}T${newTime}`).toISOString() : null;
+      const isoDateTime = bookingDateStringFromParts(newDate, newTime);
       if (!isoDateTime) {
         setRescheduleError('Please select both date and time.');
         setRescheduleLoading(false);
@@ -796,7 +803,7 @@ const LeadDetail = () => {
         is_confirmed: 0, // Reset to unconfirmed when rescheduling
         booking_status: 'Reschedule', // Set to new Reschedule status to indicate rescheduling
         isReschedule: true,
-        rescheduleReason: `Appointment rescheduled via lead detail to ${new Date(isoDateTime).toLocaleString()}`
+        rescheduleReason: `Appointment rescheduled via lead detail to ${formatBookingDateTime(isoDateTime)}`
       });
       setLead(response.data.lead || response.data);
       setFormData(response.data.lead || response.data);
@@ -1712,7 +1719,7 @@ const LeadDetail = () => {
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Date Added:</span>
                       <span className="text-sm font-medium text-gray-900">
-                        {formatDate(lead.dateBooked)}
+                        {formatDate(lead.created_at)}
                       </span>
                     </div>
                     
@@ -1760,10 +1767,10 @@ const LeadDetail = () => {
                 <button
                   className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                   onClick={async () => {
-                    if (lead.dateBooked) {
+                    if (bookingDateOf(lead)) {
                       try {
                         const response = await axios.post(`/api/leads/${lead.id}/send-booking-confirmation`, {
-                          appointmentDate: lead.dateBooked
+                          appointmentDate: bookingDateOf(lead)
                         });
                         
                         if (response.data.success) {
