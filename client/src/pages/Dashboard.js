@@ -6,6 +6,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import GmailEmailRenderer from '../components/GmailEmailRenderer';
 import { toZonedTime, format } from 'date-fns-tz';
+import { formatBookingDate, formatBookingTime } from '../utils/bookingTime';
 
 const getTodayUK = () => {
   const ukTz = 'Europe/London';
@@ -147,7 +148,7 @@ const Dashboard = () => {
             id: lead.id,
             name: lead.name,
             phone: lead.phone || lead.phone_number,
-            time: lead.date_booked ? new Date(lead.date_booked).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '12:00',
+            time: lead.date_booked ? formatBookingTime(lead.date_booked, 'en-US', { hour: '2-digit', minute: '2-digit' }) : '12:00',
             status: 'Booked', // Always show as "Booked" in daily activities (real status tracked elsewhere)
             dateBooked: lead.date_booked,
             bookedAt: lead.updated_at || lead.created_at,
@@ -205,15 +206,28 @@ const Dashboard = () => {
 
       // Calculate total bookings and sales from bookerStats
       const totalBookingsToday = activity.reduce((sum, user) => sum + (user.bookings || 0), 0);
-      const totalSalesToday = activity.reduce((sum, user) => sum + (user.sales || 0), 0);
+
+      // "This Hour" only means anything while the panel is showing today. booked_at
+      // is a real UTC instant, so comparing instants is timezone-safe.
+      const isViewingToday = selectedActivityDate === new Date().toISOString().split('T')[0];
+      let thisHourBookings = 0;
+      if (isViewingToday) {
+        const hourStart = new Date();
+        hourStart.setMinutes(0, 0, 0);
+        thisHourBookings = leads.filter(l => {
+          const bookedAt = l.booked_at || l.created_at;
+          return bookedAt && new Date(bookedAt) >= hourStart;
+        }).length;
+      }
 
       setBookerActivity(activity);
 
-      // Update live stats with correct counts
+      // Update live stats with correct counts. todaySales/todayRevenue are owned
+      // by fetchStats (/api/sales/stats) so the tile's count and revenue agree.
       setLiveStats(prev => ({
         ...prev,
         todayBookings: totalBookingsToday,
-        todaySales: totalSalesToday
+        thisHourBookings
       }));
     } catch (e) {
       console.error('Error fetching booker activity:', e);
@@ -376,7 +390,7 @@ const Dashboard = () => {
         .map(lead => ({
           id: lead.id,
           type: 'booking',
-          message: `${lead.name} booked for ${lead.date_booked ? new Date(lead.date_booked).toLocaleDateString() : 'appointment'}`,
+          message: `${lead.name} booked for ${lead.date_booked ? formatBookingDate(lead.date_booked) : 'appointment'}`,
           timestamp: new Date(lead.updated_at || lead.created_at),
           icon: 'calendar'
         }));
@@ -615,7 +629,11 @@ const Dashboard = () => {
                 <div>
                   <p className="text-blue-100 text-xs sm:text-sm font-medium">Bookings</p>
                   <p className="text-xl sm:text-2xl lg:text-3xl font-bold">{liveStats.todayBookings}</p>
-                  <p className="text-blue-100 text-xs mt-0.5 sm:mt-1">Today</p>
+                  <p className="text-blue-100 text-xs mt-0.5 sm:mt-1">
+                    {selectedActivityDate === new Date().toISOString().split('T')[0]
+                      ? 'Today'
+                      : new Date(selectedActivityDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </p>
                 </div>
                 <FiCalendar className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-200" />
               </div>
