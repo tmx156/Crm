@@ -7,6 +7,7 @@ const express = require('express');
 const path = require('path');
 const { auth, adminAuth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
+const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 
 const getDb = () => {
   return new Database(path.join(__dirname, '..', 'local-crm.db'));
@@ -176,7 +177,13 @@ router.post('/campaign/start', auth, adminAuth, async (req, res) => {
           type: 'email',
           status: 'pending'
         };
-        await MessagingService.sendEmail(message);
+        // Send from the account the template names, otherwise the brand this
+        // lead already deals with — not the hardcoded default.
+        const { account: emailAccount } = await resolveReplyAccount({
+          leadId: lead.id,
+          preferredAccount: template.email_account
+        });
+        await MessagingService.sendEmail(message, emailAccount, template.sender_name || null);
 
         // Update lead's campaign history
         const currentRetargeting = lead.retargeting || {};

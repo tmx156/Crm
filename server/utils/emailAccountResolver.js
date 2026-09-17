@@ -15,13 +15,16 @@
  * 'primary' sentinel), which means steps 1-3 decide — so one shared template
  * can serve every brand.
  *
- * Whatever is chosen is checked against gmail_accounts — an account that was
- * disconnected would otherwise throw "No Gmail tokens found" at send time.
+ * Whatever is chosen is checked against the accounts that can actually send —
+ * a mailbox that was disconnected, or whose Gmail access has lapsed, would
+ * otherwise fail at send time.
  */
 
 const { getSupabaseClient } = require('../config/supabase-client');
+const { getLiveAccounts, clearCache: clearHealthCache } = require('./gmailAccountHealth');
 
-const DEFAULT_ACCOUNT = 'bookings@camrymodels.co.uk';
+// Kept in step with emailService's own default; GMAIL_USER moves both.
+const DEFAULT_ACCOUNT = (process.env.GMAIL_USER || 'bookings@camrymodels.co.uk').trim().toLowerCase();
 
 // 'primary' is a legacy sentinel meaning "just use the default", stored on some
 // older leads and templates. It is not a real address, so treat it as no signal.
@@ -35,21 +38,22 @@ function normalise(value) {
   return SENTINELS.has(v) ? null : v;
 }
 
-/** Addresses currently connected in gmail_accounts (60s cache). */
-async function getConnectedAccounts(supabase) {
+/**
+ * Addresses that can actually send right now (60s cache over the health check's
+ * own). A row in gmail_accounts is not enough: a mailbox whose OAuth grant has
+ * gone fails every send, so it must never be picked.
+ */
+async function getConnectedAccounts() {
   if (_cache.accounts && Date.now() - _cache.at < CACHE_MS) return _cache.accounts;
 
-  const { data, error } = await supabase.from('gmail_accounts').select('email');
-  if (error) {
-    console.warn('⚠️ [account-resolver] could not read gmail_accounts:', error.message);
+  try {
+    const live = await getLiveAccounts();
+    _cache = { accounts: live, at: Date.now() };
+    return live;
+  } catch (e) {
+    console.warn('⚠️ [account-resolver] could not check account health:', e.message);
     return _cache.accounts || new Set();
   }
-
-  _cache = {
-    accounts: new Set((data || []).map(r => String(r.email).toLowerCase())),
-    at: Date.now()
-  };
-  return _cache.accounts;
 }
 
 /**
@@ -112,12 +116,12 @@ async function resolveReplyAccount({
 
   candidates.push({ account: DEFAULT_ACCOUNT, source: 'default' });
 
-  const connected = await getConnectedAccounts(supabase);
+  const connected = await getConnectedAccounts();
 
   for (const c of candidates) {
     if (connected.size === 0 || connected.has(c.account)) return c;
     console.warn(
-      `⚠️ [account-resolver] ${c.account} (${c.source}) is not connected, trying next`
+      `⚠️ [account-resolver] ${c.account} (${c.source}) cannot send right now, trying next`
     );
   }
 
@@ -132,9 +136,54 @@ async function resolveReplyAccount({
   return { account: DEFAULT_ACCOUNT, source: 'default (nothing connected)' };
 }
 
+/**
+ * The account a template pins with its "Send From" setting, or null when it is
+ * left on "Match customer's brand".
+ *
+ * Send paths that work the account out for themselves can get it wrong, so this
+ * is checked again right before the send: whatever a caller decided, an explicit
+ * per-template choice wins.
+ *
+ * @param {string} templateId
+ * @returns {Promise<{account: string|null, senderName: string|null}>}
+ */
+async function getTemplateSendFrom(templateId) {
+  if (!templateId) return { account: null, senderName: null };
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('templates')
+      .select('email_account, sender_name')
+      .eq('id', templateId)
+      .maybeSingle();
+
+    if (error || !data) return { account: null, senderName: null };
+
+    const account = normalise(data.email_account);
+    const senderName = data.sender_name || null;
+
+    // A mailbox that has since been disconnected would throw at send time, so
+    // leave the caller's own choice in place instead.
+    if (account) {
+      const connected = await getConnectedAccounts();
+      if (connected.size > 0 && !connected.has(account)) {
+        console.warn(`⚠️ [account-resolver] template account ${account} cannot send right now, ignoring`);
+        return { account: null, senderName };
+      }
+    }
+
+    return { account, senderName };
+  } catch (e) {
+    console.warn('⚠️ [account-resolver] template lookup failed:', e.message);
+    return { account: null, senderName: null };
+  }
+}
+
 /** Test hook / used after connecting or removing an account. */
 function clearCache() {
   _cache = { accounts: null, at: 0 };
+  clearHealthCache();
 }
 
-module.exports = { resolveReplyAccount, clearCache, DEFAULT_ACCOUNT };
+module.exports = { resolveReplyAccount, getTemplateSendFrom, clearCache, DEFAULT_ACCOUNT };

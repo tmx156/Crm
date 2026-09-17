@@ -5,6 +5,8 @@ const { sendSMS: sendActualSMS } = require('./smsService');
 const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid'); // Use uuid package for reliable ID generation
 const config = require('../config');
+const { resolveReplyAccount, getTemplateSendFrom } = require('./emailAccountResolver');
+const { getLiveAccounts } = require('./gmailAccountHealth');
 
 // Supabase configuration - use service role key to bypass RLS for server-side operations
 const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.anonKey);
@@ -274,9 +276,16 @@ class MessagingService {
       // Determine email account: booking_account on lead locks it in permanently.
       // On a brand-new lead it won't be set yet, so derive from template and then write it.
       const bookingAccount = effectiveSendEmail ? await this.getLeadBookingAccount(leadId) : null;
-      const emailAccount = bookingAccount || options.emailAccount || template.email_account || 'bookings@camrymodels.co.uk';
+      // The template's "Send From" is authoritative when one is chosen; left on
+      // "Match customer's brand" it falls back to the account this lead already
+      // deals with. The resolver also skips accounts no longer connected, so a
+      // removed mailbox cannot take the send down.
+      const resolvedBC = effectiveSendEmail
+        ? await resolveReplyAccount({ leadId, preferredAccount: options.emailAccount || template.email_account })
+        : { account: null, source: 'email disabled' };
+      const emailAccount = resolvedBC.account;
       if (effectiveSendEmail) {
-        console.log(`📧 Booking confirmation account: ${emailAccount} (source: ${bookingAccount ? 'lead.booking_account' : options.emailAccount ? 'options' : 'template'})`);
+        console.log(`📧 Booking confirmation account: ${emailAccount} (source: ${resolvedBC.source})`);
 
         // Lock the owning account on the lead the first time a confirmation is sent.
         // Resends will skip this because getLeadBookingAccount will already return a value.
@@ -334,6 +343,7 @@ class MessagingService {
         recipient_email: lead.email,
         recipient_phone: lead.phone,
         sent_by: userId,
+        template_id: template.id || null,
         booking_date: bookingDate,
         attachments: []
       };
@@ -608,10 +618,11 @@ class MessagingService {
 
       const effectiveSendEmail = !!template.send_email;
       const effectiveSendSms = !!template.send_sms;
-      // Booking account wins over the template's own setting, so the reminder
-      // always leaves from the account that sent the booking confirmation.
-      const emailAccount = bookingAccount || template.email_account || 'bookings@camrymodels.co.uk';
-      console.log(`📧 Reminder account: ${emailAccount} (source: ${bookingAccount ? 'booking confirmation' : 'template'})`);
+      // The template's "Send From" is authoritative when one is chosen; otherwise
+      // the reminder follows the account that sent the booking confirmation.
+      const resolvedRem = await resolveReplyAccount({ leadId, preferredAccount: template.email_account });
+      const emailAccount = resolvedRem.account;
+      console.log(`📧 Reminder account: ${emailAccount} (source: ${resolvedRem.source})`);
 
       // If neither channel selected, do nothing
       if (!effectiveSendEmail && !effectiveSendSms) {
@@ -665,6 +676,7 @@ class MessagingService {
         recipient_phone: lead.phone,
         sent_by: user.id || null,
         sent_by_name: user.name || 'System',
+        template_id: template.id || null,
         booking_date: bookingDate,
         reminder_days: reminderDays,
         attachments: []
@@ -771,8 +783,58 @@ class MessagingService {
   }
 
   // Send email
+  /**
+   * Keep messages.gmail_account_key in step with the account that actually
+   * sent, so later replies to this lead follow the same brand.
+   */
+  static async recordSendingAccount(messageId, account) {
+    if (!messageId || !account) return;
+    try {
+      await supabase
+        .from('messages')
+        .update({ gmail_account_key: account })
+        .eq('id', messageId);
+    } catch (e) {
+      console.warn(`⚠️ Could not record sending account for ${messageId}: ${e.message}`);
+    }
+  }
+
   static async sendEmail(message, emailAccount = 'bookings@camrymodels.co.uk', senderName = null) {
     const messageId = message.id || 'unknown';
+
+    // A template that names a "Send From" account is authoritative, whoever is
+    // sending it. Some callers still work the account out from the lead's own
+    // history and would otherwise quietly fall back to the default mailbox, so
+    // the template's choice is applied here, at the one point every send passes
+    // through.
+    if (message.template_id) {
+      const pinned = await getTemplateSendFrom(message.template_id);
+      if (pinned.account && pinned.account !== String(emailAccount || '').toLowerCase()) {
+        console.log(`📧 Template "Send From" overrides ${emailAccount || 'default'} → ${pinned.account}`);
+        emailAccount = pinned.account;
+        await this.recordSendingAccount(message.id, pinned.account);
+      }
+      if (!senderName && pinned.senderName) senderName = pinned.senderName;
+    }
+
+    // Last guard: never post from a mailbox we already know Gmail will refuse.
+    // Reconnecting it is the real fix, but a customer's email should not be lost
+    // to it in the meantime.
+    try {
+      const live = await getLiveAccounts();
+      if (live.size > 0 && !live.has(String(emailAccount || '').toLowerCase())) {
+        const { account: usable, source } = await resolveReplyAccount({
+          leadId: message.lead_id,
+          preferredAccount: emailAccount
+        });
+        console.warn(`⚠️ ${emailAccount} cannot send right now — using ${usable} (${source})`);
+        emailAccount = usable;
+        await this.recordSendingAccount(message.id, usable);
+      }
+    } catch (e) {
+      console.warn(`⚠️ Could not check account health, sending as ${emailAccount}: ${e.message}`);
+    }
+
     console.log('\n' + '='.repeat(80));
     console.log(`📧 [EMAIL SEND ATTEMPT]`);
     console.log('='.repeat(80));

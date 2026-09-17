@@ -4,6 +4,8 @@ const { google } = require('googleapis');
 const { makeOAuth2Client, getOAuthClientByName, resolveOAuthClient } = require('../utils/gmailClient');
 const config = require('../config');
 const { getSupabaseClient } = require('../config/supabase-client');
+const { getAccountHealth, clearCache: clearHealthCache } = require('../utils/gmailAccountHealth');
+const { clearCache: clearResolverCache } = require('../utils/emailAccountResolver');
 
 const supabase = getSupabaseClient();
 
@@ -145,6 +147,11 @@ router.get('/callback', async (req, res) => {
 
     console.log(`[Gmail] OAuth tokens stored for ${email}`);
 
+    // A freshly connected account must show up in the pickers straight away,
+    // and one that was failing is live again.
+    clearHealthCache();
+    clearResolverCache();
+
     // A refresh token only works with the client that issued it. If this
     // account isn't mapped to that client, every later refresh would be
     // attempted with the primary client and fail with invalid_grant.
@@ -171,18 +178,33 @@ router.get('/callback', async (req, res) => {
 
 /**
  * GET /api/gmail/accounts
- * Returns the list of connected Gmail accounts.
+ * Connected Gmail accounts that can actually send. A mailbox whose OAuth grant
+ * has gone is left out of `accounts` — offering it in a "Send From" picker only
+ * gets it chosen and every send from it fails — and reported in `unavailable`
+ * so the reason can be shown.
+ *
+ * ?all=true      keep unusable accounts in the list (diagnostics)
+ * ?refresh=true  re-check with Google instead of using the 5 minute cache
  */
 router.get('/accounts', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('gmail_accounts')
-      .select('email, updated_at')
-      .order('updated_at', { ascending: true });
+    const includeDead = req.query.all === 'true';
+    const health = await getAccountHealth({ force: req.query.refresh === 'true' });
 
-    if (error) throw error;
+    const usable = health.filter(a => a.live).map(a => a.email);
+    const unavailable = health
+      .filter(a => !a.live)
+      .map(a => ({ email: a.email, error: a.error }));
 
-    res.json({ accounts: (data || []).map(r => r.email) });
+    if (unavailable.length > 0) {
+      console.warn(`[Gmail] ${unavailable.length} connected account(s) cannot send: ` +
+        unavailable.map(a => a.email).join(', '));
+    }
+
+    res.json({
+      accounts: includeDead ? health.map(a => a.email) : usable,
+      unavailable
+    });
   } catch (err) {
     console.error('[Gmail] Error listing accounts:', err.message);
     res.status(500).json({ error: err.message });

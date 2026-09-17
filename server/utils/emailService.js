@@ -12,8 +12,10 @@ const { google } = require('googleapis');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const { getAuthedClient } = require('./gmailClient');
 
-// Default sending address — Camry Models is the primary account
-const DEFAULT_GMAIL_FROM = 'bookings@camrymodels.co.uk';
+// Default sending address, used only when nothing more specific applies.
+// Set GMAIL_USER to move it — a mailbox that is closed down must not keep
+// taking every unrouted send with it.
+const DEFAULT_GMAIL_FROM = (process.env.GMAIL_USER || 'bookings@camrymodels.co.uk').trim().toLowerCase();
 
 // Display name per sending address. Extra accounts can be added without a code
 // change via GMAIL_ACCOUNT_NAMES, a comma-separated list of "email=Display Name".
@@ -30,7 +32,8 @@ for (const pair of (process.env.GMAIL_ACCOUNT_NAMES || '').split(',')) {
   if (email && name) ACCOUNT_NAMES[email] = name;
 }
 
-const FROM_NAME = 'Camry Models';
+// Display name for an address with no mapping of its own.
+const FROM_NAME = ACCOUNT_NAMES[DEFAULT_GMAIL_FROM] || 'Camry Models';
 
 console.log(`[Gmail API] Default sending account: ${FROM_NAME} <${DEFAULT_GMAIL_FROM || 'NOT SET'}>`);
 
@@ -46,6 +49,7 @@ if (EMAIL_SENDING_DISABLED) {
  * @param {string} body          - Email body (HTML or plain text)
  * @param {Array}  attachments   - Nodemailer-style attachment objects (optional)
  * @param {string} fromEmail     - Sending Gmail address (defaults to GMAIL_USER env var)
+ * @param {string} fromName      - Display name override (optional)
  * @returns {Promise<{success: boolean, response?: string, error?: string}>}
  */
 async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null) {

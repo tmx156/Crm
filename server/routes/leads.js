@@ -5004,6 +5004,7 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
               recipient_phone: lead.phone,
               sent_by: req.user.id,
               sent_by_name: req.user.name || 'System',
+              template_id: template.id,
               attachments: []
             };
 
@@ -5012,7 +5013,7 @@ router.post('/:id/wrong-number', auth, async (req, res) => {
             let smsSent = false;
 
             if (effectiveSendEmail) {
-              emailSent = await MessagingService.sendEmail(message, emailAccount);
+              emailSent = await MessagingService.sendEmail(message, emailAccount, template.sender_name || null);
             }
             if (effectiveSendSms) {
               smsSent = await MessagingService.sendSMS(message);
@@ -5288,6 +5289,7 @@ router.post('/:id/no-answer', auth, async (req, res) => {
               recipient_phone: lead.phone,
               sent_by: req.user.id,
               sent_by_name: req.user.name || 'System',
+              template_id: template.id,
               attachments: []
             };
 
@@ -5296,7 +5298,7 @@ router.post('/:id/no-answer', auth, async (req, res) => {
             let smsSent = false;
 
             if (effectiveSendEmail) {
-              emailSent = await MessagingService.sendEmail(message, emailAccount);
+              emailSent = await MessagingService.sendEmail(message, emailAccount, template.sender_name || null);
             }
             if (effectiveSendSms) {
               smsSent = await MessagingService.sendSMS(message);

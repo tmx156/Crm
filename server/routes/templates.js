@@ -778,12 +778,13 @@ router.post('/:id/test/:leadId', auth, async (req, res) => {
       recipient_phone: lead.phone,
       sent_by: req.user.id,
       sent_by_name: req.user.name || 'Admin',
+      template_id: template.id,
       attachments: []
     };
 
     // Send test messages
     if (effectiveSendEmail) {
-      await MessagingService.sendEmail(message, emailAccount);
+      await MessagingService.sendEmail(message, emailAccount, template.sender_name || null);
     }
     if (effectiveSendSms) {
       await MessagingService.sendSMS(message);

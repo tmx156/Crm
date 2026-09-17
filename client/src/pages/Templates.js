@@ -18,6 +18,9 @@ const Templates = () => {
   const [variables, setVariables] = useState([]);
   const [sendingReminders, setSendingReminders] = useState(false);
   const [gmailAccounts, setGmailAccounts] = useState([]);
+  // Connected mailboxes that can't currently send — listed so a missing option
+  // in "Send From" doesn't look like a glitch.
+  const [unavailableAccounts, setUnavailableAccounts] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -87,6 +90,7 @@ const Templates = () => {
       if (response.ok) {
         const data = await response.json();
         setGmailAccounts(data.accounts || []);
+        setUnavailableAccounts(data.unavailable || []);
       }
     } catch (e) {
       console.error('Failed to fetch Gmail accounts:', e);
@@ -871,6 +875,12 @@ const Templates = () => {
                                   ? `Every send uses ${formData.emailAccount}, whichever brand the customer belongs to.`
                                   : 'Sends from whichever account the customer already deals with, so one template works for every brand.'}
                               </p>
+                              {unavailableAccounts.length > 0 && (
+                                <p className="mt-1 text-xs text-amber-600">
+                                  Not listed because it can&apos;t send right now:{' '}
+                                  {unavailableAccounts.map(a => a.email).join(', ')}. Reconnect it under Gmail settings.
+                                </p>
+                              )}
                             </div>
                           )}
 

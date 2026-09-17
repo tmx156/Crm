@@ -659,6 +659,22 @@ async function startAllGmailPollers(socketIoInstance) {
     }
   }
 
+  // Polling a mailbox whose Gmail access has lapsed just fills the log with
+  // auth errors every 30 seconds, so leave those alone until they are reconnected.
+  try {
+    const { getLiveAccounts } = require('./gmailAccountHealth');
+    const live = await getLiveAccounts();
+    if (live.size > 0) {
+      const dead = emails.filter(e => !live.has(e.toLowerCase()));
+      if (dead.length > 0) {
+        console.log(`📧 Not polling (cannot authenticate): ${dead.join(', ')}`);
+        emails = emails.filter(e => live.has(e.toLowerCase()));
+      }
+    }
+  } catch (e) {
+    console.warn(`⚠️ Could not check Gmail account health, polling all: ${e.message}`);
+  }
+
   const pollers = [];
   for (const email of emails) {
     const poller = startGmailPoller(socketIoInstance, email);

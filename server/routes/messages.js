@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const MessagingService = require('../utils/messagingService');
+const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 
@@ -267,9 +268,20 @@ router.post('/send', auth, async (req, res) => {
     };
 
     try {
-      // Account priority: booking history → template setting → default
-      const bookingAccount = await MessagingService.getLeadBookingAccount(leadId);
-      const emailAccount = bookingAccount || template.email_account || 'primary';
+      // The template's "Send From" wins when one is chosen; left on "Match
+      // customer's brand" the resolver follows the account this lead already
+      // deals with. Previously the lead's booking account came first, so a
+      // template pinned to one brand still went out as another.
+      const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+        leadId,
+        preferredAccount: template.email_account
+      });
+      console.log(`📧 Template send account: ${emailAccount} (source: ${accountSource})`);
+
+      await supabase
+        .from('messages')
+        .update({ gmail_account_key: emailAccount })
+        .eq('id', newMessage.id);
 
       if (adaptedTemplate.sendEmail && lead.email) {
         await MessagingService.sendEmail({
@@ -373,8 +385,12 @@ router.post('/:id/resend', auth, async (req, res) => {
         };
 
         if (adaptedTemplate.sendEmail && message.leads?.email) {
-          const bookingAccount = await MessagingService.getLeadBookingAccount(message.lead_id);
-          const emailAccount = bookingAccount || template.email_account || 'primary';
+          // Same rule as the send above: an explicit "Send From" is honoured.
+          const { account: emailAccount, source: accountSource } = await resolveReplyAccount({
+            leadId: message.lead_id,
+            preferredAccount: template.email_account
+          });
+          console.log(`📧 Resend account: ${emailAccount} (source: ${accountSource})`);
           await MessagingService.sendEmail({
             ...message,
             recipient_email: message.leads.email
