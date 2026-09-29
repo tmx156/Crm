@@ -111,6 +111,16 @@ const Calendar = () => {
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
   const [editingNotes, setEditingNotes] = useState(false);
+  // Collapsible notes panel. Remembered per browser so a booker who prefers
+  // it closed is not re-opening it on every appointment. Storage can throw in
+  // private windows, which just means it defaults to closed.
+  const [notesOpen, setNotesOpen] = useState(() => {
+    try { return localStorage.getItem('calendar.notesOpen') === '1'; } catch { return false; }
+  });
+  const setNotesOpenRemembered = (open) => {
+    setNotesOpen(open);
+    try { localStorage.setItem('calendar.notesOpen', open ? '1' : '0'); } catch { /* not persisted */ }
+  };
   const [notesText, setNotesText] = useState('');
   const [sendEmail, setSendEmail] = useState(true);
   const [leadsWithUnreadEmails, setLeadsWithUnreadEmails] = useState(new Set());
@@ -3251,21 +3261,44 @@ const Calendar = () => {
                       <div className="w-8 h-8 rounded-lg bg-gray-500 flex items-center justify-center flex-shrink-0">
                         <FiFileText className="h-4 w-4 text-white" />
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Notes</p>
+                      <div className="flex-1 min-w-0">
+                        <div className={`flex items-center justify-between ${notesOpen || editingNotes ? 'mb-1' : ''}`}>
+                          {/* The header toggles the panel. While closed it shows the
+                              first line of the note, so an important note is not
+                              hidden just because the panel is folded away. */}
+                          <button
+                            type="button"
+                            onClick={() => !editingNotes && setNotesOpenRemembered(!notesOpen)}
+                            aria-expanded={notesOpen || editingNotes}
+                            className="flex items-center gap-1.5 min-w-0 flex-1 text-left group"
+                            title={notesOpen ? 'Hide notes' : 'Show notes'}
+                          >
+                            {notesOpen || editingNotes
+                              ? <FiChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                              : <FiChevronRight className="h-4 w-4 text-gray-500 flex-shrink-0" />}
+                            <span className="text-xs font-medium text-gray-600 uppercase tracking-wide flex-shrink-0 group-hover:text-gray-900">
+                              Notes
+                            </span>
+                            {!notesOpen && !editingNotes && (
+                              <span className="text-xs text-gray-500 truncate ml-1">
+                                {selectedEvent.extendedProps?.lead?.notes
+                                  ? `— ${selectedEvent.extendedProps.lead.notes.split('\n').find(l => l.trim()) || ''}`
+                                  : '— none'}
+                              </span>
+                            )}
+                          </button>
                           {!editingNotes && (
                             <button
-                              onClick={handleEditNotes}
-                              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                              onClick={() => { setNotesOpenRemembered(true); handleEditNotes(); }}
+                              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex-shrink-0"
                             >
                               <FiEdit className="h-3 w-3" />
                               <span>Edit Notes</span>
                             </button>
                           )}
                         </div>
-                        
-                        {editingNotes ? (
+
+                        {!(notesOpen || editingNotes) ? null : editingNotes ? (
                           <div className="space-y-3">
                             <div className="relative">
                               <textarea

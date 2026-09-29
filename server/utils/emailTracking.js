@@ -32,8 +32,41 @@ function createTrackingId() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+let warnedLocalhost = false;
+
+/**
+ * The address that links in outgoing email should point at.
+ *
+ * Every link we mail out - gallery, ZIP download, open pixel - is opened by a
+ * client on their own device, so it has to be the public address no matter
+ * which server sent the email. A link to localhost only ever works on the
+ * machine that sent it, which is exactly how it can look fine in testing and
+ * be dead for every real recipient.
+ *
+ *   1. PUBLIC_BASE_URL - set it for a custom domain, or on a local machine so
+ *      emails sent from there still link to production.
+ *   2. RAILWAY_PUBLIC_DOMAIN - Railway injects this into every service with a
+ *      public domain, so production is right without any configuration.
+ *   3. localhost, with a warning - only reachable from this machine.
+ *
+ * Deliberately NOT derived from the incoming request: a booker working on a
+ * local copy would then mail clients a link to their own laptop.
+ */
+function publicBaseUrl() {
+  const strip = (u) => u.replace(/\/+$/, '');
+  if (process.env.PUBLIC_BASE_URL) return strip(process.env.PUBLIC_BASE_URL);
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${strip(process.env.RAILWAY_PUBLIC_DOMAIN)}`;
+
+  if (!warnedLocalhost) {
+    warnedLocalhost = true;
+    console.warn('⚠️ No PUBLIC_BASE_URL or RAILWAY_PUBLIC_DOMAIN - emailed links will point at ' +
+      'localhost and will not work for recipients. Set PUBLIC_BASE_URL.');
+  }
+  return 'http://localhost:5000';
+}
+
 function trackingUrl(trackingId, baseUrl) {
-  const base = (baseUrl || process.env.PUBLIC_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  const base = (baseUrl || publicBaseUrl()).replace(/\/+$/, '');
   return `${base}/api/track/open/${trackingId}.gif`;
 }
 
@@ -78,6 +111,7 @@ function isProxyFetch(userAgent) {
 module.exports = {
   PIXEL,
   createTrackingId,
+  publicBaseUrl,
   trackingUrl,
   injectTrackingPixel,
   isProxyFetch

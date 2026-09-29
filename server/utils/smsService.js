@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const { publicBaseUrl } = require('./emailTracking');
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL || 'https://tnltvfzltdeilanxhlvy.supabase.co';
@@ -122,8 +123,8 @@ async function createShortLinkForContent(content) {
       return null;
     }
     
-    const base = process.env.PUBLIC_BASE_URL || 'http://localhost:5000';
-    return `${base}/c/${id}`;
+    // Tapped on the recipient's phone, so it must be the public address.
+    return `${publicBaseUrl()}/c/${id}`;
   } catch (err) {
     console.error('Failed to create short link:', err);
     return null;

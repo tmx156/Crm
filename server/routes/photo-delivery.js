@@ -22,7 +22,7 @@ const config = require('../config');
 const photoStorage = require('../services/photoStorage');
 const { sendEmail } = require('../utils/emailService');
 const { resolveReplyAccount } = require('../utils/emailAccountResolver');
-const { createTrackingId } = require('../utils/emailTracking');
+const { createTrackingId, publicBaseUrl } = require('../utils/emailTracking');
 
 const router = express.Router();
 const supabase = createClient(config.supabase.url, config.supabase.serverKey);
@@ -296,8 +296,9 @@ router.post('/send', auth, async (req, res) => {
     const downloadToken = crypto.randomBytes(16).toString('hex');
     const { url: zipUrl, key: zipKey } = await photoStorage.uploadZip(zipBuffer, zipFilename);
 
-    const base = (process.env.PUBLIC_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
-    const galleryUrl = `${base}/gallery/${downloadToken}`;
+    // The client opens this on their own device, so it must be the public
+    // address even when a local copy of the CRM sent the email.
+    const galleryUrl = `${publicBaseUrl()}/gallery/${downloadToken}`;
 
     // First photo as a teaser - it makes the email feel personal and gives
     // them a reason to click through.

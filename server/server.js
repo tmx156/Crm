@@ -67,6 +67,7 @@ const photoDeliveryRoutes = require('./routes/photo-delivery');
 const photoEditRoutes = require('./routes/photo-edit');
 const retouchQueue = require('./services/retouchQueue');
 const trackingRoutes = require('./routes/tracking');
+const { publicBaseUrl } = require('./utils/emailTracking');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
 // Removed legacy auto-sync import to avoid accidental background duplication
 let startUltraFastSMSPolling = () => {};
@@ -581,8 +582,8 @@ app.post('/api/short/sms', async (req, res) => {
       return res.status(500).json({ error: 'SHORT_LINK_ERROR', message: 'Database error' });
     }
     
-    const base = process.env.PUBLIC_BASE_URL || 'http://localhost:5000';
-    return res.json({ id, url: `${base}/c/${id}` });
+    // Sent to clients, so it must be the public address, not localhost.
+    return res.json({ id, url: `${publicBaseUrl()}/c/${id}` });
   } catch (err) {
     console.error('❌ Failed to create short link:', err?.message || err);
     return res.status(500).json({ error: 'SHORT_LINK_ERROR' });
