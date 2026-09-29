@@ -122,7 +122,7 @@ router.get('/', auth, async (req, res) => {
         }
       }
 
-      const msgColumns = 'id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at';
+      const msgColumns = 'id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, provider_message_id, delivery_provider, delivery_attempts, attachments, sent_at, created_at, opened_at, last_opened_at, open_count';
       let messageData = [];
 
       if (!bookerLeadIds) {
@@ -263,7 +263,12 @@ router.get('/', auth, async (req, res) => {
             provider_message_id: row.provider_message_id,
             delivery_provider: row.delivery_provider,
             delivery_attempts: row.delivery_attempts,
-            email_status: row.email_status
+            email_status: row.email_status,
+            // Recipient open tracking - distinct from isRead above, which is
+            // whether a CRM user has read the message.
+            opened_at: row.opened_at,
+            last_opened_at: row.last_opened_at,
+            open_count: row.open_count
           });
         });
       }

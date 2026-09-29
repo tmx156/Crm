@@ -11,6 +11,7 @@ console.log('[Gmail API] Email Service: Initializing...');
 const { google } = require('googleapis');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const { getAuthedClient } = require('./gmailClient');
+const { injectTrackingPixel } = require('./emailTracking');
 
 // Default sending address, used only when nothing more specific applies.
 // Set GMAIL_USER to move it — a mailbox that is closed down must not keep
@@ -50,9 +51,10 @@ if (EMAIL_SENDING_DISABLED) {
  * @param {Array}  attachments   - Nodemailer-style attachment objects (optional)
  * @param {string} fromEmail     - Sending Gmail address (defaults to GMAIL_USER env var)
  * @param {string} fromName      - Display name override (optional)
+ * @param {object} options       - { trackingId } to embed an open-tracking pixel
  * @returns {Promise<{success: boolean, response?: string, error?: string}>}
  */
-async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null) {
+async function sendEmail(to, subject, body, attachments = [], fromEmail = null, fromName = null, options = {}) {
   const GMAIL_FROM = (fromEmail && fromEmail !== 'primary') ? fromEmail : DEFAULT_GMAIL_FROM;
   const resolvedFromName = fromName || ACCOUNT_NAMES[GMAIL_FROM.toLowerCase()] || FROM_NAME;
   const emailId = Math.random().toString(36).substring(2, 8);
@@ -92,7 +94,17 @@ async function sendEmail(to, subject, body, attachments = [], fromEmail = null, 
 
     if (inputAttachments.length > 0) {
       for (const att of inputAttachments) {
-        if (!att.path || !att.filename) continue;
+        if (!att.filename) continue;
+
+        // In-memory attachments (e.g. a photo ZIP built on the fly) arrive as
+        // a Buffer rather than a path, so size-check the buffer directly.
+        if (att.content) {
+          const size = Buffer.isBuffer(att.content) ? att.content.length : 0;
+          if (size > 0 && size <= 25 * 1024 * 1024) validAttachments.push(att);
+          continue;
+        }
+
+        if (!att.path) continue;
         try {
           const stats = await fs.stat(att.path);
           if (stats.size > 0 && stats.size <= 25 * 1024 * 1024) {
@@ -105,15 +117,22 @@ async function sendEmail(to, subject, body, attachments = [], fromEmail = null, 
       console.log(`[${emailId}] Attachments: ${validAttachments.length}/${inputAttachments.length} valid`);
     }
 
+    // --- Open tracking ---
+    // Callers opt in by passing a trackingId and storing it on the message
+    // row; the pixel is only injected into HTML bodies.
+    const trackedBody = options.trackingId
+      ? injectTrackingPixel(body, options.trackingId)
+      : body;
+
     // --- Detect whether body is HTML ---
-    const isHtml = /<[a-z][\s\S]*>/i.test(body);
+    const isHtml = /<[a-z][\s\S]*>/i.test(trackedBody);
 
     // --- Build MIME message with MailComposer ---
     const mailOptions = {
       from: { name: resolvedFromName, address: GMAIL_FROM },
       to,
       subject,
-      ...(isHtml ? { html: body } : { text: body }),
+      ...(isHtml ? { html: trackedBody } : { text: trackedBody }),
       attachments: validAttachments,
       headers: {
         'X-Email-ID': emailId,

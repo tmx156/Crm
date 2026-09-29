@@ -1,6 +1,7 @@
 // const Database = require('better-sqlite3'); // Removed - using Supabase only
 const path = require('path');
 const { sendEmail: sendActualEmail, getAccountDisplayName } = require('./emailService');
+const { createTrackingId } = require('./emailTracking');
 const { sendSMS: sendActualSMS } = require('./smsService');
 const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid'); // Use uuid package for reliable ID generation
@@ -865,7 +866,11 @@ class MessagingService {
       }
       
       console.log('📤 Sending email via Gmail API...');
-      
+
+      // Open tracking: a per-message pixel id, persisted alongside the send
+      // status below so the tracking endpoint can map a hit back to this row.
+      const trackingId = createTrackingId();
+
       // Actually send the email using the email service
       const startTime = Date.now();
       const emailResult = await sendActualEmail(
@@ -874,7 +879,8 @@ class MessagingService {
         message.email_body,
         message.attachments || [],
         emailAccount,
-        senderName
+        senderName,
+        { trackingId }
       );
       
       const timeTaken = Date.now() - startTime;
@@ -906,6 +912,9 @@ class MessagingService {
           email_status: status,
           status: status,
           error_message: errorMessage,
+          // Only claim a tracking id when the send actually left the building;
+          // a failed send has no pixel in flight.
+          ...(emailResult.success ? { tracking_id: trackingId, open_count: 0 } : {}),
           updated_at: new Date().toISOString()
         })
         .eq('id', message.id);

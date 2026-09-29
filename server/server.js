@@ -62,6 +62,11 @@ const scheduler = require('./utils/scheduler');
 const { startAllGmailPollers } = require('./utils/gmailPoller');
 const { startGoogleSheetsSync } = require('./utils/googleSheetsSync');
 const googleSheetsRoutes = require('./routes/google-sheets');
+const photoRoutes = require('./routes/photos');
+const photoDeliveryRoutes = require('./routes/photo-delivery');
+const photoEditRoutes = require('./routes/photo-edit');
+const retouchQueue = require('./services/retouchQueue');
+const trackingRoutes = require('./routes/tracking');
 const FinanceReminderService = require('./services/financeReminderServiceSupabase');
 // Removed legacy auto-sync import to avoid accidental background duplication
 let startUltraFastSMSPolling = () => {};
@@ -463,6 +468,17 @@ app.use('/api/gmail', gmailAuthRoutes);
 app.use('/api/google-sheets', googleSheetsRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/ai-assistant', aiAssistantRoutes);
+app.use('/api/photos', photoRoutes);
+app.use('/api/photo-delivery', photoDeliveryRoutes);
+app.use('/api/photo-edit', photoEditRoutes);
+// Auto-retouch lives in-process, so a restart can strand 'running' edit rows.
+retouchQueue.recoverStale();
+// Public: hit by mail clients (open pixel) and by clients downloading their
+// photos, neither of which carries an auth token.
+app.use('/api/track', trackingRoutes);
+// Public: the client photo gallery behind the "View your photos" email button.
+// Must stay above the React catch-all at the bottom of this file.
+app.use('/gallery', require('./routes/gallery'));
 // TEMPORARILY DISABLED: app.use('/api/performance', require('./routes/performance'));
 
 // Scheduler API - manual trigger + status

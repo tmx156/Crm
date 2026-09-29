@@ -25,6 +25,40 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const router = express.Router();
 
+// "On The Way" ETA lives in leads.eta_at (migrations/add-lead-eta.sql). Until that
+// migration has been run the column does not exist, and naming it in a select or an
+// update makes Supabase reject the whole query - which would blank the calendar. So
+// probe for it once and only use it when present; a miss is re-checked every 5 min
+// so the feature switches on by itself shortly after the migration is applied.
+let etaColumnState = { available: false, checkedAt: 0 };
+const hasEtaColumn = async () => {
+  if (etaColumnState.available) return true;
+  if (Date.now() - etaColumnState.checkedAt < 5 * 60 * 1000) return false;
+  const { error } = await supabase.from('leads').select('eta_at').limit(1);
+  etaColumnState = { available: !error, checkedAt: Date.now() };
+  if (error) console.warn('⚠️ leads.eta_at missing - run migrations/add-lead-eta.sql to enable On The Way ETAs');
+  return !error;
+};
+
+// Model stats (height, measurements, eyes, hair, DOB) shown on the calendar's
+// appointment card. Same approach as eta_at above: the columns are looked for
+// rather than assumed, because naming a column that does not exist yet fails
+// the whole calendar query, not just the card. Until
+// migrations/add-model-stats-columns.sql is run the card simply stays empty.
+const MODEL_STATS_COLUMNS = [
+  'date_of_birth', 'height_inches', 'chest_inches', 'waist_inches',
+  'hips_inches', 'eye_color', 'hair_color', 'hair_length'
+];
+let modelStatsColumnState = { available: false, checkedAt: 0 };
+const hasModelStatsColumns = async () => {
+  if (modelStatsColumnState.available) return true;
+  if (Date.now() - modelStatsColumnState.checkedAt < 5 * 60 * 1000) return false;
+  const { error } = await supabase.from('leads').select(MODEL_STATS_COLUMNS.join(', ')).limit(1);
+  modelStatsColumnState = { available: !error, checkedAt: Date.now() };
+  if (error) console.warn('⚠️ leads model stats columns missing - run migrations/add-model-stats-columns.sql');
+  return !error;
+};
+
 // TIMEZONE FIX: Helper function to preserve local time when saving to database
 const preserveLocalTime = (dateString) => {
   if (!dateString) return null;
@@ -540,6 +574,10 @@ router.get('/', auth, async (req, res) => {
 // @access  Private (All logged-in users - special endpoint for calendar)
 router.get('/calendar', auth, async (req, res) => {
   try {
+    const etaSelect = (await hasEtaColumn()) ? ' eta_at,' : '';
+    // Authenticated calendar only - deliberately NOT added to /calendar-public,
+    // which has no login and must not expose dates of birth or measurements.
+    const statsSelect = (await hasModelStatsColumns()) ? ' ' + MODEL_STATS_COLUMNS.join(', ') + ',' : '';
     console.log(`📅 Calendar API: Fetching events for user ${req.user.name} (${req.user.role})`);
 
     // PERFORMANCE: Get pagination and date range from query params
@@ -587,7 +625,7 @@ router.get('/calendar', auth, async (req, res) => {
           .from('leads')
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
-            is_confirmed, booking_status, has_sale,
+            is_confirmed, booking_status, has_sale,${etaSelect}${statsSelect}
             created_at, updated_at, postcode, notes, image_url, booking_account
           `)
           .or('date_booked.not.is.null,status.eq.Booked')
@@ -692,7 +730,7 @@ router.get('/calendar', auth, async (req, res) => {
           .from('leads')
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
-            is_confirmed, booking_status, has_sale,
+            is_confirmed, booking_status, has_sale,${etaSelect}${statsSelect}
             created_at, updated_at, postcode, notes, image_url, booking_account
           `)
           .not('date_booked', 'is', null)
@@ -837,7 +875,7 @@ router.get('/:id([0-9a-fA-F-]{36})/messages', auth, async (req, res) => {
 
     let query = supabase
       .from('messages')
-      .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, attachments, sent_at, created_at')
+      .select('id, lead_id, type, content, sms_body, email_body, subject, recipient_email, sent_by, sent_by_name, status, email_status, read_status, delivery_status, error_message, attachments, sent_at, created_at, opened_at, last_opened_at, open_count')
       .eq('lead_id', leadId)
       .order('created_at', { ascending: true });
 
@@ -1754,6 +1792,18 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       delete updateData.booked_by;
     }
     
+    // Writing a column that doesn't exist yet fails the whole update, so drop the ETA
+    // until migrations/add-lead-eta.sql has been run (see hasEtaColumn).
+    if ((updateData.eta_at !== undefined || updateData.etaAt !== undefined) && !(await hasEtaColumn())) {
+      delete updateData.eta_at;
+      delete updateData.etaAt;
+    }
+
+    // Same for model stats, until migrations/add-model-stats-columns.sql runs.
+    if (MODEL_STATS_COLUMNS.some(c => updateData[c] !== undefined) && !(await hasModelStatsColumns())) {
+      MODEL_STATS_COLUMNS.forEach(c => delete updateData[c]);
+    }
+
     // Filter out any fields that might cause SQLite binding issues
     const validUpdateData = {};
     for (const [key, value] of Object.entries(updateData)) {
@@ -1821,7 +1871,9 @@ router.put('/:id([0-9a-fA-F-]{36})', auth, async (req, res) => {
       if (key === 'sendEmail' || key === 'sendSms' || key === 'templateId') continue;
       
       // For certain fields, we want to allow null values to clear them
-      const allowNullFields = ['booking_status', 'date_booked', 'reschedule_reason'];
+      // Model stats need null too: a booker correcting a wrong height to
+      // "unknown" sends null, and skipping it would silently keep the old value.
+      const allowNullFields = ['booking_status', 'date_booked', 'reschedule_reason', 'eta_at', ...MODEL_STATS_COLUMNS];
       if (value === null && allowNullFields.includes(key)) {
         filteredUpdateFields[key] = null;
         continue;
@@ -2821,6 +2873,7 @@ router.get('/:id/events', auth, async (req, res) => {
 router.get('/calendar-public', async (req, res) => {
   try {
     console.log(`📅 Public Calendar API: Fetching events`);
+    const etaSelect = (await hasEtaColumn()) ? ' eta_at,' : '';
 
     const { start, end, limit = 200 } = req.query;
     const validatedLimit = Math.min(parseInt(limit) || 200, 500);
@@ -2831,7 +2884,7 @@ router.get('/calendar-public', async (req, res) => {
       .from('leads')
       .select(`
         id, name, phone, email, status, date_booked, booker_id,
-        is_confirmed, booking_status, has_sale,
+        is_confirmed, booking_status, has_sale,${etaSelect}
         created_at, updated_at, postcode, notes, image_url
       `)
       .or('date_booked.not.is.null,status.eq.Booked')
