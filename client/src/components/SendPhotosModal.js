@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { FiX, FiSend, FiLoader, FiLink } from 'react-icons/fi';
 import axios from 'axios';
 
@@ -18,11 +18,21 @@ const formatBytes = (bytes) => {
 const SendPhotosModal = ({ leadId, leadName, leadEmail, photos, onClose, onSent }) => {
   const [sizeVariant, setSizeVariant] = useState('original');
   const [recipientEmail, setRecipientEmail] = useState(leadEmail || '');
-  const [subject, setSubject] = useState('Your photos from your shoot');
+  // Empty means the server's default, which names the sending agency
+  const [subject, setSubject] = useState('');
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  // The agency the email will come from, so a wrong brand is caught before sending
+  const [senderName, setSenderName] = useState(null);
+  useEffect(() => {
+    let live = true;
+    axios.get('/api/photo-delivery/sender', { params: { leadId } })
+      .then(({ data }) => { if (live) setSenderName(data.name); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [leadId]);
 
   // JPEG barely deflates, so the ZIP lands within a few percent of the sum of
   // its parts - close enough to predict attachment vs link.
@@ -137,6 +147,12 @@ const SendPhotosModal = ({ leadId, leadName, leadEmail, photos, onClose, onSent 
               </span>
             </div>
 
+            {senderName && (
+              <p className="text-xs text-gray-600">
+                Sending from <span className="font-semibold text-gray-900">{senderName}</span>
+              </p>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Send to</label>
               <input
@@ -155,6 +171,7 @@ const SendPhotosModal = ({ leadId, leadName, leadEmail, photos, onClose, onSent 
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
+                placeholder={`Your photos from ${senderName || 'us'}`}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm
                            focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               />
@@ -197,16 +214,11 @@ const SendPhotosModal = ({ leadId, leadName, leadEmail, photos, onClose, onSent 
                            disabled:cursor-not-allowed transition-colors"
               >
                 {sending
-                  ? <><FiLoader className="h-4 w-4 animate-spin" /> Zipping &amp; sending...</>
+                  ? <><FiLoader className="h-4 w-4 animate-spin" /> Sending...</>
                   : <><FiSend className="h-4 w-4" /> Send photos</>}
               </button>
             </div>
 
-            {sending && (
-              <p className="text-xs text-gray-400 text-center">
-                Large sets can take a minute to zip &mdash; keep this open.
-              </p>
-            )}
           </div>
         )}
       </div>

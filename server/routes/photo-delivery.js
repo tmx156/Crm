@@ -147,6 +147,42 @@ function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl, bran
 }
 
 /**
+ * The mailbox a lead's photos go out from. The lead's own agency
+ * (booking_account) wins over the latest thread message, so an Antara client
+ * hears from Antara - through Antara's own Gmail connection - even if an
+ * earlier email on the lead went out from another mailbox. The resolver
+ * skips a mailbox that cannot send rather than failing the delivery.
+ */
+async function senderForLead(lead) {
+  const { account } = await resolveReplyAccount({
+    leadId: lead.id,
+    preferredAccount: lead.booking_account
+  });
+  return account;
+}
+
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+
+/**
+ * GET /api/photo-delivery/sender?leadId=...
+ * Which agency the email will come from, shown in the send dialog.
+ */
+router.get('/sender', auth, async (req, res) => {
+  try {
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id, booking_account')
+      .eq('id', req.query.leadId)
+      .maybeSingle();
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
+    const account = await senderForLead(lead);
+    res.json({ success: true, account, name: brandForAccount(account).name });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/photo-delivery/send
  * Body: leadId, photoIds[], sizeVariant, subject, note, recipientEmail
  */
@@ -156,7 +192,9 @@ router.post('/send', auth, async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to send photos' });
     }
 
-    const { leadId, photoIds, sizeVariant = 'original', subject, note } = req.body;
+    const { leadId, sizeVariant = 'original', subject, note } = req.body;
+    // A repeated id would otherwise fail the "all found" check below
+    const photoIds = Array.isArray(req.body.photoIds) ? [...new Set(req.body.photoIds)] : req.body.photoIds;
 
     if (!leadId) {
       return res.status(400).json({ success: false, message: 'leadId is required' });
@@ -176,7 +214,7 @@ router.post('/send', auth, async (req, res) => {
 
     const { data: lead, error: leadError } = await supabase
       .from('leads')
-      .select('id, name, email')
+      .select('id, name, email, booking_account')
       .eq('id', leadId)
       .single();
 
@@ -184,9 +222,12 @@ router.post('/send', auth, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Lead not found' });
     }
 
-    const recipientEmail = req.body.recipientEmail || lead.email;
+    const recipientEmail = String(req.body.recipientEmail || lead.email || '').trim();
     if (!recipientEmail) {
       return res.status(400).json({ success: false, message: 'This lead has no email address' });
+    }
+    if (!EMAIL_RE.test(recipientEmail)) {
+      return res.status(400).json({ success: false, message: `"${recipientEmail}" is not a valid email address` });
     }
 
     // Fetch by id AND lead_id so a crafted request cannot pull another
@@ -232,10 +273,10 @@ router.post('/send', auth, async (req, res) => {
 
     // Resolved first because it decides the branding: the email body has to
     // name the same agency as the From line it arrives under.
-    const { account: fromAccount } = await resolveReplyAccount({ leadId });
+    const fromAccount = await senderForLead(lead);
     const brand = brandForAccount(fromAccount);
 
-    const emailSubject = subject || `Your photos from ${brand.name}`;
+    const emailSubject = (subject || '').trim() || `Your photos from ${brand.name}`;
     const emailHtml = buildEmailHtml({
       leadName: lead.name,
       photoCount: photos.length,

@@ -75,6 +75,7 @@ const PresentationGallery = ({
   }, [allPhotos]);
 
   const thumbnailContainerRef = useRef(null);
+  const stageImgRef = useRef(null);
   const autoPlayRef = useRef(null);
   const galleryContainerRef = useRef(null);
   const transitionTimeoutRef = useRef(null);
@@ -157,6 +158,17 @@ const PresentationGallery = ({
     setPreviousIndex(null);
     setImageLoaded(false);
   }, [isOpen, isLoadingPhotos, allPhotos, initialPhotoId]);
+
+  // The stage stays hidden until onLoad. But opening resets imageLoaded again
+  // once the full photo list arrives, and if the first photo had already
+  // loaded by then, the same <img> never fires onLoad a second time - the
+  // first slide stayed black until autoplay moved on (or forever, if paused).
+  // So whenever we are waiting, check whether the image is in fact ready.
+  const stagePhotoId = photos[currentIndex]?.id;
+  useEffect(() => {
+    const img = stageImgRef.current;
+    if (!imageLoaded && img && img.complete && img.naturalWidth > 0) setImageLoaded(true);
+  }, [imageLoaded, stagePhotoId]);
 
   const changeFolder = (folder) => {
     setActiveFolder(folder);
@@ -490,7 +502,10 @@ const PresentationGallery = ({
                 src={stageUrl(currentPhoto)}
                 alt={currentPhoto.description || `Photo ${currentIndex + 1}`}
                 className="max-w-full max-h-full object-contain relative z-10"
+                ref={stageImgRef}
                 onLoad={() => setImageLoaded(true)}
+                // A failed load should not leave the stage black either
+                onError={() => setImageLoaded(true)}
               />
             </div>
 
@@ -618,7 +633,7 @@ const PresentationGallery = ({
             className="flex items-center space-x-2 sm:space-x-3 text-white px-4 py-2.5 sm:px-8 sm:py-4 rounded-full text-sm sm:text-lg font-semibold whitespace-nowrap shadow-xl hover:shadow-2xl transition-all transform hover:scale-105 bg-gradient-to-r from-indigo-600 to-purple-600"
           >
             <FiSend className="w-5 h-5 sm:w-6 sm:h-6" />
-            <span>Send {selectedIds.size} as ZIP</span>
+            <span>Send {selectedIds.size} photo{selectedIds.size === 1 ? '' : 's'}</span>
           </button>
         </div>
       )}

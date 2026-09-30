@@ -43,7 +43,14 @@ async function brandForDelivery(delivery) {
       .maybeSingle();
     if (data?.gmail_account_key) return brandForAccount(data.gmail_account_key);
   }
-  return brandForAccount(null);
+  // No message row (its insert failed after the send): the lead's own agency
+  // is what the email was sent as, not whatever the default account is.
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('booking_account')
+    .eq('id', delivery.lead_id)
+    .maybeSingle();
+  return brandForAccount(lead?.booking_account || null);
 }
 
 const escapeHtml = (value) => String(value ?? '')

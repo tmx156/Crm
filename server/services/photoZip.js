@@ -48,6 +48,10 @@ async function streamPhotosAsZip(res, photos, sizeVariant, zipFilename) {
   const archive = archiver('zip', { store: true });
   const nameFor = uniqueNamer();
   let aborted = false;
+  let onAbort;
+  // Settles when the client goes away, so a wait on an entry that abort()
+  // will never finish cannot hang this request (and its buffer) forever.
+  const abortedSignal = new Promise(resolve => { onAbort = resolve; });
   let files = 0;
   const missing = [];
 
@@ -56,6 +60,7 @@ async function streamPhotosAsZip(res, photos, sizeVariant, zipFilename) {
   res.on('close', () => {
     if (!res.writableFinished) {
       aborted = true;
+      onAbort();
       archive.abort();
     }
   });
@@ -99,7 +104,8 @@ async function streamPhotosAsZip(res, photos, sizeVariant, zipFilename) {
     });
     archive.append(buffer, { name: nameFor(photo.filename) });
     buffer = null;
-    await written;
+    await Promise.race([written, abortedSignal]);
+    if (aborted) break;
     files += 1;
   }
 
