@@ -17,6 +17,8 @@ const { auth } = require('../middleware/auth');
 const config = require('../config');
 const photoStorage = require('../services/photoStorage');
 const retouchQueue = require('../services/retouchQueue');
+const { streamPhotosAsZip } = require('../services/photoZip');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -284,6 +286,105 @@ router.post('/upload', auth, upload.array('photos', 50), async (req, res) => {
  * PATCH /api/photos/:id
  * Move a photo between folders or edit its description.
  */
+/**
+ * Downloading a selection from the CRM as one ZIP.
+ *
+ * Needed because a browser will not save a burst of separate files: Chrome
+ * lets the first through and silently blocks the rest unless the site has
+ * been granted "automatic downloads", which is how "Download" on twenty
+ * photos was producing one. A single ZIP is one download, so it always works.
+ *
+ * It is two steps because the download has to be a plain navigation - so it
+ * streams straight to disk rather than through browser memory - and a
+ * navigation cannot carry the Authorization header. So the authenticated
+ * POST mints a short-lived, unguessable link for exactly those photos, and
+ * the GET behind it needs nothing else.
+ */
+const zipLinks = new Map(); // token -> { leadId, photoIds, name, expires }
+const ZIP_LINK_TTL_MS = 10 * 60 * 1000;
+
+function sweepZipLinks() {
+  const now = Date.now();
+  for (const [token, link] of zipLinks) if (link.expires < now) zipLinks.delete(token);
+}
+
+/**
+ * POST /api/photos/zip-link  { leadId, photoIds[] }
+ * -> { url } valid for ten minutes
+ */
+router.post('/zip-link', auth, async (req, res) => {
+  try {
+    const { leadId, photoIds } = req.body || {};
+    if (!leadId) return res.status(400).json({ success: false, message: 'leadId is required' });
+    if (!Array.isArray(photoIds) || !photoIds.length) {
+      return res.status(400).json({ success: false, message: 'Select at least one photo' });
+    }
+    if (photoIds.length > 500) {
+      return res.status(400).json({ success: false, message: 'Too many photos for one download (max 500)' });
+    }
+
+    // Only photos that really belong to this lead, so a crafted request
+    // cannot bundle up another client's pictures.
+    const { data: rows, error } = await supabase
+      .from('photos')
+      .select('id')
+      .in('id', photoIds)
+      .eq('lead_id', leadId)
+      .is('deleted_at', null);
+    if (error) throw error;
+    if (rows.length !== new Set(photoIds).size) {
+      return res.status(400).json({ success: false, message: 'Some selected photos could not be found for this lead' });
+    }
+
+    const { data: lead } = await supabase.from('leads').select('name').eq('id', leadId).maybeSingle();
+
+    sweepZipLinks();
+    const token = crypto.randomBytes(16).toString('hex');
+    zipLinks.set(token, {
+      leadId,
+      photoIds,
+      name: `Photos_${(lead?.name || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}.zip`,
+      expires: Date.now() + ZIP_LINK_TTL_MS
+    });
+
+    res.json({ success: true, url: `/api/photos/zip/${token}` });
+  } catch (error) {
+    console.error('[photos] Zip link failed:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /api/photos/zip/:token
+ * The ZIP itself. No auth header - the ten-minute token is the credential.
+ */
+router.get('/zip/:token', async (req, res) => {
+  const link = zipLinks.get(String(req.params.token || ''));
+  if (!link || link.expires < Date.now()) {
+    return res.status(404).send('This download link has expired. Go back and press Download again.');
+  }
+
+  try {
+    const { data: rows, error } = await supabase
+      .from('photos')
+      .select('id, filename, storage_key, display_key')
+      .in('id', link.photoIds)
+      .eq('lead_id', link.leadId)
+      .is('deleted_at', null);
+    if (error) throw error;
+
+    const byId = new Map(rows.map(p => [p.id, p]));
+    const photos = link.photoIds.map(id => byId.get(id)).filter(Boolean);
+    if (!photos.length) return res.status(404).send('These photos are no longer available.');
+
+    await streamPhotosAsZip(res, photos, 'original', link.name);
+  } catch (err) {
+    console.error('[photos] Zip download failed:', err.message);
+    if (res.headersSent) return res.destroy(err);
+    res.status(500).send('Something went wrong building the download. Please try again.');
+  }
+});
+
 router.patch('/:id', auth, async (req, res) => {
   try {
     if (!canEdit(req.user)) {

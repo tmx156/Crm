@@ -545,6 +545,15 @@
   z-index: 0;
 }
 
+/* Phone: the slides are absolutely positioned, so the stage padding does
+   not reach them. Keep the photo clear of the header and folder row above
+   and the select/send buttons and thumbnails below. */
+@media (max-width: 639px) {
+  .slideshow-framed .slideshow-image {
+    inset: 96px 8px 208px 8px;
+  }
+}
+
 .slideshow-image img {
   max-width: 100%;
   max-height: 100%;

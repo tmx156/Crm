@@ -379,28 +379,28 @@ const PresentationGallery = ({
   return (
     <div ref={galleryContainerRef} className="fixed inset-0 z-[80] bg-black">
       {/* Header */}
-      <div className={`absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/80 to-transparent p-4 transition-all duration-300 ${
+      <div className={`absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/80 to-transparent p-3 sm:p-4 transition-all duration-300 ${
         isImmersive ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}>
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center space-x-4">
-            <h2 className="text-white text-xl font-light tracking-wide">{leadName}</h2>
-            <span className="text-white/40 text-sm font-light">
+        <div className="flex items-center justify-between gap-2 max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <h2 className="text-white text-base sm:text-xl font-light tracking-wide truncate">{leadName}</h2>
+            <span className="text-white/40 text-sm font-light whitespace-nowrap">
               {photos.length ? `${currentIndex + 1} / ${photos.length}` : '0 / 0'}
             </span>
             {isLoadingPhotos && <FiLoader className="w-4 h-4 text-white/40 animate-spin" />}
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
             <button
               onClick={handleSelectAll}
-              className="text-white/60 hover:text-white px-3 py-2 transition-colors text-sm font-light tracking-wide"
+              className="text-white/60 hover:text-white px-2 sm:px-3 py-2 whitespace-nowrap transition-colors text-sm font-light tracking-wide"
             >
               {allInFolderSelected ? 'Deselect All' : 'Select All'}
             </button>
 
             {selectedIds.size > 0 && (
-              <span className="text-white/60 text-sm font-light">{selectedIds.size} selected</span>
+              <span className="hidden sm:inline text-white/60 text-sm font-light">{selectedIds.size} selected</span>
             )}
 
             <button
@@ -413,7 +413,7 @@ const PresentationGallery = ({
 
             <button
               onClick={toggleFullscreen}
-              className="text-white/40 hover:text-white p-2 transition-colors"
+              className="hidden sm:inline-block text-white/40 hover:text-white p-2 transition-colors"
               title="Fullscreen (F)"
             >
               {isFullscreen ? <FiMinimize className="w-5 h-5" /> : <FiMaximize className="w-5 h-5" />}
@@ -427,10 +427,10 @@ const PresentationGallery = ({
       </div>
 
       {/* Folder navigation */}
-      <div className={`absolute left-0 top-1/2 -translate-y-1/2 z-20 transition-all duration-500 ${
+      <div className={`absolute left-0 top-14 sm:top-1/2 sm:-translate-y-1/2 z-20 transition-all duration-500 ${
         isImmersive ? 'opacity-0 pointer-events-none -translate-x-full' : 'opacity-100'
       }`}>
-        <nav className="py-4 pl-6 pr-12">
+        <nav className="flex sm:block py-1 sm:py-4 pl-2 sm:pl-6 pr-2 sm:pr-12">
           {PHOTO_FOLDERS.map(folder => {
             const count = folderCounts[folder.id] || 0;
             const isActive = activeFolder === folder.id;
@@ -438,7 +438,7 @@ const PresentationGallery = ({
               <button
                 key={folder.id}
                 onClick={() => changeFolder(folder.id)}
-                className={`block w-full text-left py-2.5 transition-all duration-300 group ${
+                className={`block sm:w-full text-left py-1.5 sm:py-2.5 transition-all duration-300 group ${
                   isActive ? 'pl-4 border-l border-white' : 'pl-4 border-l border-transparent hover:border-white/30'
                 }`}
               >
@@ -460,7 +460,7 @@ const PresentationGallery = ({
 
       {/* Stage */}
       <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-        isImmersive ? 'px-4 py-4' : 'px-20 py-24'
+        isImmersive ? 'px-4 py-4' : 'slideshow-framed px-20 py-24'
       }`}>
         {photos.length > 0 && currentPhoto ? (
           <>
@@ -516,16 +516,15 @@ const PresentationGallery = ({
         <>
           <button
             onClick={() => { goToPrevious(); setIsPlaying(false); }}
-            className={`absolute top-1/2 -translate-y-1/2 z-30 text-white/20 hover:text-white p-4 transition-all hover:scale-110 ${
+            className={`absolute left-0 sm:left-40 top-1/2 -translate-y-1/2 z-30 text-white/40 sm:text-white/20 hover:text-white p-2 sm:p-4 transition-all hover:scale-110 ${
               isImmersive ? 'opacity-30 hover:opacity-100' : 'opacity-100'
             }`}
-            style={{ left: '160px' }}
           >
             <FiChevronLeft className="w-8 h-8" />
           </button>
           <button
             onClick={() => { goToNext(); setIsPlaying(false); }}
-            className={`absolute right-8 top-1/2 -translate-y-1/2 z-30 text-white/20 hover:text-white p-4 transition-all hover:scale-110 ${
+            className={`absolute right-0 sm:right-8 top-1/2 -translate-y-1/2 z-30 text-white/40 sm:text-white/20 hover:text-white p-2 sm:p-4 transition-all hover:scale-110 ${
               isImmersive ? 'opacity-30 hover:opacity-100' : 'opacity-100'
             }`}
           >
@@ -536,21 +535,21 @@ const PresentationGallery = ({
 
       {/* Select the photo on stage */}
       {photos.length > 0 && currentPhoto && (
-        <div className={`absolute bottom-36 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${
+        <div className={`absolute bottom-40 sm:bottom-36 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${
           isImmersive ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}>
           <button
             onClick={() => toggleSelection(currentPhoto.id)}
-            className={`flex items-center space-x-3 px-8 py-4 rounded-full text-lg font-semibold transition-all transform shadow-xl ${
+            className={`flex items-center space-x-2 sm:space-x-3 px-5 py-2.5 sm:px-8 sm:py-4 rounded-full text-base sm:text-lg font-semibold whitespace-nowrap transition-all transform shadow-xl ${
               isCurrentSelected
                 ? 'bg-indigo-600 text-white hover:scale-105'
                 : 'bg-white text-gray-900 hover:bg-indigo-50 hover:scale-105'
             }`}
           >
             {isCurrentSelected ? (
-              <><FiCheck className="w-6 h-6" /><span>Selected</span></>
+              <><FiCheck className="w-5 h-5 sm:w-6 sm:h-6" /><span>Selected</span></>
             ) : (
-              <><FiPlus className="w-6 h-6" /><span>Add to Selection</span></>
+              <><FiPlus className="w-5 h-5 sm:w-6 sm:h-6" /><span>Add to Selection</span></>
             )}
           </button>
         </div>
@@ -560,7 +559,7 @@ const PresentationGallery = ({
       <div className={`absolute bottom-0 left-0 right-0 z-20 transition-all duration-500 ${
         isImmersive ? 'opacity-0 pointer-events-none translate-y-full' : 'opacity-100 translate-y-0'
       }`}>
-        <div className="bg-gradient-to-t from-black via-black/80 to-transparent pt-8 pb-4 px-4">
+        <div className="bg-gradient-to-t from-black via-black/80 to-transparent pt-8 pb-4 px-0 sm:px-4">
           <div
             ref={thumbnailContainerRef}
             className="flex space-x-2 overflow-x-auto px-4"
@@ -611,14 +610,14 @@ const PresentationGallery = ({
 
       {/* Send the selection */}
       {selectedIds.size > 0 && onSendSelected && (
-        <div className={`absolute bottom-28 right-8 z-20 transition-all duration-300 ${
+        <div className={`absolute bottom-24 right-3 sm:bottom-28 sm:right-8 z-20 transition-all duration-300 ${
           isImmersive ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}>
           <button
             onClick={handleSend}
-            className="flex items-center space-x-3 text-white px-8 py-4 rounded-full text-lg font-semibold shadow-xl hover:shadow-2xl transition-all transform hover:scale-105 bg-gradient-to-r from-indigo-600 to-purple-600"
+            className="flex items-center space-x-2 sm:space-x-3 text-white px-4 py-2.5 sm:px-8 sm:py-4 rounded-full text-sm sm:text-lg font-semibold whitespace-nowrap shadow-xl hover:shadow-2xl transition-all transform hover:scale-105 bg-gradient-to-r from-indigo-600 to-purple-600"
           >
-            <FiSend className="w-6 h-6" />
+            <FiSend className="w-5 h-5 sm:w-6 sm:h-6" />
             <span>Send {selectedIds.size} as ZIP</span>
           </button>
         </div>

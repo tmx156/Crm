@@ -170,18 +170,18 @@ const PhotoEditModal = ({ photo, leadName, onClose, onSaved }) => {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-2 sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) close(); }}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <div>
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 border-b border-gray-200">
+          <div className="min-w-0">
             <h3 className="text-base font-semibold text-gray-900 flex items-center">
               <FiZap className="mr-2 h-4 w-4 text-indigo-600" />
               AI Retouch
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 mt-0.5 truncate">
               {leadName ? `${leadName} - ` : ''}{photo?.filename || 'photo'}
               {config?.model && <span className="text-gray-400"> &middot; {config.model}</span>}
             </p>
@@ -196,8 +196,8 @@ const PhotoEditModal = ({ photo, leadName, onClose, onSaved }) => {
         </div>
 
         {/* Before / after */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4">
             <figure className="m-0">
               <figcaption className="text-xs font-medium text-gray-500 mb-1.5">Original</figcaption>
               <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
@@ -342,14 +342,14 @@ const PhotoEditModal = ({ photo, leadName, onClose, onSaved }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <p className="text-xs text-gray-500">
             {savedPhoto
               ? 'The original is untouched - both are in the gallery.'
               : 'Saved as a new photo. The original is never overwritten.'}
           </p>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             {running ? (
               <button
                 onClick={stop}

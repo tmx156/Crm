@@ -3099,7 +3099,10 @@ const Calendar = () => {
                       <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
                         <FiMail className="h-4 w-4 text-white" />
                       </div>
-                      <div className="flex-1">
+                      {/* min-w-0: a flex item will not shrink below its content by
+                          default, so the one-line email preview (truncate) was
+                          stretching the whole window 217px past a phone screen. */}
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setShowAllMessages(!showAllMessages)}>
                             <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Emails</p>

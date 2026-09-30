@@ -429,50 +429,122 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
   const selectedPhotos = photos.filter(p => selectedIds.has(p.id));
 
   /**
-   * Download the selected photos to this computer as individual full-size
-   * files - no ZIP, no email.
+   * Download the selected photos, full size.
+   *
+   * Firing one download per photo does not work: Chrome lets the first file
+   * through and silently blocks the rest unless the site has been granted
+   * "automatic downloads" - twenty selected, one received. So:
+   *
+   *   - one photo   -> saved directly, as its own file
+   *   - several, where the browser can write to a folder (Chrome, Edge on
+   *     desktop) -> the booker picks a folder once and every photo is saved
+   *     into it as its own full-size file. One permission, nothing to miss.
+   *   - several, anywhere else (Safari, phones) -> a single ZIP, which every
+   *     browser downloads.
    *
    * `url` is the original as uploaded (for a retouch, the retouched file),
-   * not the grid thumbnail or the 1400px display copy. The ?download= query
-   * makes storage send Content-Disposition: attachment, which is what turns
-   * a click into a download: a plain link to an image on another domain
-   * just opens it in a tab, and the <a download> attribute is ignored
-   * cross-origin.
-   *
-   * Clicks are spaced out because browsers throttle, and sometimes drop,
-   * downloads fired in the same instant. Chrome also asks once per site
-   * whether to allow multiple downloads.
+   * never the grid thumbnail or the 1400px display copy.
    */
   const [downloadProgress, setDownloadProgress] = useState(null);
-  const downloadSelected = async () => {
-    const list = selectedPhotos.filter(p => p.url);
-    if (!list.length) return;
-    setDownloadProgress({ done: 0, total: list.length });
+  const [downloadError, setDownloadError] = useState(null);
 
+  const saveOne = (photo, fallbackName) => {
+    // ?download= makes storage send Content-Disposition: attachment. A plain
+    // link to an image on another domain just opens it, and the download
+    // attribute is ignored cross-origin.
+    const href = new URL(photo.url);
+    href.searchParams.set('download', photo.filename || fallbackName);
+    const a = document.createElement('a');
+    a.href = href.toString();
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const downloadAsZip = async (list) => {
+    setDownloadProgress({ done: 0, total: list.length, zip: true });
+    const { data } = await axios.post('/api/photos/zip-link', { leadId, photoIds: list.map(p => p.id) });
+    // A navigation, so the ZIP streams to disk instead of into memory. The
+    // API may be on another origin in development, hence the base URL.
+    window.location.href = `${axios.defaults.baseURL || ''}${data.url}`;
+    setDownloadProgress({ done: list.length, total: list.length, zip: true });
+  };
+
+  const downloadToFolder = async (list) => {
+    // Throws AbortError if the booker closes the picker - handled by caller.
+    const dir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'downloads' });
+
+    const taken = new Set();
+    const freeName = async (name) => {
+      // Never overwrite something already in the folder, or two selected
+      // photos that happen to share a filename.
+      const dot = name.lastIndexOf('.');
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : '';
+      for (let n = 0; ; n++) {
+        const candidate = n === 0 ? name : `${stem} (${n})${ext}`;
+        if (taken.has(candidate)) continue;
+        try {
+          await dir.getFileHandle(candidate); // exists already
+        } catch {
+          taken.add(candidate);
+          return candidate;
+        }
+      }
+    };
+
+    setDownloadProgress({ done: 0, total: list.length });
+    const failed = [];
     for (let i = 0; i < list.length; i++) {
       const photo = list[i];
-      const href = new URL(photo.url);
-      href.searchParams.set('download', photo.filename || `photo-${i + 1}.jpg`);
-
-      const a = document.createElement('a');
-      a.href = href.toString();
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
+      try {
+        const res = await fetch(photo.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const handle = await dir.getFileHandle(
+          await freeName(photo.filename || `photo-${i + 1}.jpg`), { create: true }
+        );
+        // Streamed to disk, so forty full-size photos never sit in memory.
+        await res.body.pipeTo(await handle.createWritable());
+      } catch (err) {
+        failed.push(photo.filename || `photo ${i + 1}`);
+      }
       setDownloadProgress({ done: i + 1, total: list.length });
-      if (i < list.length - 1) await new Promise(r => setTimeout(r, 400));
     }
+    if (failed.length) {
+      setDownloadError(`${failed.length} could not be saved: ${failed.slice(0, 3).join(', ')}` +
+        (failed.length > 3 ? '...' : ''));
+    }
+  };
 
-    setTimeout(() => setDownloadProgress(null), 1500);
+  const downloadSelected = async (forceZip = false) => {
+    const list = selectedPhotos.filter(p => p.url);
+    if (!list.length) return;
+    setDownloadError(null);
+
+    try {
+      if (list.length === 1 && !forceZip) {
+        saveOne(list[0], 'photo.jpg');
+      } else if (!forceZip && typeof window.showDirectoryPicker === 'function') {
+        await downloadToFolder(list);
+      } else {
+        await downloadAsZip(list);
+      }
+    } catch (err) {
+      // Closing the folder picker is a choice, not an error.
+      if (err?.name !== 'AbortError') {
+        setDownloadError(err.response?.data?.message || err.message || 'Download failed');
+      }
+    } finally {
+      setTimeout(() => setDownloadProgress(null), 1500);
+    }
   };
 
   return (
     <div className="mt-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3">
+        <h4 className="text-sm font-semibold text-gray-700 flex flex-wrap items-center gap-y-1">
           <FiImage className="mr-2 h-4 w-4 text-indigo-600" />
           Client Photos
           {counts.all > 0 && (
@@ -509,7 +581,7 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
           )}
         </h4>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
           {counts.all > 0 && (
             <button
               onClick={() => openGallery(null)}
@@ -533,7 +605,7 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
                   : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
               }`}
             >
-              {selecting ? 'Cancel' : 'Select to send'}
+              {selecting ? 'Cancel' : <>Select<span className="hidden sm:inline"> to send</span></>}
             </button>
           )}
           {canEdit && (
@@ -551,7 +623,7 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
 
       {/* Selection action bar */}
       {selecting && (
-        <div className="flex items-center justify-between mb-3 px-3 py-2 bg-indigo-50
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3 px-3 py-2 bg-indigo-50
                         border border-indigo-200 rounded-lg">
           <span className="text-sm text-indigo-900">
             {selectedIds.size} selected
@@ -577,27 +649,45 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
               )}
             </button>
           </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={downloadSelected}
-              disabled={selectedIds.size === 0 || !!downloadProgress}
-              title="Save the full-size files to this computer (not zipped). Chrome may ask once to allow multiple downloads."
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-700 border border-indigo-300
-                         rounded-lg text-sm font-medium hover:bg-indigo-50 disabled:opacity-40
-                         disabled:cursor-not-allowed transition-colors"
-            >
-              {downloadProgress ? (
-                <>
-                  <FiLoader className="h-4 w-4 animate-spin" />
-                  {downloadProgress.done} of {downloadProgress.total}
-                </>
-              ) : (
-                <>
-                  <FiDownload className="h-4 w-4" />
-                  Download {selectedIds.size || ''}
-                </>
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-stretch">
+              <button
+                onClick={() => downloadSelected(false)}
+                disabled={selectedIds.size === 0 || !!downloadProgress}
+                title={selectedIds.size > 1 && typeof window.showDirectoryPicker === 'function'
+                  ? 'Choose a folder - every photo is saved into it as its own full-size file'
+                  : 'Save the full-size photos to this computer'}
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 bg-white text-indigo-700 border border-indigo-300
+                           text-sm font-medium hover:bg-indigo-50 disabled:opacity-40
+                           disabled:cursor-not-allowed transition-colors ${
+                  selectedIds.size > 1 ? 'rounded-l-lg' : 'rounded-lg'
+                }`}
+              >
+                {downloadProgress ? (
+                  <>
+                    <FiLoader className="h-4 w-4 animate-spin" />
+                    {downloadProgress.zip ? 'Preparing ZIP...' : `${downloadProgress.done} of ${downloadProgress.total}`}
+                  </>
+                ) : (
+                  <>
+                    <FiDownload className="h-4 w-4" />
+                    Download {selectedIds.size || ''}
+                  </>
+                )}
+              </button>
+              {selectedIds.size > 1 && (
+                <button
+                  onClick={() => downloadSelected(true)}
+                  disabled={!!downloadProgress}
+                  title="Download them all as one ZIP file instead"
+                  className="px-2.5 py-1.5 bg-white text-indigo-700 border border-l-0 border-indigo-300
+                             rounded-r-lg text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40
+                             disabled:cursor-not-allowed transition-colors"
+                >
+                  ZIP
+                </button>
               )}
-            </button>
+            </div>
             <button
               onClick={() => setShowSendModal(true)}
               disabled={selectedIds.size === 0}
@@ -610,6 +700,9 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
             </button>
           </div>
         </div>
+      )}
+      {selecting && downloadError && (
+        <p className="-mt-2 mb-3 px-3 text-xs text-red-600">{downloadError}</p>
       )}
 
       {/* Upload panel */}
@@ -726,21 +819,22 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
           </button>
         </div>
       ) : counts.all > 0 || photos.length > 0 ? (
-        <div className="flex gap-3">
-          {/* Folder sidebar */}
-          <div className="w-24 flex-shrink-0 space-y-1">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          {/* Folders: a row of tabs on a phone (a 96px sidebar left the
+              grid ~220px wide), a sidebar from sm up */}
+          <div className="flex sm:flex-col gap-1 sm:w-24 flex-shrink-0">
             {PHOTO_FOLDERS.map(f => (
               <button
                 key={f.id}
                 onClick={() => changeFolder(f.id)}
-                className={`w-full px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left ${
+                className={`flex-1 sm:flex-none sm:w-full px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left ${
                   folder === f.id
                     ? 'bg-indigo-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 <span>{f.label}</span>
-                <span className={`block text-[10px] ${
+                <span className={`ml-1.5 sm:ml-0 sm:block text-[10px] ${
                   folder === f.id ? 'text-indigo-200' : 'text-gray-400'
                 }`}>
                   {counts[f.id] || 0}
@@ -851,8 +945,8 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
                         )}
 
                         {canEdit && !selecting && (
-                          <div className="absolute top-1 right-1 flex gap-1 opacity-0
-                                          group-hover:opacity-100 transition-opacity z-10">
+                          <div className="absolute top-1 right-1 flex gap-1 sm:opacity-0
+                                          sm:group-hover:opacity-100 transition-opacity z-10">
                             {aiEditEnabled && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditPhoto(photo); }}
