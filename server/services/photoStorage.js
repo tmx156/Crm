@@ -195,11 +195,15 @@ async function processAndUpload({ buffer, originalName, mimeType, leadId, upload
 }
 
 /** Remove every object belonging to a photo. Missing keys are not an error. */
-async function removePhotoObjects(photo) {
-  const keys = [photo.storage_key, photo.thumb_key, photo.display_key].filter(Boolean);
+async function removeObjectKeys(keys) {
+  keys = (keys || []).filter(Boolean);
   if (!keys.length) return;
   const { error } = await supabase.storage.from(BUCKET).remove(keys);
   if (error) console.error('[photos] Object delete failed:', error.message);
+}
+
+async function removePhotoObjects(photo) {
+  await removeObjectKeys([photo.storage_key, photo.thumb_key, photo.display_key]);
 }
 
 /**
@@ -340,6 +344,7 @@ module.exports = {
   ensureBucket,
   processAndUpload,
   removePhotoObjects,
+  removeObjectKeys,
   downloadObject,
   prepareForEdit,
   backdropColour,

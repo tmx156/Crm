@@ -422,6 +422,58 @@ router.patch('/:id', auth, async (req, res) => {
 });
 
 /**
+ * POST /api/photos/delete-batch  { leadId, photoIds: [...] }
+ *
+ * Deletes a selection in one request, same order as the single delete: rows
+ * soft-deleted first, storage objects removed after. Every id must belong to
+ * the lead, so a stale or tampered selection cannot reach another client.
+ */
+router.post('/delete-batch', auth, async (req, res) => {
+  try {
+    if (!canEdit(req.user)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to delete photos' });
+    }
+    const { leadId } = req.body || {};
+    const photoIds = [...new Set(Array.isArray(req.body?.photoIds) ? req.body.photoIds : [])];
+    if (!leadId || !photoIds.length) {
+      return res.status(400).json({ success: false, message: 'leadId and photoIds are required' });
+    }
+    if (photoIds.length > 500) {
+      return res.status(400).json({ success: false, message: 'Delete at most 500 photos at a time' });
+    }
+
+    const { data: photos, error: fetchError } = await supabase
+      .from('photos')
+      .select('id, lead_id, storage_key, thumb_key, display_key')
+      .in('id', photoIds)
+      .is('deleted_at', null);
+    if (fetchError) throw fetchError;
+    if (photos.some(p => String(p.lead_id) !== String(leadId))) {
+      return res.status(400).json({ success: false, message: 'Some photos do not belong to this client' });
+    }
+    if (!photos.length) return res.json({ success: true, deleted: 0 });
+
+    const ids = photos.map(p => p.id);
+    const { error: updateError } = await supabase
+      .from('photos')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', ids);
+    if (updateError) throw updateError;
+
+    // One storage call for the lot; failures only leave orphaned bytes
+    const keys = photos.flatMap(p => [p.storage_key, p.thumb_key, p.display_key]).filter(Boolean);
+    for (let i = 0; i < keys.length; i += 900) {
+      await photoStorage.removeObjectKeys(keys.slice(i, i + 900));
+    }
+
+    res.json({ success: true, deleted: ids.length, ids });
+  } catch (error) {
+    console.error('[photos] Batch delete failed:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * DELETE /api/photos/:id
  *
  * The row is soft-deleted first and the objects removed after. If the object
