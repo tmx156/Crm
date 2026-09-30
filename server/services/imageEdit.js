@@ -347,6 +347,20 @@ const GUARDRAIL =
 const isConfigured = () => !!process.env.OPENAI_API_KEY;
 
 /**
+ * Shared rate-limit cooldown. OpenAI's image limit is per account, so when
+ * any caller is told to back off - the background queue or a booker's manual
+ * retouch - every caller should hold off until then, or they simply take it
+ * in turns to earn the next 429.
+ */
+let cooldownUntil = 0;
+function noteRateLimit(waitMs) {
+  cooldownUntil = Math.max(cooldownUntil, Date.now() + waitMs);
+}
+function cooldownRemainingMs() {
+  return Math.max(0, cooldownUntil - Date.now());
+}
+
+/**
  * Build the prompt actually sent to the API.
  * A preset can be combined with free text - the note is applied on top.
  */
@@ -644,6 +658,8 @@ async function editImage({
 
 module.exports = {
   ImageEditError,
+  noteRateLimit,
+  cooldownRemainingMs,
   parseRetryAfter,
   MODEL,
   QUALITIES,

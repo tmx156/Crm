@@ -331,20 +331,6 @@ async function downloadObject(key) {
   return Buffer.from(await data.arrayBuffer());
 }
 
-/** Park a built ZIP in storage so it can be sent as a link instead. */
-async function uploadZip(buffer, filename) {
-  const ok = await ensureBucket();
-  if (!ok) throw new Error('Photo storage bucket is unavailable');
-
-  const key = `deliveries/${new Date().getFullYear()}/${crypto.randomUUID()}/${filename}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(key, buffer, {
-    contentType: 'application/zip',
-    upsert: true,
-    cacheControl: '2592000'
-  });
-  if (error) throw new Error(`upload zip: ${error.message}`);
-  return { key, url: publicUrl(key) };
-}
 
 module.exports = {
   BUCKET,
@@ -357,6 +343,5 @@ module.exports = {
   downloadObject,
   prepareForEdit,
   backdropColour,
-  uploadZip,
   publicUrl
 };

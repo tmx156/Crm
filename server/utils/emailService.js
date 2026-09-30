@@ -22,7 +22,10 @@ const DEFAULT_GMAIL_FROM = (process.env.GMAIL_USER || 'bookings@camrymodels.co.u
 // change via GMAIL_ACCOUNT_NAMES, a comma-separated list of "email=Display Name".
 const ACCOUNT_NAMES = {
   'bookings@camrymodels.co.uk': 'Camry Models',
-  'bookings@antaramodels.co.uk': 'Antara Models'
+  'bookings@antaramodels.co.uk': 'Antara Models',
+  // Was only supplied through GMAIL_ACCOUNT_NAMES, which production does not
+  // set - so John Ryland mail went out under the default brand's name there.
+  'bookings@johnrylandmodels.co.uk': 'John Ryland Models'
 };
 
 for (const pair of (process.env.GMAIL_ACCOUNT_NAMES || '').split(',')) {

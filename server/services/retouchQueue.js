@@ -59,12 +59,12 @@ const MAX_ATTEMPTS = 6;
 const BACKOFF_MS = [15000, 30000, 60000, 120000, 180000];
 const MAX_WAIT_MS = 5 * 60 * 1000;
 
-// When one worker is told to back off, every worker is: the limit is per
-// account, so the other worker's next call would only earn another 429.
-let cooldownUntil = 0;
+// When anything is told to back off, everything does: the limit is per
+// account, so another worker's next call - or a booker's manual retouch -
+// would only earn another 429. The clock lives in imageEdit so both share it.
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitForCooldown() {
-  const wait = cooldownUntil - Date.now();
+  const wait = imageEdit.cooldownRemainingMs();
   if (wait > 0) await sleep(wait);
 }
 
@@ -255,7 +255,7 @@ async function run({ photoId, leadId, userId }) {
         const ladder = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)];
         const wait = Math.min(Math.max(err.retryAfterMs || 0, ladder), MAX_WAIT_MS) +
           Math.floor(Math.random() * 3000);
-        cooldownUntil = Math.max(cooldownUntil, Date.now() + wait);
+        imageEdit.noteRateLimit(wait);
 
         console.warn(`[retouch] ${source.filename}: ${err.message} - retry ${attempt}/${MAX_ATTEMPTS - 1} in ${Math.round(wait / 1000)}s`);
         emit('photo_retouch_retrying', {

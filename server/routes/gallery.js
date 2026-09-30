@@ -22,12 +22,29 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const { isProxyFetch } = require('../utils/emailTracking');
+const { brandForAccount } = require('../utils/brand');
 
 const router = express.Router();
 const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 
-const COMPANY = 'John Ryland Models';
 const TOKEN_RE = /^[a-f0-9]{32}$/i;
+
+/**
+ * The agency this gallery belongs to: whoever the email was sent from, read
+ * off the recorded message, so the page matches the email that led here.
+ * Falls back to the default brand for a delivery with no message row.
+ */
+async function brandForDelivery(delivery) {
+  if (delivery.message_id) {
+    const { data } = await supabase
+      .from('messages')
+      .select('gmail_account_key')
+      .eq('id', delivery.message_id)
+      .maybeSingle();
+    if (data?.gmail_account_key) return brandForAccount(data.gmail_account_key);
+  }
+  return brandForAccount(null);
+}
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -85,13 +102,14 @@ router.get('/:token', async (req, res) => {
     const delivery = await loadDelivery(req.params.token);
     if (!delivery) return notFoundPage(res);
 
-    const [{ data: lead }, { data: photoRows }] = await Promise.all([
+    const [{ data: lead }, { data: photoRows }, brand] = await Promise.all([
       supabase.from('leads').select('name').eq('id', delivery.lead_id).maybeSingle(),
       supabase
         .from('photos')
         .select('id, filename, url, display_url, thumb_url')
         .in('id', delivery.photo_ids || [])
-        .is('deleted_at', null)
+        .is('deleted_at', null),
+      brandForDelivery(delivery)
     ]);
 
     // Keep the order the photos were picked in
@@ -103,7 +121,9 @@ router.get('/:token', async (req, res) => {
     const token = escapeHtml(delivery.download_token);
     const firstName = (lead?.name || '').trim().split(/\s+/)[0];
     const count = photos.length;
-    const canDownloadAll = !!delivery.zip_url;
+    // The ZIP is streamed on request now (routes/tracking.js), so there is
+    // always one to offer - older deliveries redirect to their stored copy.
+    const canDownloadAll = count > 1;
 
     const tiles = photos.map((p, i) => {
       const view = escapeHtml(p.display_url || p.url);
@@ -122,8 +142,8 @@ router.get('/:token', async (req, res) => {
     const body = `
       <header class="hero">
         <div class="brand">
-          <span class="brand-main">JOHN RYLAND</span>
-          <span class="brand-sub">MODELS</span>
+          <span class="brand-main">${escapeHtml(brand.main)}</span>
+          ${brand.sub ? `<span class="brand-sub">${escapeHtml(brand.sub)}</span>` : ''}
         </div>
         <h1>${firstName ? `${escapeHtml(firstName)}, your` : 'Your'} photos are ready</h1>
         <p class="lede">${count} photo${count === 1 ? '' : 's'} from your shoot, chosen just for you.</p>
@@ -138,7 +158,7 @@ router.get('/:token', async (req, res) => {
       <main class="grid">${tiles}</main>
 
       <footer class="foot">
-        <p>&copy; ${new Date().getFullYear()} ${COMPANY}</p>
+        <p>&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}</p>
         <p class="small">This private gallery was created just for you. Please don't share the link.</p>
       </footer>
 
@@ -202,7 +222,7 @@ router.get('/:token', async (req, res) => {
         })();
       </script>`;
 
-    res.send(shell(`Your photos | ${COMPANY}`, body));
+    res.send(shell(`Your photos | ${brand.name}`, body));
   } catch (err) {
     console.error('[gallery] Page failed:', err.message);
     res.status(500).send(shell('Something went wrong', `

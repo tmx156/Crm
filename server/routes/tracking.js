@@ -10,6 +10,7 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const { PIXEL, isProxyFetch } = require('../utils/emailTracking');
+const { streamPhotosAsZip } = require('../services/photoZip');
 
 const router = express.Router();
 const supabase = createClient(config.supabase.url, config.supabase.serverKey);
@@ -97,6 +98,7 @@ router.get('/open/:trackingId', (req, res) => {
  */
 router.get('/download/:token', async (req, res) => {
   const token = String(req.params.token || '');
+  const gone = 'This download link is no longer available. Please contact us and we will resend your photos.';
 
   if (!/^[a-f0-9]{32}$/i.test(token)) {
     return res.status(404).send('Download link not found.');
@@ -105,15 +107,14 @@ router.get('/download/:token', async (req, res) => {
   try {
     const { data: delivery } = await supabase
       .from('photo_deliveries')
-      .select('id, zip_url, first_downloaded_at, download_count')
+      .select('id, lead_id, photo_ids, size_variant, zip_url, first_downloaded_at, download_count')
       .eq('download_token', token)
+      // A delivery whose email never went out was never meant to be opened -
+      // the same rule the gallery page applies.
+      .eq('status', 'sent')
       .maybeSingle();
 
-    if (!delivery || !delivery.zip_url) {
-      return res
-        .status(404)
-        .send('This download link is no longer available. Please contact us and we will resend your photos.');
-    }
+    if (!delivery) return res.status(404).send(gone);
 
     const now = new Date().toISOString();
     supabase
@@ -129,9 +130,33 @@ router.get('/download/:token', async (req, res) => {
         if (error) console.error('[track] Download count update failed:', error.message);
       });
 
-    res.redirect(302, delivery.zip_url);
+    // Deliveries sent before ZIPs were built on demand have one in storage.
+    if (delivery.zip_url) return res.redirect(302, delivery.zip_url);
+
+    const [{ data: rows }, { data: lead }] = await Promise.all([
+      supabase
+        .from('photos')
+        .select('id, filename, storage_key, display_key')
+        .in('id', delivery.photo_ids || [])
+        .is('deleted_at', null),
+      supabase.from('leads').select('name').eq('id', delivery.lead_id).maybeSingle()
+    ]);
+
+    // Keep the order the photos were chosen in.
+    const byId = new Map((rows || []).map(p => [p.id, p]));
+    const photos = (delivery.photo_ids || []).map(id => byId.get(id)).filter(Boolean);
+    if (!photos.length) return res.status(404).send(gone);
+
+    const zipName = `Photos_${(lead?.name || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}.zip`;
+    const result = await streamPhotosAsZip(res, photos, delivery.size_variant, zipName);
+    console.log(`[track] Streamed ZIP for delivery ${delivery.id}: ${result.files} file(s)` +
+      (result.missing ? `, ${result.missing} missing` : '') + (result.aborted ? ' (client cancelled)' : ''));
   } catch (err) {
     console.error('[track] Download handler failed:', err.message);
+    // Once the ZIP has started the status line is gone; all that is left is
+    // to cut the connection so the browser reports a failed download rather
+    // than saving a truncated file as if it were complete.
+    if (res.headersSent) return res.destroy(err);
     res.status(500).send('Something went wrong fetching your photos. Please contact us.');
   }
 });

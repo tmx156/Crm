@@ -31,6 +31,13 @@ const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 // Matches CAN_EDIT_ROLES in routes/photos.js - editing a client's photos is
 // the same privilege as deleting them.
 const CAN_EDIT_ROLES = ['admin', 'booker'];
+
+// Retries for a manual retouch. Tighter than the background queue's (which
+// can wait minutes unseen): about a minute in all before telling the booker,
+// who is sat watching the dialog.
+const MANUAL_MAX_ATTEMPTS = 4;
+const MANUAL_BACKOFF_MS = [10000, 20000, 30000];
+const MANUAL_MAX_WAIT_MS = 60000;
 const canEdit = (user) => CAN_EDIT_ROLES.includes(user?.role);
 
 // The columns the gallery renders, plus the edit provenance. Keep in step
@@ -310,26 +317,57 @@ router.post('/:photoId', auth, async (req, res) => {
     if (editError) throw editError;
     editId = editRow.id;
 
-    send('status', { stage: 'editing', message: 'Sending to OpenAI', editId });
-
-    const result = await imageEdit.editImage({
-      buffer: input.buffer,
-      filename: source.filename || 'photo.jpg',
-      mimeType: input.mimeType,
-      preset,
-      prompt,
-      backdrop,
-      quality,
-      size: outputSize,
-      signal: abort.signal,
-      onPartial: ({ index, buffer }) => {
-        send('partial', {
-          index,
-          total: 3,
-          image: `data:image/${imageEdit.OUTPUT_FORMAT};base64,${buffer.toString('base64')}`
-        });
-      }
+    // A booker is watching this one, so the waits are shorter than the
+    // background queue's and each one is announced on screen. It shares the
+    // queue's cooldown: during a big upload the account's per-minute image
+    // limit is already in use, and firing anyway only earns a 429.
+    const waitAbortable = (ms) => new Promise((resolve) => {
+      const t = setTimeout(resolve, ms);
+      abort.signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
     });
+    const announceWait = (ms, why) => send('status', {
+      stage: 'waiting', message: `${why} - trying again in ${Math.ceil(ms / 1000)}s`, editId
+    });
+
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      const cooling = imageEdit.cooldownRemainingMs();
+      if (cooling > 0) {
+        announceWait(cooling, 'OpenAI is busy with other retouches');
+        await waitAbortable(cooling);
+      }
+      if (closed) throw Object.assign(new Error('Edit cancelled'), { cancelled: true });
+
+      send('status', { stage: 'editing', message: 'Sending to OpenAI', editId });
+      try {
+        result = await imageEdit.editImage({
+          buffer: input.buffer,
+          filename: source.filename || 'photo.jpg',
+          mimeType: input.mimeType,
+          preset,
+          prompt,
+          backdrop,
+          quality,
+          size: outputSize,
+          signal: abort.signal,
+          onPartial: ({ index, buffer }) => {
+            send('partial', {
+              index,
+              total: 3,
+              image: `data:image/${imageEdit.OUTPUT_FORMAT};base64,${buffer.toString('base64')}`
+            });
+          }
+        });
+        break;
+      } catch (err) {
+        if (!err.retryable || attempt >= MANUAL_MAX_ATTEMPTS) throw err;
+        const ladder = MANUAL_BACKOFF_MS[Math.min(attempt - 1, MANUAL_BACKOFF_MS.length - 1)];
+        const wait = Math.min(Math.max(err.retryAfterMs || 0, ladder), MANUAL_MAX_WAIT_MS);
+        imageEdit.noteRateLimit(wait);
+        announceWait(wait, 'OpenAI asked us to slow down');
+        await waitAbortable(wait);
+      }
+    }
 
     if (closed) throw Object.assign(new Error('Edit cancelled'), { cancelled: true });
 

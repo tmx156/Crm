@@ -1,5 +1,5 @@
 /**
- * Send a client their selected photos as a ZIP.
+ * Send a client their selected photos.
  *
  * Adapted from the contract-delivery flow in the sister CRM, but decoupled
  * from contracts/invoices/packages: this is a plain "tick some photos, send
@@ -9,20 +9,22 @@
  * into a private gallery (routes/gallery.js) rather than an attachment. The
  * click is the only reliable read receipt - an attachment can't be tracked
  * and an open pixel is easily faked or blocked - and it also sidesteps
- * Gmail's 25 MB ceiling. The ZIP is still built and stored so the gallery
- * can offer "Download all".
+ * Gmail's 25 MB ceiling.
+ *
+ * No ZIP is built here. "Download all" builds one as the client downloads it
+ * (services/photoZip.js); building it at send time failed outright past the
+ * storage bucket's 45 MB per-file cap - about fourteen full-size photos.
  */
 
 const express = require('express');
 const crypto = require('crypto');
-const archiver = require('archiver');
 const { createClient } = require('@supabase/supabase-js');
 const { auth } = require('../middleware/auth');
 const config = require('../config');
-const photoStorage = require('../services/photoStorage');
 const { sendEmail } = require('../utils/emailService');
 const { resolveReplyAccount } = require('../utils/emailAccountResolver');
 const { createTrackingId, publicBaseUrl } = require('../utils/emailTracking');
+const { brandForAccount } = require('../utils/brand');
 
 const router = express.Router();
 const supabase = createClient(config.supabase.url, config.supabase.serverKey);
@@ -31,78 +33,6 @@ const CAN_SEND_ROLES = ['admin', 'booker'];
 
 const MAX_PHOTOS_PER_SEND = 200;
 
-// Downloads run a few at a time: unbounded parallelism on a 100-photo send
-// would open 100 sockets and spike memory by ~440 MB.
-const DOWNLOAD_CONCURRENCY = 4;
-
-/** Pull objects for every photo, a few at a time, preserving input order. */
-async function fetchPhotoBuffers(photos, variant) {
-  const results = new Array(photos.length);
-  let cursor = 0;
-
-  const worker = async () => {
-    while (cursor < photos.length) {
-      const index = cursor++;
-      const photo = photos[index];
-      // 'delivery' ships the 1400px copy - about 15x smaller than the
-      // original and fine for web, social and proofing.
-      const key = variant === 'delivery'
-        ? (photo.display_key || photo.storage_key)
-        : photo.storage_key;
-
-      results[index] = {
-        filename: photo.filename || `photo_${index + 1}.jpg`,
-        buffer: await photoStorage.downloadObject(key)
-      };
-    }
-  };
-
-  await Promise.all(
-    Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, photos.length) }, worker)
-  );
-
-  return results;
-}
-
-/**
- * Build the ZIP in memory.
- *
- * Compression is level 1, not 9. JPEGs are already entropy-coded, so deflate
- * recovers well under 1% on them while level 9 costs several times the CPU;
- * on a 100-photo send that is the difference between seconds and a request
- * timeout. Level 1 still trims PNG and TIFF uploads.
- */
-function buildZip(entries) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    const archive = archiver('zip', { zlib: { level: 1 } });
-    const used = new Map();
-
-    archive.on('data', (chunk) => chunks.push(chunk));
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
-    archive.on('error', reject);
-
-    for (const entry of entries) {
-      // Two files called IMG_1234.jpg must not silently collapse into one
-      // entry, so de-duplicate names as we go.
-      let name = entry.filename;
-      if (used.has(name)) {
-        const next = used.get(name) + 1;
-        used.set(name, next);
-        const dot = name.lastIndexOf('.');
-        name = dot > 0
-          ? `${name.slice(0, dot)}_${next}${name.slice(dot)}`
-          : `${name}_${next}`;
-      } else {
-        used.set(name, 1);
-      }
-      archive.append(entry.buffer, { name });
-    }
-
-    archive.finalize();
-  });
-}
-
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -110,14 +40,14 @@ const escapeHtml = (value) => String(value ?? '')
   .replace(/"/g, '&quot;');
 
 /**
- * Branded John Ryland Models delivery email.
+ * Branded delivery email, in the name of the agency it is sent from.
  *
  * Table-based with inline styles because that is all Outlook and Gmail
  * reliably render. There is deliberately no attachment: the photos live
  * behind the "View your photos" button, and that click is the reliable read
  * receipt (see routes/gallery.js).
  */
-function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl }) {
+function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl, brand }) {
   const firstName = (leadName || '').trim().split(/\s+/)[0];
   const greeting = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi,';
   const plural = photoCount === 1 ? '' : 's';
@@ -149,7 +79,7 @@ function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl }) {
 </head>
 <body style="margin:0;padding:0;background:#f7f4ef;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    Your ${photoCount} photo${plural} from John Ryland Models are ready to view and download.
+    Your ${photoCount} photo${plural} from ${escapeHtml(brand.name)} are ready to view and download.
   </div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f7f4ef;">
     <tr><td align="center" style="padding:32px 12px;">
@@ -158,10 +88,10 @@ function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl }) {
 
         <!-- Brand -->
         <tr><td align="center" style="background:#141414;padding:36px 24px 30px;">
-          <div style="font-family:${serif};font-size:26px;letter-spacing:8px;color:#ffffff;font-weight:600;">JOHN&nbsp;RYLAND</div>
-          <div style="font-family:${sans};font-size:10px;letter-spacing:7px;color:#b8955a;font-weight:600;padding-top:8px;">
-            &#8212;&nbsp;&nbsp;MODELS&nbsp;&nbsp;&#8212;
-          </div>
+          <div style="font-family:${serif};font-size:26px;letter-spacing:8px;color:#ffffff;font-weight:600;">${escapeHtml(brand.main).replace(/ /g, '&nbsp;')}</div>
+          ${brand.sub ? `<div style="font-family:${sans};font-size:10px;letter-spacing:7px;color:#b8955a;font-weight:600;padding-top:8px;">
+            &#8212;&nbsp;&nbsp;${escapeHtml(brand.sub)}&nbsp;&nbsp;&#8212;
+          </div>` : ''}
         </td></tr>
 
         <!-- Heading -->
@@ -205,7 +135,7 @@ function buildEmailHtml({ leadName, photoCount, note, galleryUrl, coverUrl }) {
         <!-- Footer -->
         <tr><td align="center" style="background:#faf8f4;border-top:1px solid #ece6dc;padding:28px 32px;
                                       font-family:${sans};font-size:12px;line-height:1.6;color:#8a847b;">
-          <div style="font-family:${serif};font-size:15px;letter-spacing:3px;color:#141414;padding-bottom:6px;">JOHN RYLAND MODELS</div>
+          <div style="font-family:${serif};font-size:15px;letter-spacing:3px;color:#141414;padding-bottom:6px;">${escapeHtml(brand.name.toUpperCase())}</div>
           This private gallery was created just for you. Please don't forward this email.
         </td></tr>
 
@@ -279,22 +209,17 @@ router.post('/send', auth, async (req, res) => {
 
     const deliveryId = crypto.randomUUID();
     const messageId = crypto.randomUUID();
-    const dateStr = new Date().toISOString().split('T')[0];
-    const zipFilename = `Photos_${(lead.name || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}_${dateStr}.zip`;
-
-    console.log(`[delivery] Building ZIP: ${photos.length} photos, variant=${sizeVariant}`);
-
-    const entries = await fetchPhotoBuffers(photos, sizeVariant);
-    const zipBuffer = await buildZip(entries);
-    const zipMB = zipBuffer.length / 1048576;
-
-    console.log(`[delivery] ZIP built: ${zipMB.toFixed(2)} MB`);
 
     // Stored as 'link' - the gallery is the link, and the existing CHECK
     // constraint only allows 'attachment' | 'link'.
     const deliveryMethod = 'link';
     const downloadToken = crypto.randomBytes(16).toString('hex');
-    const { url: zipUrl, key: zipKey } = await photoStorage.uploadZip(zipBuffer, zipFilename);
+
+    // What "Download all" will come to. Recorded for the history view; the
+    // ZIP itself is only built when the client downloads it.
+    const totalBytes = photos.reduce((sum, p) => sum + ((sizeVariant === 'delivery'
+      ? (p.display_size || p.file_size)
+      : p.file_size) || 0), 0);
 
     // The client opens this on their own device, so it must be the public
     // address even when a local copy of the CRM sent the email.
@@ -305,16 +230,21 @@ router.post('/send', auth, async (req, res) => {
     const cover = photos.find(p => p.id === photoIds[0]) || photos[0];
     const coverUrl = cover?.display_url || cover?.url || null;
 
-    const emailSubject = subject || `Your photos from your shoot`;
+    // Resolved first because it decides the branding: the email body has to
+    // name the same agency as the From line it arrives under.
+    const { account: fromAccount } = await resolveReplyAccount({ leadId });
+    const brand = brandForAccount(fromAccount);
+
+    const emailSubject = subject || `Your photos from ${brand.name}`;
     const emailHtml = buildEmailHtml({
       leadName: lead.name,
       photoCount: photos.length,
       note,
       galleryUrl,
-      coverUrl
+      coverUrl,
+      brand
     });
 
-    const { account: fromAccount } = await resolveReplyAccount({ leadId });
     const trackingId = createTrackingId();
     const nowIso = new Date().toISOString();
 
@@ -328,9 +258,10 @@ router.post('/send', auth, async (req, res) => {
       photo_ids: photos.map(p => p.id),
       photo_count: photos.length,
       size_variant: sizeVariant,
-      zip_bytes: zipBuffer.length,
-      zip_url: zipUrl,
-      zip_key: zipKey,
+      zip_bytes: totalBytes,
+      // No stored ZIP: "Download all" streams one on demand (routes/tracking.js).
+      zip_url: null,
+      zip_key: null,
       delivery_method: deliveryMethod,
       recipient_email: recipientEmail,
       subject: emailSubject,
@@ -409,7 +340,7 @@ router.post('/send', auth, async (req, res) => {
       delivery: {
         id: deliveryId,
         photoCount: photos.length,
-        zipBytes: zipBuffer.length,
+        zipBytes: totalBytes,
         deliveryMethod,
         recipientEmail,
         sizeVariant
@@ -452,3 +383,6 @@ router.get('/', auth, async (req, res) => {
 });
 
 module.exports = router;
+// Exposed for the delivery tests, which check each agency's branding without
+// sending real mail.
+module.exports.buildEmailHtml = buildEmailHtml;
