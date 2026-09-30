@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  FiImage, FiUpload, FiTrash2, FiCheck, FiSend, FiLoader, FiZap, FiPlay
+  FiImage, FiUpload, FiTrash2, FiCheck, FiSend, FiLoader, FiZap, FiPlay, FiDownload
 } from 'react-icons/fi';
 import axios from 'axios';
 import SendPhotosModal from './SendPhotosModal';
@@ -428,6 +428,46 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
 
   const selectedPhotos = photos.filter(p => selectedIds.has(p.id));
 
+  /**
+   * Download the selected photos to this computer as individual full-size
+   * files - no ZIP, no email.
+   *
+   * `url` is the original as uploaded (for a retouch, the retouched file),
+   * not the grid thumbnail or the 1400px display copy. The ?download= query
+   * makes storage send Content-Disposition: attachment, which is what turns
+   * a click into a download: a plain link to an image on another domain
+   * just opens it in a tab, and the <a download> attribute is ignored
+   * cross-origin.
+   *
+   * Clicks are spaced out because browsers throttle, and sometimes drop,
+   * downloads fired in the same instant. Chrome also asks once per site
+   * whether to allow multiple downloads.
+   */
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const downloadSelected = async () => {
+    const list = selectedPhotos.filter(p => p.url);
+    if (!list.length) return;
+    setDownloadProgress({ done: 0, total: list.length });
+
+    for (let i = 0; i < list.length; i++) {
+      const photo = list[i];
+      const href = new URL(photo.url);
+      href.searchParams.set('download', photo.filename || `photo-${i + 1}.jpg`);
+
+      const a = document.createElement('a');
+      a.href = href.toString();
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setDownloadProgress({ done: i + 1, total: list.length });
+      if (i < list.length - 1) await new Promise(r => setTimeout(r, 400));
+    }
+
+    setTimeout(() => setDownloadProgress(null), 1500);
+  };
+
   return (
     <div className="mt-4">
       {/* Header */}
@@ -537,16 +577,38 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
               )}
             </button>
           </span>
-          <button
-            onClick={() => setShowSendModal(true)}
-            disabled={selectedIds.size === 0}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg
-                       text-sm font-medium hover:bg-indigo-700 disabled:opacity-40
-                       disabled:cursor-not-allowed transition-colors"
-          >
-            <FiSend className="h-4 w-4" />
-            Send {selectedIds.size || ''}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadSelected}
+              disabled={selectedIds.size === 0 || !!downloadProgress}
+              title="Save the full-size files to this computer (not zipped). Chrome may ask once to allow multiple downloads."
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-white text-indigo-700 border border-indigo-300
+                         rounded-lg text-sm font-medium hover:bg-indigo-50 disabled:opacity-40
+                         disabled:cursor-not-allowed transition-colors"
+            >
+              {downloadProgress ? (
+                <>
+                  <FiLoader className="h-4 w-4 animate-spin" />
+                  {downloadProgress.done} of {downloadProgress.total}
+                </>
+              ) : (
+                <>
+                  <FiDownload className="h-4 w-4" />
+                  Download {selectedIds.size || ''}
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowSendModal(true)}
+              disabled={selectedIds.size === 0}
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg
+                         text-sm font-medium hover:bg-indigo-700 disabled:opacity-40
+                         disabled:cursor-not-allowed transition-colors"
+            >
+              <FiSend className="h-4 w-4" />
+              Send {selectedIds.size || ''}
+            </button>
+          </div>
         </div>
       )}
 
