@@ -423,6 +423,45 @@ async function* readEvents(body) {
 }
 
 /** Turn an error body from OpenAI into something worth showing a booker. */
+/**
+ * An error from the edit API that knows whether waiting would help.
+ *
+ * `retryable` separates "come back shortly" (rate limit, a blip on OpenAI's
+ * side, a dropped connection) from "this will never work" (no credit, bad
+ * key, refused prompt). `retryAfterMs` is OpenAI's own estimate when it gives
+ * one, so a caller can wait exactly as long as asked instead of guessing.
+ */
+class ImageEditError extends Error {
+  constructor(message, { status = null, retryable = false, retryAfterMs = null } = {}) {
+    super(message);
+    this.name = 'ImageEditError';
+    this.status = status;
+    this.retryable = retryable;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/**
+ * How long OpenAI asked us to wait, from the headers or failing that the
+ * message text ("...Please try again in 12.5s." / "in 1m30s" / "in 850ms").
+ */
+function parseRetryAfter(response, detail) {
+  const ms = parseFloat(response?.headers?.get?.('retry-after-ms'));
+  if (Number.isFinite(ms) && ms > 0) return ms;
+
+  const secs = parseFloat(response?.headers?.get?.('retry-after'));
+  if (Number.isFinite(secs) && secs > 0) return secs * 1000;
+
+  // (?!s) keeps the "m" of "850ms" from being read as 850 minutes.
+  const m = /try again in\s+(?:(\d+)m(?!s))?\s*(?:([\d.]+)(ms|s))?/i.exec(detail || '');
+  if (m && (m[1] || m[2])) {
+    const minutes = m[1] ? parseInt(m[1], 10) * 60000 : 0;
+    const rest = m[2] ? parseFloat(m[2]) * (m[3] === 'ms' ? 1 : 1000) : 0;
+    if (minutes + rest > 0) return minutes + rest;
+  }
+  return null;
+}
+
 async function describeFailure(response) {
   let detail = '';
   let code = '';
@@ -434,22 +473,41 @@ async function describeFailure(response) {
     detail = (await response.text().catch(() => '')).slice(0, 300);
   }
 
-  if (response.status === 401) return 'The OpenAI API key was rejected';
+  const status = response.status;
+
+  if (status === 401) return new ImageEditError('The OpenAI API key was rejected', { status });
 
   // A 429 is two completely different problems wearing the same status code.
-  // An empty balance never clears by waiting, so telling a booker to try again
-  // shortly sends them round a loop that cannot succeed.
-  if (response.status === 429) {
+  // An empty balance never clears by waiting, so it must not be retried - a
+  // queue that retried it would just spin until it gave up.
+  if (status === 429) {
     if (/insufficient_quota|credit_balance_exhausted|billing/i.test(`${code} ${detail}`)) {
-      return 'OpenAI has no credit left on this account - top it up in the OpenAI billing settings';
+      return new ImageEditError(
+        'OpenAI has no credit left on this account - top it up in the OpenAI billing settings',
+        { status }
+      );
     }
-    return 'OpenAI rate limit reached - try again in a moment';
+    return new ImageEditError('OpenAI rate limit reached - try again in a moment', {
+      status,
+      retryable: true,
+      retryAfterMs: parseRetryAfter(response, detail)
+    });
   }
 
-  if (response.status === 400 && /safety|moderation|rejected/i.test(detail)) {
-    return `OpenAI refused this edit: ${detail}`;
+  if (status === 400 && /safety|moderation|rejected/i.test(detail)) {
+    return new ImageEditError(`OpenAI refused this edit: ${detail}`, { status });
   }
-  return detail || `OpenAI returned ${response.status}`;
+
+  // OpenAI's own hiccups. Worth another go; they rarely last.
+  if (status >= 500) {
+    return new ImageEditError(detail || `OpenAI returned ${status}`, {
+      status,
+      retryable: true,
+      retryAfterMs: parseRetryAfter(response, detail)
+    });
+  }
+
+  return new ImageEditError(detail || `OpenAI returned ${status}`, { status });
 }
 
 /**
@@ -529,10 +587,11 @@ async function editImage({
   } catch (err) {
     if (signal?.aborted) throw cancelled();
     if (timeout.aborted) throw timedOut();
-    throw new Error(`Could not reach OpenAI: ${err.message}`);
+    // A dropped connection or DNS blip - worth another try.
+    throw new ImageEditError(`Could not reach OpenAI: ${err.message}`, { retryable: true });
   }
 
-  if (!response.ok) throw new Error(await describeFailure(response));
+  if (!response.ok) throw await describeFailure(response);
 
   let final = null;
   let usage = null;
@@ -541,7 +600,13 @@ async function editImage({
     for await (const event of readEvents(response.body)) {
       // An error can arrive mid-stream, after a 200, once generation starts.
       if (event.type === 'error' || event.error) {
-        throw new Error(event.error?.message || 'OpenAI reported an error mid-edit');
+        const msg = event.error?.message || 'OpenAI reported an error mid-edit';
+        // Limits can also be hit after the stream has opened.
+        const limited = /rate limit|overloaded|try again/i.test(msg);
+        throw new ImageEditError(msg, {
+          retryable: limited,
+          retryAfterMs: limited ? parseRetryAfter(null, msg) : null
+        });
       }
 
       if (event.type === 'image_edit.partial_image' && event.b64_json) {
@@ -578,6 +643,8 @@ async function editImage({
 }
 
 module.exports = {
+  ImageEditError,
+  parseRetryAfter,
   MODEL,
   QUALITIES,
   DEFAULT_QUALITY,

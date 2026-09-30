@@ -474,6 +474,9 @@ app.use('/api/photo-delivery', photoDeliveryRoutes);
 app.use('/api/photo-edit', photoEditRoutes);
 // Auto-retouch lives in-process, so a restart can strand 'running' edit rows.
 retouchQueue.recoverStale();
+// And pick up photos a restart (e.g. a deploy mid-upload) dropped before they
+// started. Delayed so it runs once the server and sockets are up.
+setTimeout(() => retouchQueue.resumeOnBoot(), 10000);
 // Public: hit by mail clients (open pixel) and by clients downloading their
 // photos, neither of which carries an auth token.
 app.use('/api/track', trackingRoutes);

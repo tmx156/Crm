@@ -68,6 +68,10 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
   const [now, setNow] = useState(() => Date.now());
   const pendingFetchTimer = useRef(null);
   const retouching = pendingRetouches.length;
+  // Originals with no retouch and nothing in flight - ones that failed (say to
+  // an OpenAI rate limit) or were dropped by a restart. Drives "Retouch missing".
+  const [missingRetouches, setMissingRetouches] = useState(0);
+  const [requeuing, setRequeuing] = useState(false);
 
   // "Select all" has to reach photos beyond the page loaded in the grid
   const [selectingAll, setSelectingAll] = useState(false);
@@ -155,6 +159,7 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
     setShowUpload(false);
     setUploadErrors([]);
     setPendingRetouches([]);
+    setMissingRetouches(0);
     setGalleryOpen(false);
     if (!leadId) return;
 
@@ -181,15 +186,32 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
 
   const loadPending = useCallback(async () => {
     if (!leadId || !canEdit) return;
-    try {
-      const { data } = await axios.get('/api/photo-edit/pending', { params: { leadId } });
-      if (activeLeadRef.current !== leadId) return;
-      setPendingRetouches(data?.pending || []);
-      if (data?.estimateMs) setRetouchEstimateMs(data.estimateMs);
-    } catch (err) {
-      // Placeholders are a nicety; the finished retouches still arrive.
+    // Fetched together: anything that changes what is in flight also changes
+    // what is missing, so one refresh keeps both honest.
+    const [pending, missing] = await Promise.allSettled([
+      axios.get('/api/photo-edit/pending', { params: { leadId } }),
+      axios.get('/api/photo-edit/missing', { params: { leadId } })
+    ]);
+    if (activeLeadRef.current !== leadId) return;
+    // Either can fail on its own; both are niceties and the retouches still arrive.
+    if (pending.status === 'fulfilled') {
+      setPendingRetouches(pending.value.data?.pending || []);
+      if (pending.value.data?.estimateMs) setRetouchEstimateMs(pending.value.data.estimateMs);
     }
+    if (missing.status === 'fulfilled') setMissingRetouches(missing.value.data?.missing || 0);
   }, [leadId, canEdit]);
+
+  const retouchMissing = async () => {
+    setRequeuing(true);
+    try {
+      await axios.post('/api/photo-edit/retouch-missing', { leadId });
+      await loadPending();
+    } catch (err) {
+      window.alert(err.response?.data?.message || 'Could not queue the missing retouches');
+    } finally {
+      setRequeuing(false);
+    }
+  };
 
   // A drop of 40 photos fires 40 "queued" events in a burst - refetch once.
   const schedulePendingRefresh = useCallback(() => {
@@ -225,6 +247,8 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
     const settled = (p) => {
       if (p.leadId !== leadId) return;
       setPendingRetouches(prev => prev.filter(x => x.photoId !== p.photoId));
+      // A failure is now a missing retouch - refresh so the button counts it.
+      schedulePendingRefresh();
     };
 
     const done = (p) => {
@@ -423,6 +447,25 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
               <FiLoader className="h-2.5 w-2.5 animate-spin" />
               retouching {retouching}
             </span>
+          )}
+          {/* Originals with no retouch and nothing in flight: failed (usually
+              an OpenAI rate limit) or dropped by a restart. One click re-queues
+              them all. Hidden while anything is still running, so a drop that
+              is mid-way through does not look like it has failed. */}
+          {canEdit && aiEditEnabled && missingRetouches > 0 && retouching === 0 && (
+            <button
+              onClick={retouchMissing}
+              disabled={requeuing}
+              title="These photos have no retouch yet. Queue them again."
+              className="ml-2 flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-800
+                         border border-amber-200 rounded-full text-[10px] font-medium
+                         hover:bg-amber-100 disabled:opacity-50 transition-colors"
+            >
+              {requeuing
+                ? <FiLoader className="h-2.5 w-2.5 animate-spin" />
+                : <FiZap className="h-2.5 w-2.5" />}
+              Retouch {missingRetouches} missing
+            </button>
           )}
         </h4>
 

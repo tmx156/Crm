@@ -105,6 +105,54 @@ router.get('/pending', auth, async (req, res) => {
 });
 
 /**
+ * GET /api/photo-edit/missing?leadId=...
+ * How many originals in an appointment have no retouch and nothing in
+ * flight - the number shown on the "Retouch missing" button.
+ */
+router.get('/missing', auth, async (req, res) => {
+  try {
+    const { leadId } = req.query;
+    if (!leadId) return res.status(400).json({ success: false, message: 'leadId is required' });
+    const retouchQueue = require('../services/retouchQueue');
+    if (!retouchQueue.isEnabled()) return res.json({ success: true, missing: 0 });
+    const missing = await retouchQueue.findMissing({ leadId });
+    res.json({ success: true, missing: missing.length });
+  } catch (error) {
+    console.error('[photo-edit] Missing count failed:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/photo-edit/retouch-missing  { leadId }
+ * Queue every original in the appointment that still has no retouch,
+ * including ones that failed earlier (e.g. to a rate limit).
+ */
+router.post('/retouch-missing', auth, async (req, res) => {
+  try {
+    if (!canEdit(req.user)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to edit photos' });
+    }
+    const { leadId } = req.body || {};
+    if (!leadId) return res.status(400).json({ success: false, message: 'leadId is required' });
+
+    const retouchQueue = require('../services/retouchQueue');
+    if (!retouchQueue.isEnabled()) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI retouching is not configured - add OPENAI_API_KEY to the server environment'
+      });
+    }
+
+    const queued = await retouchQueue.requeueMissing(leadId, req.user.id);
+    res.json({ success: true, queued, ...retouchQueue.stats() });
+  } catch (error) {
+    console.error('[photo-edit] Retouch missing failed:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * GET /api/photo-edit/:photoId/history
  * Every attempt against one photo, failures included.
  */

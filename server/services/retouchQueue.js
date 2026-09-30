@@ -19,11 +19,11 @@
  *
  * WHAT IT DOES NOT DO
  * -------------------
- * The queue lives in this process. A restart mid-drop loses whatever had not
- * started yet - those photos keep their originals and simply never get a
- * retouch, which is why `recoverStale()` exists to tidy the audit rows on
- * boot rather than leaving them stuck at 'running' forever. Re-run anything
- * that was missed from the retouch dialog.
+ * The queue lives in this process, so a restart mid-drop loses whatever had
+ * not started. On Railway `resumeOnBoot()` picks those back up; anywhere else,
+ * or for anything that was tried and failed, the panel's "Retouch missing"
+ * button re-queues them. `recoverStale()` tidies audit rows a restart left
+ * stuck at 'running'.
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -47,6 +47,26 @@ const CONCURRENCY = Math.max(1, parseInt(process.env.PHOTO_AUTO_RETOUCH_CONCURRE
 // An edit that has been 'running' longer than this was almost certainly
 // orphaned by a restart; nothing legitimately takes 30 minutes.
 const STALE_AFTER_MS = 30 * 60 * 1000;
+
+// Rate limits. A new OpenAI account allows only a handful of images a minute,
+// and a 13-photo drop has been seen to lose 4 retouches to a 429 because the
+// queue gave up on the first one. So a limit is now waited out: OpenAI's own
+// "try again in Ns" when it gives one, otherwise this ladder. Six attempts
+// spans about seven minutes - long enough for a per-minute limit to clear
+// many times over, short enough that a genuinely stuck photo still fails in
+// the same sitting rather than lingering.
+const MAX_ATTEMPTS = 6;
+const BACKOFF_MS = [15000, 30000, 60000, 120000, 180000];
+const MAX_WAIT_MS = 5 * 60 * 1000;
+
+// When one worker is told to back off, every worker is: the limit is per
+// account, so the other worker's next call would only earn another 429.
+let cooldownUntil = 0;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+async function waitForCooldown() {
+  const wait = cooldownUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+}
 
 const queue = [];
 let active = 0;
@@ -115,6 +135,10 @@ function enqueue(photo, userId) {
   // but if it ever did this is the difference between one extra image and an
   // unbounded loop billed by the image.
   if (photo.is_ai_edited || photo.edited_from) return false;
+
+  // Already waiting or already being worked on - a second copy would retouch
+  // (and bill) the same photo twice.
+  if (running.has(photo.id) || queue.some(job => job.photoId === photo.id)) return false;
 
   queue.push({ photoId: photo.id, leadId: photo.lead_id, userId });
   emit('photo_retouch_queued', { photoId: photo.id, leadId: photo.lead_id, ...stats() });
@@ -204,15 +228,41 @@ async function run({ photoId, leadId, userId }) {
 
     // No onPartial: nobody is watching this one, and skipping the partials
     // means the API sends one image instead of four.
-    const result = await imageEdit.editImage({
-      buffer: input.buffer,
-      filename: source.filename || 'photo.jpg',
-      mimeType: input.mimeType,
-      preset: PRESET,
-      backdrop,
-      quality: QUALITY,
-      size
-    });
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      await waitForCooldown();
+      try {
+        result = await imageEdit.editImage({
+          buffer: input.buffer,
+          filename: source.filename || 'photo.jpg',
+          mimeType: input.mimeType,
+          preset: PRESET,
+          backdrop,
+          quality: QUALITY,
+          size
+        });
+        break;
+      } catch (err) {
+        // No credit, bad key, refused prompt: waiting will not change the
+        // answer, so fail now rather than burn seven minutes finding out.
+        if (!err.retryable || attempt >= MAX_ATTEMPTS) {
+          if (err.retryable) err.message = `${err.message} (gave up after ${attempt} attempts)`;
+          throw err;
+        }
+
+        // Take the longer of OpenAI's estimate and our ladder, plus a little
+        // jitter so the two workers do not wake and collide on the same tick.
+        const ladder = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)];
+        const wait = Math.min(Math.max(err.retryAfterMs || 0, ladder), MAX_WAIT_MS) +
+          Math.floor(Math.random() * 3000);
+        cooldownUntil = Math.max(cooldownUntil, Date.now() + wait);
+
+        console.warn(`[retouch] ${source.filename}: ${err.message} - retry ${attempt}/${MAX_ATTEMPTS - 1} in ${Math.round(wait / 1000)}s`);
+        emit('photo_retouch_retrying', {
+          photoId: source.id, leadId, attempt, waitMs: wait, ...stats()
+        });
+      }
+    }
 
     const base = (source.filename || 'photo').replace(/\.[^.]+$/, '');
     const row = await photoStorage.processAndUpload({
@@ -280,6 +330,92 @@ async function run({ photoId, leadId, userId }) {
 }
 
 /**
+ * Originals that have no retouch yet and are not already being handled.
+ *
+ * "Being handled" covers this process (queued or running) and, through a
+ * recent 'running' audit row, another one: production and a local copy share
+ * the database, and both retouching the same photo would bill it twice.
+ *
+ * @param {object}  opts
+ * @param {string}  [opts.leadId]        one appointment, or every lead
+ * @param {string}  [opts.since]         ISO time; only originals newer than this
+ * @param {boolean} [opts.neverAttempted] only photos with no edit attempt at
+ *   all - what a restart drops. Photos that were tried and failed are left for
+ *   a person to retry, so a prompt the safety filter refuses is not re-billed
+ *   on every deploy.
+ */
+async function findMissing({ leadId, since, neverAttempted = false } = {}) {
+  let q = supabase
+    .from('photos')
+    .select('id, lead_id, filename')
+    .is('deleted_at', null)
+    .not('is_ai_edited', 'is', true);
+  if (leadId) q = q.eq('lead_id', leadId);
+  if (since) q = q.gte('created_at', since);
+
+  const { data: originals, error } = await q.limit(1000);
+  if (error) throw error;
+  if (!originals.length) return [];
+
+  const ids = originals.map(p => p.id);
+  const [{ data: retouches, error: rErr }, { data: edits, error: eErr }] = await Promise.all([
+    supabase.from('photos').select('edited_from').in('edited_from', ids).is('deleted_at', null),
+    supabase.from('photo_edits').select('source_photo_id, status, created_at').in('source_photo_id', ids)
+  ]);
+  if (rErr) throw rErr;
+  if (eErr) throw eErr;
+
+  const done = new Set(retouches.map(r => r.edited_from));
+  const liveCutoff = Date.now() - STALE_AFTER_MS;
+  const inFlightElsewhere = new Set(edits
+    .filter(e => e.status === 'running' && new Date(e.created_at).getTime() > liveCutoff)
+    .map(e => e.source_photo_id));
+  const attempted = new Set(edits.map(e => e.source_photo_id));
+
+  return originals.filter(p =>
+    !done.has(p.id) &&
+    !inFlightElsewhere.has(p.id) &&
+    !running.has(p.id) &&
+    !queue.some(job => job.photoId === p.id) &&
+    (!neverAttempted || !attempted.has(p.id))
+  );
+}
+
+/**
+ * Queue every original in an appointment that still has no retouch - the
+ * "Retouch missing" button. Includes ones that failed before.
+ *
+ * @returns {Promise<number>} how many were queued
+ */
+async function requeueMissing(leadId, userId) {
+  if (!isEnabled()) return 0;
+  const missing = await findMissing({ leadId });
+  let queued = 0;
+  for (const photo of missing) {
+    if (enqueue({ id: photo.id, lead_id: photo.lead_id }, userId)) queued += 1;
+  }
+  if (queued) console.log(`[retouch] Re-queued ${queued} missing retouch(es) for lead ${leadId}`);
+  return queued;
+}
+
+/**
+ * On boot, pick up photos a restart dropped from the queue before they
+ * started. Only on Railway: a local copy shares the database, and if every
+ * instance resumed on boot they would all go after the same photos.
+ */
+async function resumeOnBoot() {
+  if (!isEnabled() || !process.env.RAILWAY_ENVIRONMENT) return;
+  try {
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const missing = await findMissing({ since, neverAttempted: true });
+    for (const photo of missing) enqueue({ id: photo.id, lead_id: photo.lead_id }, null);
+    if (missing.length) console.log(`[retouch] Resumed ${missing.length} retouch(es) dropped by the last restart`);
+  } catch (err) {
+    console.error('[retouch] Resume on boot failed:', err.message);
+  }
+}
+
+/**
  * Mark edits orphaned by a restart as failed, so they do not sit at
  * 'running' forever and skew the spend report.
  */
@@ -316,5 +452,8 @@ module.exports = {
   enqueue,
   stats,
   pendingFor,
+  findMissing,
+  requeueMissing,
+  resumeOnBoot,
   recoverStale
 };
