@@ -272,57 +272,84 @@ async function prepareForEdit(buffer, mimeType) {
  * it, and lifts its brightness along with the exposure. Handing it the
  * actual RGB value to hold is concrete in a way that prose is not.
  *
- * Six patches are taken around the border, where studio backdrop normally
- * is and the subject normally is not, and the MEDIAN of the patch means is
- * returned. The median is the point: a light stand in one corner or a lamp
- * intruding at the top skews an average badly, but it cannot move the middle
- * value of six.
+ * Fourteen patches are taken along the top and the upper sides, where the
+ * backdrop normally is and the floor is not. The subject often covers some of
+ * them - on a close-up, hair and shoulders fill half the border - so the
+ * answer is the colour most patches AGREE on, not their median: busy patches
+ * (hair, clothing, a light stand) are dropped first, then the largest group
+ * of patches within a small colour distance of each other wins. A median of
+ * six read a white-paper close-up as RGB(200,189,186) - her hair.
  *
  * @returns {Promise<{r:number,g:number,b:number}|null>}
  */
 async function backdropColour(buffer) {
   try {
-    const img = sharp(buffer, { failOn: 'none' }).rotate();
-    const meta = await img.metadata();
-    if (!meta.width || !meta.height) return null;
+    const { data, info } = await sharp(buffer, { failOn: 'none' }).rotate()
+      .resize({ width: 600, withoutEnlargement: true })
+      .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const w = info.width, h = info.height;
+    const pw = Math.max(6, Math.floor(w * 0.07));
+    const ph = Math.max(6, Math.floor(h * 0.05));
 
-    const flat = await img.toBuffer();
-    const pw = Math.max(8, Math.floor(meta.width * 0.08));
-    const ph = Math.max(8, Math.floor(meta.height * 0.06));
-
-    // Along the top and the upper sides: away from the floor, which is often
-    // a different surface, and away from the centre where the subject stands.
-    const spots = [
-      { left: 0,                          top: 0 },
-      { left: Math.floor(meta.width / 2 - pw / 2), top: 0 },
-      { left: meta.width - pw,            top: 0 },
-      { left: 0,                          top: Math.floor(meta.height * 0.25) },
-      { left: meta.width - pw,            top: Math.floor(meta.height * 0.25) },
-      { left: meta.width - pw,            top: Math.floor(meta.height * 0.45) }
-    ];
-
-    const means = [];
-    for (const s of spots) {
-      try {
-        const stats = await sharp(flat)
-          .extract({ left: s.left, top: s.top, width: pw, height: ph })
-          .stats();
-        means.push(stats.channels.slice(0, 3).map(c => c.mean));
-      } catch { /* a patch that falls outside the image is simply skipped */ }
+    const spots = [];
+    for (const fx of [0, 0.2, 0.4, 0.6, 0.8, 1]) spots.push([Math.round(fx * (w - pw)), 0]);
+    for (const fy of [0.12, 0.25, 0.38, 0.5]) {
+      spots.push([0, Math.round(fy * h)]);
+      spots.push([w - pw, Math.round(fy * h)]);
     }
-    if (means.length < 3) return null;
 
-    const median = (xs) => {
-      const sorted = [...xs].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-    };
+    const patches = spots.map(([x0, y0]) => {
+      const sum = [0, 0, 0], sq = [0, 0, 0]; let n = 0;
+      for (let y = y0; y < Math.min(h, y0 + ph); y++) {
+        for (let x = x0; x < Math.min(w, x0 + pw); x++) {
+          const k = (y * w + x) * 3;
+          for (let c = 0; c < 3; c++) { sum[c] += data[k + c]; sq[c] += data[k + c] * data[k + c]; }
+          n++;
+        }
+      }
+      const mean = sum.map(v => v / n);
+      const sd = Math.sqrt(sq.reduce((a, v, c) => a + v / n - mean[c] * mean[c], 0) / 3);
+      return { mean, sd };
+    });
 
-    return {
-      r: Math.round(median(means.map(m => m[0]))),
-      g: Math.round(median(means.map(m => m[1]))),
-      b: Math.round(median(means.map(m => m[2])))
+    // Backdrop is smooth; hair and fabric are not. Keep the calm patches
+    // unless that would leave too few to judge by.
+    const calm = patches.filter(p => p.sd <= 14);
+    const pool = calm.length >= 3 ? calm : patches;
+
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    let best = null;
+    for (const p of pool) {
+      const group = pool.filter(q => dist(p.mean, q.mean) <= 22);
+      if (!best || group.length > best.length ||
+          (group.length === best.length && p.sd < best.sd)) {
+        best = Object.assign(group, { sd: p.sd });
+      }
+    }
+    const avg = (c) => Math.round(best.reduce((a, q) => a + q.mean[c], 0) / best.length);
+    // How the backdrop is LIT, not just its colour: a gel or a spotlight is
+    // strong at the top and falls off down the wall onto a paler floor. One
+    // number for all of it is what made the model paint a gelled backdrop and
+    // its floor a single flat blue. Sampled at the frame edges, where the
+    // subject rarely is; the calmer of left/right at each height wins.
+    const zone = (fy) => {
+      const y0 = Math.min(h - ph, Math.max(0, Math.round(fy * h - ph / 2)));
+      const cands = [0, w - pw].map((x0) => {
+        const sum = [0, 0, 0], sq = [0, 0, 0]; let n = 0;
+        for (let y = y0; y < y0 + ph; y++) for (let x = x0; x < x0 + pw; x++) {
+          const k = (y * w + x) * 3;
+          for (let c = 0; c < 3; c++) { sum[c] += data[k + c]; sq[c] += data[k + c] * data[k + c]; }
+          n++;
+        }
+        const mean = sum.map(v => v / n);
+        const sd = Math.sqrt(sq.reduce((a, v, c) => a + v / n - mean[c] * mean[c], 0) / 3);
+        return { mean, sd };
+      }).sort((a, b) => a.sd - b.sd);
+      return cands[0].mean.map(Math.round);
     };
+    const profile = { top: zone(0.04), middle: zone(0.5), floor: zone(0.95) };
+
+    return { r: avg(0), g: avg(1), b: avg(2), profile };
   } catch {
     return null;
   }

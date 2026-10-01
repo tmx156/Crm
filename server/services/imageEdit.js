@@ -65,12 +65,12 @@ const capabilitiesFor = (model) => MODEL_CAPABILITIES[model] || DEFAULT_CAPABILI
 // is not offered in the UI - it makes the cost unpredictable.
 const QUALITIES = [...capabilitiesFor(MODEL).qualities, 'auto'];
 
-// 'low' by default: measured on the studio's own frames it costs about a
-// third of 'high' ($0.02 against $0.06 per image, reconciled with the OpenAI
-// bill) and the studio judged it good enough for everyday use. Pick 'high'
-// from the retouch dialog for the handful of images a client is paying for;
-// at full size 'low' is visibly softer in hair and skin detail.
-const DEFAULT_QUALITY = process.env.OPENAI_IMAGE_QUALITY || 'low';
+// 'medium' by default (Oct 2026, the studio's call): 'low' ($0.02 an image
+// on the studio's own frames) was visibly soft in hair, lace and sequins
+// once the retouch moved to a premium beauty finish. 'high' (~$0.06) is still
+// there in the retouch dialog for the shots a client is paying for. Applies
+// to auto-retouch too, unless PHOTO_AUTO_RETOUCH_QUALITY says otherwise.
+const DEFAULT_QUALITY = process.env.OPENAI_IMAGE_QUALITY || 'medium';
 
 // JPEG rather than the PNG default: every derivative in this CRM is already
 // JPEG, and a PNG partial is several times larger to push down the SSE pipe
@@ -94,6 +94,10 @@ const TIMEOUT_MS = parseInt(process.env.OPENAI_IMAGE_TIMEOUT_MS, 10) || 300000;
 // Prompts are capped at 32000 chars by the API. This is far below that - it
 // is a retouch note, and a runaway paste is more likely a bug than intent.
 const MAX_PROMPT_LENGTH = 1200;
+
+// Decides whether a set is white paper, black, or a colour - the same test the
+// tonal finish uses, so the prompt and the finish always agree.
+const { classifyBackdrop, finishTones } = require('./tonalFinish');
 
 // API limits on a requested size: each edge a multiple of 16, aspect between
 // 1:3 and 3:1, and no larger than 3840x2160.
@@ -203,49 +207,117 @@ const PRESETS = {
   // colour gets richer but stays true; skin evens out - and the pose,
   // expression, outfit and framing are left completely alone.
   //
-  // This is the preset auto-retouch uses, so it is deliberately the most
-  // conservative reading of "magazine": clean up the room, not the person.
+  // Oct 2026: rebuilt on the brief the studio's client actually retouches
+  // to - the shoot keeps its own backdrop colour, gels and mood, while the
+  // person gets a full beauty retouch (under-eyes, lines, jaw and neck,
+  // subtle slimming) and a soft beauty light on the face. This is the preset
+  // auto-retouch uses. White and black sets are then finished to pure white
+  // and true black by services/tonalFinish.js.
   magazine: {
     label: 'Magazine finish',
-    description: 'Studio clean-up and grade - the house look',
+    description: 'Life-like premium retouch, keeping the shoot\'s own mood - the house look',
     prompt:
-      'Retouch this studio photograph to a polished magazine standard while ' +
-      'keeping it recognisably the same photograph. Make the backdrop clean, ' +
-      'seamless and evenly lit in the same colour it already is, removing the ' +
-      'floor-to-wall junction, seams, cracks, scuffs, tape, seat marks and ' +
-      'debris from the floor and walls so the floor reads as one clean, ' +
-      'uniform, unblemished surface. Keep the backdrop the colour it already ' +
-      'is: match its hue, saturation and depth to the backdrop in the ' +
-      'original, and even out blotches and unevenness without neutralising, ' +
-      'warming, cooling, lightening or darkening it. The backdrop in the ' +
-      'result must read as the same roll of paper, lit the same way, as the ' +
-      'one in the photograph. Remove everything that is not part of ' +
-      'the shot: studio equipment, lamps, light stands, cables, reflectors, ' +
-      'clutter, stray props and any object intruding at the edges of the ' +
-      'frame, filling the space behind them with the same clean backdrop. ' +
-      'Keep anything the subject is actually using - whatever they are '  +
-      'sitting on, leaning on, lying on, holding or touching stays exactly ' +
-      'as it is. Lift the exposure on the subject so they are bright and ' +
-      'clean, correct any colour cast on their skin and clothing, and give ' +
-      'the subject rich, true, natural colour with gentle contrast - vivid ' +
-      'but not oversaturated. Even out skin tone and reduce shine while keeping ' +
-      'natural skin texture, pores and fine lines. Tidy obvious flyaway hairs. ' +
-      'Keep the subject exactly as photographed: identical pose, body ' +
-      'position, hands, expression, eyeline, hair, glasses, jewellery and ' +
-      'clothing, with the fabric falling the same way. Do not recompose, do ' +
-      'not crop, do not move or reposition the subject, and do not change the ' +
-      'camera angle or focal length.'
+      'This is a professional fashion and beauty retouch of one studio ' +
+      'photograph. Return one finished edit of this exact photograph: same ' +
+      'model, same pose, same clothing, same composition, camera angle and ' +
+      'perspective - never a different pose, a duplicate, a collage or a ' +
+      'composite. ' +
+      // Mood and backdrop
+      'Preserve the original background colour, the overall colour ' +
+      'temperature and the intended studio mood, including any coloured gels, ' +
+      'spotlight pools and soft falloff on the backdrop. Correct and improve ' +
+      'the lighting where needed - uneven exposure, dull or muddy light, harsh ' +
+      'highlights, blocked shadows, colour casts on the subject and uneven ' +
+      'light across the face, body or clothing - so it looks professionally ' +
+      'lit and balanced while staying believable and consistent with the ' +
+      'original direction and character of the light. Lighting corrections ' +
+      'must not shift, bleach, neutralise, brighten or recolour the backdrop. ' +
+      'Add a soft, flattering beauty light on the face, as if from a beauty ' +
+      'dish or soft key light from the same direction as the existing light: ' +
+      'a gentle glow that lifts and models the face, with natural catchlights ' +
+      'in the eyes, without flattening it or changing the mood of the shot. ' +
+      'Remove unwanted room and studio elements - visible walls, corners, ' +
+      'skirting boards, door frames, ceiling lines, cables, sockets, light ' +
+      'stands, lamps, equipment, floor edges, backdrop seams, wrinkles, ' +
+      'stains, scuffs and marks. Where the backdrop does not fill the frame, ' +
+      'extend it naturally so the photograph looks as if it was taken against ' +
+      'a clean, seamless professional studio backdrop, matching the original ' +
+      'backdrop tone, colour, texture, falloff and lighting rather than ' +
+      'replacing it with a generic one. Keep realistic floor contact shadows, ' +
+      'with no cut-out edges, halos or artificial masking. Keep anything the ' +
+      'subject is using - whatever they are sitting on, leaning on, lying on, ' +
+      'holding or touching stays exactly as it is. ' +
+      // Beauty - Oct 2026: the client brief's jaw/neck/slimming wording made
+      // the model reshape heads and de-age people. The studio wants the
+      // TV / streaming-poster / fashion-campaign standard instead: the person
+      // on their best day, flattered by light, skin and grade - never reshaped.
+      'Retouch the person to the standard of a high-end TV or streaming-series ' +
+      'poster or a fashion campaign, for someone who does not usually ' +
+      'photograph well: they must look like themselves on their best day - ' +
+      'fresh, rested, well lit and polished - completely believable and ' +
+      'life-like, never like a different, younger or reshaped person. ' +
+      'Smooth and even the skin while keeping real skin texture and pores; ' +
+      'reduce under-eye darkness and puffiness, blemishes, redness, ' +
+      'blotchiness, shine and uneven pigmentation; soften the deepest ' +
+      "wrinkles a little but keep the person's character lines and their " +
+      "age. Keep the person's own natural skin tone - do not tan, bronze or " +
+      'orange the skin. Clean up distracting flyaway hairs while keeping the ' +
+      'natural hair texture and hairstyle. Retouch any visible neck, ' +
+      'decolletage, arms, hands and legs to match. ' +
+      'Do not reshape anything: keep the exact shape, size and outline of ' +
+      'the head and skull, hairline, forehead, ears, eyes, nose, mouth, lips, ' +
+      'jaw, chin, neck and body, and the same proportions between them - no ' +
+      'slimming, no jaw or neck sculpting, no enlarged eyes, no bigger or ' +
+      'rounder head. Do not distort garments, prints, seams, buttons, ' +
+      'jewellery, glasses, footwear, folds or fabric structure. ' +
+      'Keep the framing exactly: the same crop and zoom, with the subject at ' +
+      'exactly the same size and position in the frame - do not zoom in, do ' +
+      'not crop tighter and do not make the face or head larger. ' +
+      // Finish
+      'Improve overall photographic quality: balance highlights, midtones ' +
+      'and shadows while keeping dimension, with rich deep blacks and clean ' +
+      'whites; improve skin luminosity without making it flat, plastic, ' +
+      'overexposed or excessively airbrushed; enhance garment texture, ' +
+      'fabric detail, jewellery and accessories while keeping them realistic; ' +
+      'keep the highlight direction and natural shadow placement; and apply a ' +
+      'sophisticated, high-end colour grade suited to this particular ' +
+      'photograph. Keep hands, fingers, limbs, face, jaw, neck and body ' +
+      'proportions realistic - no warped anatomy, extra or fused fingers, ' +
+      'stretched features or altered facial identity. Keep the head angle, ' +
+      'the direction the face is turned, whether the eyes are open or closed, ' +
+      'the gaze and the expression exactly as photographed. The result ' +
+      'should look like a premium TV or streaming-series poster or a fashion ' +
+      'campaign: clean seamless backdrop, flattering professional light, ' +
+      'polished but real skin, refreshed under-eyes, crisp clothing detail ' +
+      'and a sophisticated grade - with the person exactly as they are, ' +
+      'just at their best.'
+  },
+  'face-light': {
+    label: 'Face light',
+    description: 'Adds a soft beauty light to the face',
+    prompt:
+      'Add a soft, flattering beauty light on the face, as if from a beauty ' +
+      'dish or large soft key light placed in the same direction as the ' +
+      'existing light: gently lift and model the face, brighten the eyes with ' +
+      'natural catchlights and soften shadows under the eyes and chin, while ' +
+      'keeping the dimension of the face and the mood of the shot. Do not ' +
+      'change anything else - same face, expression, pose, hair, clothing, ' +
+      'backdrop colour and composition.'
   },
   'skin-retouch': {
     label: 'Skin retouch',
-    description: 'Evens skin tone and removes temporary blemishes',
+    description: 'Life-like skin retouch, no reshaping',
     prompt:
-      'Retouch the skin naturally: even out skin tone, reduce shine and ' +
-      'redness, and remove temporary blemishes and stray hairs. Keep skin ' +
-      'texture, pores, freckles, moles, scars and fine lines visible - do not ' +
-      'smooth or airbrush. Do not change the face shape, features, ' +
-      'proportions, expression, age, body shape or hair style. Leave the ' +
-      'clothing and the lighting exactly as they are.'
+      'Retouch the skin to a premium TV or fashion-campaign standard, life-like ' +
+      'and believable: smooth and even the skin while keeping real texture ' +
+      'and pores; reduce under-eye darkness and puffiness, blemishes, ' +
+      'redness, blotchiness, shine and uneven pigmentation; soften the ' +
+      "deepest wrinkles a little but keep the person's character lines and " +
+      "age. Keep the person's own natural skin tone - no tan, bronze or orange. " +
+      'Keep moles and scars. Do not reshape anything: keep the exact shape, ' +
+      'size and outline of the head, hairline, face, features, jaw, neck and ' +
+      'body, and the same framing and zoom. Do not change the expression, ' +
+      'head angle, eyes, gaze, hair style, clothing, backdrop or lighting.'
   },
   'studio-lighting': {
     label: 'Fix lighting',
@@ -330,8 +402,11 @@ const PRESETS = {
  * whether it is furniture.
  */
 const GUARDRAIL =
-  " Preserve the person's identity exactly: do not alter their facial " +
-  'features, bone structure, body shape, apparent age, ethnicity or gender. ' +
+  " Keep the person exactly recognisable as themselves: the same face, " +
+  'eyes, nose, mouth, bone structure, head shape and size, hairline, ' +
+  'apparent age, ethnicity and gender, with life-like proportions - ' +
+  'nothing that turns them into someone else. Edit only this one ' +
+  'photograph and keep its pose, framing and zoom exactly. ' +
   'Keep the original orientation and composition: do not rotate, flip, ' +
   'mirror or straighten the image, and do not turn a subject the right way ' +
   'up - return the photograph the same way round as it was given to you. ' +
@@ -340,7 +415,8 @@ const GUARDRAIL =
   'clamps, tape, boxes, discarded props and any equipment intruding at the ' +
   'edges of the frame, and remove floor cracks, scuffs, marks and debris, ' +
   'filling all of it in with the surrounding backdrop so the background ' +
-  'reads clean and uniform. Never remove anything the subject is using: ' +
+  'reads clean, keeping its original lighting, gradient and falloff. ' +
+  'Never remove anything the subject is using: ' +
   'whatever they are sitting on, standing on, leaning on, lying on, holding, ' +
   'wearing or touching stays exactly as it is.';
 
@@ -364,6 +440,17 @@ function cooldownRemainingMs() {
  * Build the prompt actually sent to the API.
  * A preset can be combined with free text - the note is applied on top.
  */
+/** "about RGB(a) at the top, RGB(b) halfway down and RGB(c) on the floor" */
+function describeBackdrop(backdrop) {
+  const p = backdrop.profile;
+  const rgb = (v) => `RGB(${v[0]}, ${v[1]}, ${v[2]})`;
+  if (!p) {
+    return `The backdrop is approximately RGB(${backdrop.r}, ${backdrop.g}, ${backdrop.b}).`;
+  }
+  return `Measured from the original, the backdrop is about ${rgb(p.top)} at the top ` +
+    `of the frame, ${rgb(p.middle)} halfway down and ${rgb(p.floor)} on the floor.`;
+}
+
 function buildPrompt({ preset, prompt, backdrop }) {
   const parts = [];
   if (preset) {
@@ -385,14 +472,38 @@ function buildPrompt({ preset, prompt, backdrop }) {
   // brightens it along with everything else. Naming the RGB is concrete in a
   // way that an adjective is not. Skipped for the presets whose entire job
   // is to replace the backdrop.
+  //
+  // White and black sets are the exception: there the studio wants the
+  // backdrop pushed to pure white or true black, not held where the camera
+  // left it (services/tonalFinish.js then guarantees the numbers).
   let pin = '';
   if (backdrop && !(preset && PRESETS[preset].replacesBackdrop)) {
-    pin =
-      ' The backdrop in the photograph provided is approximately ' +
-      `RGB(${backdrop.r}, ${backdrop.g}, ${backdrop.b}). The backdrop in your ` +
-      'result must stay that same colour at that same brightness. Do not ' +
-      'lighten it, do not neutralise its tint, and do not shift it warmer or ' +
-      'cooler - only even out its blemishes and unevenness.';
+    const set = classifyBackdrop(backdrop);
+    if (set === 'white') {
+      pin =
+        ' This is a white studio set. Make the whole backdrop and floor one ' +
+        'seamless, evenly lit, pure white (RGB 255, 255, 255) infinity sweep: ' +
+        'no grey, no visible floor-to-wall line, no fade or darker band on ' +
+        'the floor and no vignette. Keep only a soft, natural contact shadow ' +
+        'directly beneath the subject and whatever they are touching.';
+    } else if (set === 'black') {
+      pin =
+        ' This is a black studio set. Make the backdrop and floor a deep, ' +
+        'even, true black, close to RGB(0, 0, 0), with no grey haze, no ' +
+        'lifted or milky blacks and no visible floor line, while keeping ' +
+        "subtle edge detail so the subject's hair and black clothing still " +
+        'separate from it.';
+    } else {
+      pin =
+        ' Keep the backdrop lit exactly as it is in the original - this is ' +
+        'part of the mood of the shoot. ' + describeBackdrop(backdrop) +
+        ' Keep that gradient and falloff, any coloured gel, spotlight pool or ' +
+        'vignette, the floor\'s own paler or darker tone, and the natural ' +
+        'shadows the subject casts on the floor and wall. Do not flatten the ' +
+        'backdrop into one even colour, do not colour the floor to match the ' +
+        'wall, and do not lighten, darken, saturate, neutralise or shift the ' +
+        'backdrop warmer or cooler - only remove marks, seams and clutter from it.';
+    }
   }
 
   return parts.join(' ') + GUARDRAIL + pin;
@@ -645,6 +756,18 @@ async function editImage({
   }
 
   if (!final) throw new Error('OpenAI finished without returning an image');
+
+  // Pure whites, true blacks and a seamless floor are measured in, not left
+  // to the model (services/tonalFinish.js). Never at the cost of the edit:
+  // if the finish fails for any reason, the paid-for result is kept as is.
+  const finishBackdrop = preset === 'white-background'
+    ? { r: 255, g: 255, b: 255 }
+    : (preset && PRESETS[preset]?.replacesBackdrop ? null : backdrop);
+  try {
+    final = (await finishTones(final, { sourceBackdrop: finishBackdrop, format: OUTPUT_FORMAT })).buffer;
+  } catch (err) {
+    console.warn('[image-edit] Tonal finish skipped:', err.message);
+  }
 
   return {
     buffer: final,

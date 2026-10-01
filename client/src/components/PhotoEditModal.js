@@ -30,8 +30,8 @@ const PARTIAL_STEPS = 3;
 const apiBase = () => axios.defaults.baseURL || '';
 
 const QUALITY_HINTS = {
-  low: 'Default - everyday use',
-  medium: 'Sharper hair and skin',
+  low: 'Quick and cheapest, softer detail',
+  medium: 'Default - sharper hair and skin',
   high: 'Best detail, about 3x the cost',
   xhigh: 'Slower, finer detail',
   max: 'Slowest, best for print'
@@ -41,7 +41,7 @@ const PhotoEditModal = ({ photo, leadName, onClose, onSaved }) => {
   const [config, setConfig] = useState(null);
   const [preset, setPreset] = useState('skin-retouch');
   const [prompt, setPrompt] = useState('');
-  const [quality, setQuality] = useState('low');
+  const [quality, setQuality] = useState('medium');
 
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState(null);
@@ -80,7 +80,7 @@ const PhotoEditModal = ({ photo, leadName, onClose, onSaved }) => {
           setConfig(data);
           setQuality(data.defaultQuality && data.defaultQuality !== 'auto'
             ? data.defaultQuality
-            : 'low');
+            : 'medium');
         }
       } catch {
         if (!cancelled) setError('Could not load the retouch options');

@@ -38,8 +38,155 @@ const PAGE_SIZE = 100;
 const MAX_PHOTOS = 2000;
 
 const isRetouched = (photo) => photo.is_ai_edited === true;
+
+// Shoot order: camera filenames (DSC_0046, DSC_0047 ...) sort naturally,
+// with upload time breaking ties.
+const byShootOrder = (a, b) =>
+  String(a.filename || '').localeCompare(String(b.filename || ''), undefined, { numeric: true }) ||
+  String(a.created_at || '').localeCompare(String(b.created_at || ''));
+
+// Small seeded RNG so one opening of the slideshow keeps one order.
+const rng = (seed) => () => {
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/**
+ * Variety order for presenting. A shoot is a run of near-identical frames per
+ * outfit and set, so a straight random shuffle still lands look-alikes next
+ * to each other. Instead the shoot (in camera order) is cut into runs - each
+ * roughly one set-up - and the slideshow deals one frame from each run in
+ * turn, so consecutive slides come from different parts of the shoot. The
+ * runs and the frames within them are shuffled per opening.
+ */
+function varietyOrder(list, seed) {
+  const n = list.length;
+  if (n < 2) return list;
+  const random = rng(seed);
+  const shuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+  const sorted = [...list].sort(byShootOrder);
+  const runCount = Math.max(2, Math.round(Math.sqrt(n)));
+  const size = Math.ceil(n / runCount);
+  const runs = [];
+  for (let i = 0; i < n; i += size) runs.push(shuffle(sorted.slice(i, i + size)));
+  shuffle(runs);
+  const out = [];
+  for (let i = 0; i < size; i++) for (const run of runs) if (run[i]) out.push(run[i]);
+  return out;
+}
+
 const stageUrl = (photo) => photo.display_url || photo.url;
 const thumbUrl = (photo) => photo.thumb_url || photo.display_url || photo.url;
+
+/**
+ * A fingerprint of what a shot looks like - the person's silhouette (pose and
+ * framing) and the colours they are wearing - so the slideshow can tell
+ * look-alike shots apart. Filenames cannot do it: retouches are named after
+ * phone UUIDs. Raw pixels cannot either: they mostly measure how bright the
+ * backdrop is, and scored two arms-crossed shots in the same jacket as very
+ * different because one backdrop was whiter.
+ *
+ * The thumbnail is shrunk to 24x32, the backdrop colour is read off the
+ * border, and everything clearly different from it counts as the subject:
+ *   sil  - how much of each 4x4 cell the subject fills (48 cells)
+ *   hist - the subject's colours in 27 coarse bins (outfit)
+ * Measured on a real shoot: look-alike pairs 21-46 apart, different shots
+ * 55-64. Cached per photo; null if the image will not load.
+ */
+const fingerprintCache = new Map();
+function fingerprint(photo) {
+  if (fingerprintCache.has(photo.id)) return fingerprintCache.get(photo.id);
+  const job = new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // storage sends Access-Control-Allow-Origin: *
+    img.onload = () => {
+      try {
+        const W = 24, H = 32;
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, W, H);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        const px = (x, y) => { const k = (y * W + x) * 4; return [d[k], d[k + 1], d[k + 2]]; };
+
+        // Backdrop: median of the top rows and the upper sides
+        const border = [];
+        for (let x = 0; x < W; x++) border.push(px(x, 0), px(x, 1));
+        for (let y = 0; y < H * 0.6; y++) border.push(px(0, y), px(W - 1, y));
+        const med = (c) => border.map(p => p[c]).sort((a, b) => a - b)[border.length >> 1];
+        const bg = [med(0), med(1), med(2)];
+
+        const level = (v) => Math.min(2, v >> 6); // 0-63, 64-127, 128+
+        const sil = new Array(48).fill(0);
+        const hist = new Array(27).fill(0);
+        let n = 0;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const p = px(x, y);
+            if (Math.hypot(p[0] - bg[0], p[1] - bg[1], p[2] - bg[2]) <= 45) continue;
+            sil[Math.floor(y / 4) * 6 + Math.floor(x / 4)] += 1;
+            hist[level(p[0]) * 9 + level(p[1]) * 3 + level(p[2])] += 1;
+            n += 1;
+          }
+        }
+        resolve({
+          sil: sil.map(v => (v / 16) * 100),
+          hist: hist.map(v => (n ? (v / n) * 100 : 0))
+        });
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = thumbUrl(photo);
+  });
+  fingerprintCache.set(photo.id, job);
+  return job;
+}
+
+// Pose/framing difference plus (weighted up) outfit-colour difference
+const printDistance = (a, b) => {
+  let s = 0, t = 0;
+  for (let i = 0; i < a.sil.length; i++) { const q = a.sil[i] - b.sil[i]; s += q * q; }
+  for (let i = 0; i < a.hist.length; i++) { const q = a.hist[i] - b.hist[i]; t += q * q; }
+  return Math.sqrt(s / a.sil.length) + 1.5 * Math.sqrt(t / a.hist.length);
+};
+
+/**
+ * Shuffle for variety by what the photos look like: each next slide is drawn
+ * at random from the third of the remaining photos that look LEAST like the
+ * last two shown. Random every time, but never a run of the same outfit and
+ * set. `firstId` (the photo the booker clicked) always goes first.
+ */
+function diverseOrder(list, prints, seed, firstId) {
+  if (list.length < 2) return list;
+  const random = rng(seed);
+  const pool = [...list];
+  let start = firstId ? pool.findIndex(p => p.id === firstId) : -1;
+  if (start < 0) start = Math.floor(random() * pool.length);
+  const out = [pool.splice(start, 1)[0]];
+  while (pool.length) {
+    const recent = out.slice(-2).map(p => prints.get(p.id)).filter(Boolean);
+    const scored = pool.map((p, i) => {
+      const fp = prints.get(p.id);
+      if (!fp || !recent.length) return { i, d: 0 };
+      // The slide just shown counts fully, the one before it a little less
+      const d = Math.min(...recent.map((r, k) => printDistance(r, fp) * (k === recent.length - 1 ? 1 : 1.25)));
+      return { i, d };
+    }).sort((a, b) => b.d - a.d);
+    const top = scored.slice(0, Math.max(1, Math.ceil(scored.length / 3)));
+    out.push(pool.splice(top[Math.floor(random() * top.length)].i, 1)[0]);
+  }
+  return out;
+}
 
 const PresentationGallery = ({
   isOpen,
@@ -62,12 +209,61 @@ const PresentationGallery = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isImmersive, setIsImmersive] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Always shuffled for variety, dealt afresh each time the slideshow opens.
+  // A photo the booker clicked to open with goes first, so it is on screen
+  // and the arrows lead from it into the mix.
+  const [shuffleSeed, setShuffleSeed] = useState(() => Math.floor(Math.random() * 1e9));
 
-  const photos = useMemo(() => (
+  // The photo the slideshow must show, by id. Opening on a clicked photo or
+  // switching the order sets it; the index then follows that photo whatever
+  // order the list ends up in (a slot number alone pointed at the wrong
+  // photo once the list was re-ordered or finished loading).
+  const anchorIdRef = useRef(null);
+  // Fingerprints for the loaded photos, once they are in (see fingerprint()).
+  const [prints, setPrints] = useState(null);
+
+  // The one place a folder's slide order is decided - the slideshow, the
+  // thumbnail strip and "open on this photo" all go through it.
+  const arrange = useCallback((folderPhotos) => {
+    const printed = prints && folderPhotos.filter(p => prints.get(p.id)).length;
+    if (printed && printed >= folderPhotos.length * 0.8) {
+      return diverseOrder(folderPhotos, prints, shuffleSeed, initialPhotoId);
+    }
+    // Until the fingerprints are in: spread by name, clicked photo first
+    const order = varietyOrder(folderPhotos, shuffleSeed);
+    const first = order.findIndex(p => p.id === initialPhotoId);
+    return first > 0 ? [order[first], ...order.slice(0, first), ...order.slice(first + 1)] : order;
+  }, [shuffleSeed, initialPhotoId, prints]);
+
+  const photos = useMemo(() => arrange(
     activeFolder === 'retouched'
       ? allPhotos.filter(isRetouched)
       : allPhotos.filter(p => !isRetouched(p))
-  ), [allPhotos, activeFolder]);
+  ), [allPhotos, activeFolder, arrange]);
+
+  // The photo on screen, so a re-order (fingerprints arriving) keeps it there.
+  // The photo's own number as the CRM grid shows it (newest first), not the
+  // slide count - a shuffled show read "1 / 15, 2 / 15, 3 / 15" and looked
+  // as if it was not shuffled at all.
+  const gridNumber = (photo) => {
+    const folderList = allPhotos.filter(p => isRetouched(p) === (activeFolder === 'retouched'));
+    return Math.max(1, folderList.findIndex(p => p.id === photo?.id) + 1);
+  };
+
+  const navigatedRef = useRef(false);
+  const onScreenIdRef = useRef(null);
+  onScreenIdRef.current = photos[currentIndex]?.id || null;
+
+  useEffect(() => {
+    if (!isOpen || !allPhotos.length) return;
+    let live = true;
+    Promise.all(allPhotos.map(p => fingerprint(p).then(v => [p.id, v]))).then(pairs => {
+      if (!live) return;
+      anchorIdRef.current = anchorIdRef.current || (navigatedRef.current ? onScreenIdRef.current : null);
+      setPrints(new Map(pairs.filter(([, v]) => v)));
+    });
+    return () => { live = false; };
+  }, [isOpen, allPhotos]);
 
   const folderCounts = useMemo(() => {
     const retouched = allPhotos.filter(isRetouched).length;
@@ -91,6 +287,9 @@ const PresentationGallery = ({
       setPreviousIndex(null);
       setSelectedIds(new Set());
       setIsPlaying(!initialPhotoId); // opening on a chosen photo means "look at this one"
+      anchorIdRef.current = initialPhotoId || null;
+      navigatedRef.current = false;
+      setShuffleSeed(Math.floor(Math.random() * 1e9)); // a fresh mix per opening
       setImageLoaded(false);
       setIsImmersive(false);
       setAllPhotos(initialPhotos);
@@ -146,10 +345,11 @@ const PresentationGallery = ({
     const target = initialPhotoId && allPhotos.find(p => p.id === initialPhotoId);
     if (target) {
       const folder = isRetouched(target) ? 'retouched' : 'original';
-      const list = folder === 'retouched'
+      const list = arrange(folder === 'retouched'
         ? allPhotos.filter(isRetouched)
-        : allPhotos.filter(p => !isRetouched(p));
+        : allPhotos.filter(p => !isRetouched(p)));
       setActiveFolder(folder);
+      anchorIdRef.current = target.id;
       setCurrentIndex(Math.max(0, list.findIndex(p => p.id === target.id)));
     } else {
       setActiveFolder(allPhotos.some(isRetouched) ? 'retouched' : 'original');
@@ -157,20 +357,25 @@ const PresentationGallery = ({
     }
     setPreviousIndex(null);
     setImageLoaded(false);
+    // arrange is left out on purpose: a re-deal is followed by the anchor
+    // effect below, which keeps the photo on screen rather than the slot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isLoadingPhotos, allPhotos, initialPhotoId]);
 
-  // The stage stays hidden until onLoad. But opening resets imageLoaded again
-  // once the full photo list arrives, and if the first photo had already
-  // loaded by then, the same <img> never fires onLoad a second time - the
-  // first slide stayed black until autoplay moved on (or forever, if paused).
-  // So whenever we are waiting, check whether the image is in fact ready.
-  const stagePhotoId = photos[currentIndex]?.id;
   useEffect(() => {
-    const img = stageImgRef.current;
-    if (!imageLoaded && img && img.complete && img.naturalWidth > 0) setImageLoaded(true);
-  }, [imageLoaded, stagePhotoId]);
+    const id = anchorIdRef.current;
+    if (!id) return;
+    const i = photos.findIndex(p => p.id === id);
+    if (i >= 0 && i !== currentIndex) {
+      setCurrentIndex(i);
+      setPreviousIndex(null);
+    }
+    // Only when the list itself changes - moving on clears the anchor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos]);
 
   const changeFolder = (folder) => {
+    anchorIdRef.current = null;
     setActiveFolder(folder);
     setCurrentIndex(0);
     setPreviousIndex(null);
@@ -247,6 +452,8 @@ const PresentationGallery = ({
 
   const goToPhoto = useCallback((newIndex, skipTransition = false) => {
     if (newIndex === currentIndex || photos.length === 0) return;
+    anchorIdRef.current = null;
+    navigatedRef.current = true;
 
     const targetIndex = ((newIndex % photos.length) + photos.length) % photos.length;
 
@@ -398,7 +605,7 @@ const PresentationGallery = ({
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <h2 className="text-white text-base sm:text-xl font-light tracking-wide truncate">{leadName}</h2>
             <span className="text-white/40 text-sm font-light whitespace-nowrap">
-              {photos.length ? `${currentIndex + 1} / ${photos.length}` : '0 / 0'}
+              {photos.length ? `${gridNumber(photos[currentIndex])} / ${photos.length}` : '0 / 0'}
             </span>
             {isLoadingPhotos && <FiLoader className="w-4 h-4 text-white/40 animate-spin" />}
           </div>
