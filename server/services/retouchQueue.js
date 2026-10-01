@@ -308,7 +308,11 @@ async function run({ photoId, leadId, userId }) {
     emit('photo_retouch_done', { photo: saved, sourcePhotoId: source.id, leadId, ...stats() });
 
   } catch (err) {
-    console.error(`[retouch] Failed for photo ${photoId}:`, err.message);
+    if (isRefusal(err.message)) {
+      console.warn(`[retouch] OpenAI declined to edit photo ${photoId} (content filter) - left as the original, will not be retried`);
+    } else {
+      console.error(`[retouch] Failed for photo ${photoId}:`, err.message);
+    }
 
     if (editId) {
       await supabase.from('photo_edits').update({
@@ -344,6 +348,9 @@ async function run({ photoId, leadId, userId }) {
  *   a person to retry, so a prompt the safety filter refuses is not re-billed
  *   on every deploy.
  */
+/** An edit OpenAI's safety system declined - see imageEdit describeFailure */
+const isRefusal = (message) => /safety system|OpenAI refused/i.test(message || '');
+
 async function findMissing({ leadId, since, neverAttempted = false } = {}) {
   let q = supabase
     .from('photos')
@@ -360,7 +367,7 @@ async function findMissing({ leadId, since, neverAttempted = false } = {}) {
   const ids = originals.map(p => p.id);
   const [{ data: retouches, error: rErr }, { data: edits, error: eErr }] = await Promise.all([
     supabase.from('photos').select('edited_from').in('edited_from', ids).is('deleted_at', null),
-    supabase.from('photo_edits').select('source_photo_id, status, created_at').in('source_photo_id', ids)
+    supabase.from('photo_edits').select('source_photo_id, status, created_at, error_message').in('source_photo_id', ids)
   ]);
   if (rErr) throw rErr;
   if (eErr) throw eErr;
@@ -371,9 +378,17 @@ async function findMissing({ leadId, since, neverAttempted = false } = {}) {
     .filter(e => e.status === 'running' && new Date(e.created_at).getTime() > liveCutoff)
     .map(e => e.source_photo_id));
   const attempted = new Set(edits.map(e => e.source_photo_id));
+  // OpenAI's content filter declined these (e.g. lingerie or lying-down shots
+  // read as sexual). The same photo gets the same answer every time, so
+  // "Retouch missing" must not keep sending it - and repeated refusals count
+  // against the account. Retouch these by hand or leave them as originals.
+  const refused = new Set(edits
+    .filter(e => e.status === 'failed' && isRefusal(e.error_message))
+    .map(e => e.source_photo_id));
 
   return originals.filter(p =>
     !done.has(p.id) &&
+    !refused.has(p.id) &&
     !inFlightElsewhere.has(p.id) &&
     !running.has(p.id) &&
     !queue.some(job => job.photoId === p.id) &&
