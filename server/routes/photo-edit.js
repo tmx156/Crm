@@ -293,7 +293,7 @@ router.post('/:photoId', auth, async (req, res) => {
     const backdrop = await photoStorage.backdropColour(input.buffer);
 
     const outputSize = size === 'auto'
-      ? (imageEdit.bestSizeFor(input.width, input.height) || 'auto')
+      ? (imageEdit.bestSizeFor(input.originalWidth || input.width, input.originalHeight || input.height) || 'auto')
       : size;
 
     // Logged before the call so a crash or a restart still leaves a trace of
@@ -350,6 +350,8 @@ router.post('/:photoId', auth, async (req, res) => {
           quality,
           size: outputSize,
           signal: abort.signal,
+          outputWidth: input.originalWidth,
+          outputHeight: input.originalHeight,
           onPartial: ({ index, buffer }) => {
             send('partial', {
               index,

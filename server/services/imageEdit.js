@@ -76,7 +76,10 @@ const DEFAULT_QUALITY = process.env.OPENAI_IMAGE_QUALITY || 'medium';
 // JPEG, and a PNG partial is several times larger to push down the SSE pipe
 // three times per edit for no visible gain on a photograph.
 const OUTPUT_FORMAT = 'jpeg';
-const OUTPUT_COMPRESSION = 90;
+// 100, not 90: the tonal finish re-encodes every result, and two lossy
+// passes left blocky smudges in hair and skin. The finish does the one
+// real JPEG encode.
+const OUTPUT_COMPRESSION = 100;
 
 // 0-3 per the API. 3 is the smoothest preview; the final image can still
 // arrive before all three if the model finishes early.
@@ -111,7 +114,12 @@ const MIN_EDGE = 256;
 // has been accepting from ChatGPT by hand, and is ample for a web gallery
 // and a ZIP. Raise it for print, and expect the per-image price to rise
 // roughly in step with the pixel count.
-const TARGET_LONG_EDGE = parseInt(process.env.OPENAI_IMAGE_LONG_EDGE, 10) || 1536;
+//
+// Oct 2026: raised to the API maximum. Measured on the studio's frames,
+// drawing at 2144x3216 instead of 1024x1536 cost about a third more output
+// tokens (453 vs 343 - a fraction of a cent) and came back visibly sharper in
+// eyes, hair and skin. The retouch is then delivered at the uploaded size.
+const TARGET_LONG_EDGE = parseInt(process.env.OPENAI_IMAGE_LONG_EDGE, 10) || MAX_LONG_EDGE;
 
 /**
  * Pick an output size with the SAME aspect ratio as the source.
@@ -142,7 +150,10 @@ function bestSizeFor(width, height, longEdge = TARGET_LONG_EDGE) {
 
   // Never upscale past the source - inventing pixels costs more and adds
   // nothing a photographer would want.
-  const targetLong = Math.min(longEdge, sourceLong, MAX_LONG_EDGE);
+  // ...and keep the short edge inside the API's 2160 too, or a 4:3 frame at
+  // the full long edge would have no legal size at all
+  const targetLong = Math.min(longEdge, sourceLong, MAX_LONG_EDGE,
+    Math.floor(MAX_SHORT_EDGE * Math.max(ratio, 1 / ratio)));
   const scale = targetLong / sourceLong;
 
   const snap = (n) => Math.max(MIN_EDGE, Math.round(n / SIZE_STEP) * SIZE_STEP);
@@ -256,14 +267,25 @@ const PRESETS = {
       'photograph well: they must look like themselves on their best day - ' +
       'fresh, rested, well lit and polished - completely believable and ' +
       'life-like, never like a different, younger or reshaped person. ' +
-      'Smooth and even the skin while keeping real skin texture and pores; ' +
-      'reduce under-eye darkness and puffiness, blemishes, redness, ' +
-      'blotchiness, shine and uneven pigmentation; soften the deepest ' +
-      "wrinkles a little but keep the person's character lines and their " +
-      "age. Keep the person's own natural skin tone - do not tan, bronze or " +
+      'Give the face and all visible skin a clear, professional airbrush ' +
+      'retouch, the kind a high-end retoucher does with frequency separation: ' +
+      'remove every blemish, spot, mark, red patch, broken capillary and ' +
+      'uneven pigmentation; even out the skin tone and blotchiness; smooth ' +
+      'rough or uneven texture, enlarged pores and shine; soften forehead ' +
+      'lines, fine lines and crow\'s-feet and lighten under-eye darkness and ' +
+      'puffiness, so the skin is visibly smoother and cleaner than in the ' +
+      'original - while still looking natural, with a fine, real skin ' +
+      'texture, never plastic, waxy or blurred, and with the person\'s age ' +
+      'and character still there. Do this however small the face is in the ' +
+      'frame and whichever way up it is. ' +
+      "Keep the person's own natural skin tone - do not tan, bronze or " +
       'orange the skin. Clean up distracting flyaway hairs while keeping the ' +
       'natural hair texture and hairstyle. Retouch any visible neck, ' +
-      'decolletage, arms, hands and legs to match. ' +
+      'decolletage, arms, hands and legs to match. On the neck and ' +
+      'decolletage, fully smooth out the lines, folds, creases and crepey ' +
+      'texture so that skin looks smooth and youthful like the face - this is ' +
+      'the one place where lines are removed, not just softened - as a ' +
+      'skin-surface retouch only, keeping the same shape and outline. ' +
       'Do not reshape anything: keep the exact shape, size and outline of ' +
       'the head and skull, hairline, forehead, ears, eyes, nose, mouth, lips, ' +
       'jaw, chin, neck and body, and the same proportions between them - no ' +
@@ -282,7 +304,9 @@ const PRESETS = {
       'keep the highlight direction and natural shadow placement; and apply a ' +
       'sophisticated, high-end colour grade suited to this particular ' +
       'photograph. Keep hands, fingers, limbs, face, jaw, neck and body ' +
-      'proportions realistic - no warped anatomy, extra or fused fingers, ' +
+      'proportions realistic, and keep the image free of generation ' +
+      'artifacts - no smeared or melted textures, no garbled lace or ' +
+      'patterns, no blotchy or muddy patches, no warped anatomy, extra or fused fingers, ' +
       'stretched features or altered facial identity. Keep the head angle, ' +
       'the direction the face is turned, whether the eyes are open or closed, ' +
       'the gaze and the expression exactly as photographed. The result ' +
@@ -308,12 +332,18 @@ const PRESETS = {
     label: 'Skin retouch',
     description: 'Life-like skin retouch, no reshaping',
     prompt:
-      'Retouch the skin to a premium TV or fashion-campaign standard, life-like ' +
-      'and believable: smooth and even the skin while keeping real texture ' +
-      'and pores; reduce under-eye darkness and puffiness, blemishes, ' +
-      'redness, blotchiness, shine and uneven pigmentation; soften the ' +
-      "deepest wrinkles a little but keep the person's character lines and " +
-      "age. Keep the person's own natural skin tone - no tan, bronze or orange. " +
+      'Give the face and all visible skin a clear, professional airbrush ' +
+      'retouch, the kind a high-end retoucher does with frequency separation: ' +
+      'remove every blemish, spot, mark, red patch, broken capillary and ' +
+      'uneven pigmentation; even out the skin tone and blotchiness; smooth ' +
+      'rough or uneven texture, enlarged pores and shine; soften forehead ' +
+      'lines, fine lines and crow\'s-feet and lighten under-eye darkness and ' +
+      'puffiness, so the skin is visibly smoother and cleaner than in the ' +
+      'original - while still looking natural, with a fine, real skin ' +
+      'texture, never plastic, waxy or blurred, and with the person\'s age ' +
+      'and character still there. Do this however small the face is in the ' +
+      'frame and whichever way up it is. ' +
+      "Keep the person's own natural skin tone - no tan, bronze or orange. " +
       'Keep moles and scars. Do not reshape anything: keep the exact shape, ' +
       'size and outline of the head, hairline, face, features, jaw, neck and ' +
       'body, and the same framing and zoom. Do not change the expression, ' +
@@ -661,7 +691,9 @@ async function editImage({
   quality = DEFAULT_QUALITY,
   size = 'auto',
   onPartial,
-  signal
+  signal,
+  outputWidth,
+  outputHeight
 }) {
   if (!isConfigured()) {
     throw new Error('AI photo editing is not configured (OPENAI_API_KEY is missing)');
@@ -764,7 +796,11 @@ async function editImage({
     ? { r: 255, g: 255, b: 255 }
     : (preset && PRESETS[preset]?.replacesBackdrop ? null : backdrop);
   try {
-    final = (await finishTones(final, { sourceBackdrop: finishBackdrop, format: OUTPUT_FORMAT })).buffer;
+    final = (await finishTones(final, {
+      sourceBackdrop: finishBackdrop,
+      format: OUTPUT_FORMAT,
+      targetSize: outputWidth && outputHeight ? { width: outputWidth, height: outputHeight } : null
+    })).buffer;
   } catch (err) {
     console.warn('[image-edit] Tonal finish skipped:', err.message);
   }

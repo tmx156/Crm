@@ -168,27 +168,108 @@ async function whiteSweepGain(rgb, w, h) {
   // Large-scale shading of the backdrop only (normalised convolution, so the
   // subject's tones do not bleed into the estimate).
   const sigma = Math.max(6, LW * 0.07);
-  const masked = Buffer.alloc(N), weight = Buffer.alloc(N);
-  for (let i = 0; i < N; i++) { masked[i] = inMask[i] ? Math.round(L[i]) : 0; weight[i] = inMask[i] ? 255 : 0; }
+  // Per channel, so a tinted paper (lilac, cream) is neutralised to white -
+  // on the backdrop only. Doing it with a global per-channel curve also
+  // pushed the person's skin orange on a lilac set.
+  const weight = Buffer.alloc(N);
+  const masked = [0, 1, 2].map(() => Buffer.alloc(N));
+  for (let i = 0; i < N; i++) {
+    weight[i] = inMask[i] ? 255 : 0;
+    for (let c = 0; c < 3; c++) masked[c][i] = inMask[i] ? small[i * 3 + c] : 0;
+  }
   const blur = (buf) => sharp(buf, { raw: { width: LW, height: lh, channels: 1 } }).blur(sigma).raw().toBuffer();
-  const [bL, bW] = await Promise.all([blur(masked), blur(weight)]);
+  const [bR, bG, bB, bW] = await Promise.all([...masked.map(blur), blur(weight)]);
+  const bC = [bR, bG, bB];
 
   // Feathered mask for blending the gain in and out
   const feather = await sharp(Buffer.from(inMask.map(v => v * 255)), { raw: { width: LW, height: lh, channels: 1 } })
     .blur(1.5).raw().toBuffer();
 
-  const gain = Buffer.alloc(N);
+  const gain = Buffer.alloc(N * 3);
   for (let i = 0; i < N; i++) {
-    const shading = bW[i] > 8 ? (bL[i] * 255) / bW[i] : 255;
-    const g = clamp(252 / Math.max(shading, 1), 1, 1.45);
     const m = feather[i] / 255;
-    // Stored as (gain - 1) * 400 in a byte for the resize
-    gain[i] = Math.round(clamp((g - 1) * m * 400, 0, 255));
+    for (let c = 0; c < 3; c++) {
+      const shading = bW[i] > 8 ? (bC[c][i] * 255) / bW[i] : 255;
+      // Aim a touch past white so the paper clips clean - any faint banding
+      // the model left in it disappears, as it did with the old global curve
+      const g = clamp(260 / Math.max(shading, 1), 1, 1.45);
+      // Stored as (gain - 1) * 400 in a byte for the resize
+      gain[i * 3 + c] = Math.round(clamp((g - 1) * m * 400, 0, 255));
+    }
   }
 
-  const full = await sharp(gain, { raw: { width: LW, height: lh, channels: 1 } })
+  // Three channels, interleaved like the image itself
+  return sharp(gain, { raw: { width: LW, height: lh, channels: 3 } })
     .resize(w, h, { fit: 'fill', kernel: 'cubic' }).raw().toBuffer();
-  return full;
+}
+
+/**
+ * Real-camera skin. AI-rendered skin is too clean - an even, waxy surface
+ * that reads as AI the moment anyone zooms in. A fine luminance grain, like
+ * a DSLR file at ISO 200-400, breaks that up so the skin reads as
+ * photographed. It sits in the midtones (skin, fabric) and fades to nothing
+ * in clipped whites and deep blacks, so white and black sets stay clean.
+ * Strength matches what the studio signed off on the Keiran Sherwin set.
+ * In place on a raw RGB buffer.
+ */
+const GRAIN = parseFloat(process.env.PHOTO_GRAIN_STRENGTH || '0.45');
+
+/**
+ * The backdrop, as a soft 0-255 mask: grown from the top and sides of the
+ * frame through smoothly varying pixels, stopping at any edge (the subject's
+ * outline, a box). Grain belongs on the person - on a smooth grey or coloured
+ * paper it just reads as noise.
+ */
+async function backdropMask(rgb, w, h) {
+  const LW = 320;
+  const lh = Math.max(8, Math.round(h * LW / w));
+  const small = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } })
+    .resize(LW, lh, { fit: 'fill' }).blur(0.8).raw().toBuffer();
+  const N = LW * lh;
+  const mask = new Uint8Array(N);
+  const queue = [];
+  const seed = (i) => { if (!mask[i]) { mask[i] = 1; queue.push(i); } };
+  for (let x = 0; x < LW; x++) for (let y = 0; y < Math.max(2, Math.round(lh * 0.05)); y++) seed(y * LW + x);
+  for (let y = 0; y < lh; y++) { seed(y * LW); seed(y * LW + LW - 1); }
+  const diff = (i, j) => Math.max(
+    Math.abs(small[i * 3] - small[j * 3]),
+    Math.abs(small[i * 3 + 1] - small[j * 3 + 1]),
+    Math.abs(small[i * 3 + 2] - small[j * 3 + 2]));
+  while (queue.length) {
+    const i = queue.pop();
+    const x = i % LW, y = (i / LW) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= LW || ny >= lh) continue;
+      const j = ny * LW + nx;
+      if (!mask[j] && diff(i, j) <= 4) { mask[j] = 1; queue.push(j); }
+    }
+  }
+  return sharp(Buffer.from(mask.map(v => v * 255)), { raw: { width: LW, height: lh, channels: 1 } })
+    .blur(1.2).resize(w, h, { fit: 'fill' }).raw().toBuffer();
+}
+
+async function cameraTexture(rgb, w, h) {
+  if (!(GRAIN > 0)) return;
+  const backdrop = await backdropMask(rgb, w, h);
+  const noise = Buffer.alloc(w * h);
+  for (let i = 0; i < noise.length; i++) {
+    let u = 0; while (!u) u = Math.random();
+    const g = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+    noise[i] = clamp(Math.round(128 + g * 40), 0, 255);
+  }
+  // A touch of blur so it reads as sensor grain, not digital speckle
+  const grain = await sharp(noise, { raw: { width: w, height: h, channels: 1 } }).blur(0.55).raw().toBuffer();
+  const amp = 7.5 * GRAIN;
+  for (let i = 0, k = 0; i < grain.length; i++, k += 3) {
+    const L = lum(rgb[k], rgb[k + 1], rgb[k + 2]) / 255;
+    const weight = Math.max(0, 1 - Math.pow(Math.abs(L - 0.5) * 2, 3)) * (1 - backdrop[i] / 255);
+    if (weight <= 0) continue;
+    const n = ((grain[i] - 128) / 40) * amp * weight;
+    rgb[k] = clamp(Math.round(rgb[k] + n), 0, 255);
+    rgb[k + 1] = clamp(Math.round(rgb[k + 1] + n), 0, 255);
+    rgb[k + 2] = clamp(Math.round(rgb[k + 2] + n), 0, 255);
+  }
 }
 
 /**
@@ -198,9 +279,21 @@ async function whiteSweepGain(rgb, w, h) {
  * @param {string}  [opts.format]           output format, default 'jpeg'
  * @returns {Promise<{buffer: Buffer, kind: string, applied: object}>}
  */
-async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg' } = {}) {
+async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg', targetSize = null } = {}) {
   const kind = classifyBackdrop(sourceBackdrop);
-  const { data, info } = await sharp(buffer).rotate().removeAlpha().toColourspace('srgb')
+  // The model returns ~1.5K; the studio wants the retouch back at the exact
+  // size it uploaded. Scaled here, before the tone work and the grain, so the
+  // grain is camera-sized at the final resolution rather than blown up.
+  let pipeline = sharp(buffer).rotate();
+  if (targetSize?.width && targetSize?.height) {
+    const meta = await sharp(buffer).metadata();
+    if (meta.width !== targetSize.width || meta.height !== targetSize.height) {
+      pipeline = pipeline
+        .resize(targetSize.width, targetSize.height, { fit: 'fill', kernel: 'lanczos3' })
+        .sharpen({ sigma: 0.7, m1: 0.5, m2: 1.0 });
+    }
+  }
+  const { data, info } = await pipeline.removeAlpha().toColourspace('srgb')
     .raw().toBuffer({ resolveWithObject: true });
   const { width: w, height: h } = info;
   const out = Buffer.from(data);
@@ -208,20 +301,17 @@ async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg' } = 
 
   if (kind === 'white') {
     const bd = measureBackdrop(data, w, h);
-    // Per channel, so a faint tint on the paper is neutralised to white too
-    const luts = ['r', 'g', 'b'].map(c => highlightLut(Math.min(bd[c], 252) - 2));
+    // One curve for all three channels, so the person's colours do not move;
+    // any tint on the paper is taken out by the backdrop-only sweep below.
+    // White point at the paper's LOWEST channel, so all three clip to white
+    // and any banding the model left in the paper goes with it
+    const lut = highlightLut(Math.min(bd.r, bd.g, bd.b, 252) - 2);
     const deep = shadowLut(Math.min(lumPercentile(data, 0.002), 14));
-    for (let k = 0; k < out.length; k += 3) {
-      out[k] = deep[luts[0][out[k]]]; out[k + 1] = deep[luts[1][out[k + 1]]]; out[k + 2] = deep[luts[2][out[k + 2]]];
-    }
+    for (let k = 0; k < out.length; k++) out[k] = deep[lut[out[k]]];
     const gain = await whiteSweepGain(out, w, h);
     if (gain) {
-      for (let i = 0, k = 0; i < gain.length; i++, k += 3) {
-        if (!gain[i]) continue;
-        const g = 1 + gain[i] / 400;
-        out[k] = clamp(Math.round(out[k] * g), 0, 255);
-        out[k + 1] = clamp(Math.round(out[k + 1] * g), 0, 255);
-        out[k + 2] = clamp(Math.round(out[k + 2] * g), 0, 255);
+      for (let k = 0; k < gain.length; k++) {
+        if (gain[k]) out[k] = clamp(Math.round(out[k] * (1 + gain[k] / 400)), 0, 255);
       }
     }
     applied.backdropIn = [bd.r, bd.g, bd.b].map(Math.round);
@@ -245,10 +335,12 @@ async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg' } = 
     applied.whitePoint = top;
   }
 
+  await cameraTexture(out, w, h);
+
   const img = sharp(out, { raw: { width: w, height: h, channels: 3 } });
   const encoded = format === 'png' ? await img.png().toBuffer()
-    : format === 'webp' ? await img.webp({ quality: 92 }).toBuffer()
-      : await img.jpeg({ quality: 92, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer();
+    : format === 'webp' ? await img.webp({ quality: 94 }).toBuffer()
+      : await img.jpeg({ quality: 94, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer();
   return { buffer: encoded, kind, applied };
 }
 

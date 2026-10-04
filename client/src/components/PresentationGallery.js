@@ -446,9 +446,19 @@ const PresentationGallery = ({
   const preloadImage = useCallback((index) => {
     if (photos[index]) {
       const img = new Image();
+      img.decoding = 'async';
       img.src = stageUrl(photos[index]);
     }
   }, [photos]);
+
+  // The display copies are 2560px, so have the slides either side already
+  // downloaded and decoded before the booker gets to them - next, previous
+  // and the one after next - whatever order the show is in.
+  useEffect(() => {
+    if (!isOpen || photos.length < 2) return;
+    const n = photos.length;
+    [1, -1, 2].forEach(step => preloadImage((currentIndex + step + n) % n));
+  }, [isOpen, currentIndex, photos.length, preloadImage]);
 
   const goToPhoto = useCallback((newIndex, skipTransition = false) => {
     if (newIndex === currentIndex || photos.length === 0) return;
@@ -707,6 +717,8 @@ const PresentationGallery = ({
               <img
                 key={currentPhoto.id}
                 src={stageUrl(currentPhoto)}
+                fetchpriority="high"
+                decoding="async"
                 alt={currentPhoto.description || `Photo ${currentIndex + 1}`}
                 className="max-w-full max-h-full object-contain relative z-10"
                 ref={stageImgRef}

@@ -37,10 +37,30 @@ const PROVIDER = 'supabase';
 
 // Derivative recipes. Sizes are the long edge; aspect ratio is preserved and
 // images are never scaled up.
+//
+// display is what Present and the client gallery put on screen: 2560 on the
+// long edge (Oct 2026, was 1400 at q78) so it is sharp on a 4K TV, a big
+// monitor or a Retina laptop in fullscreen. Progressive, so a slow
+// connection shows the whole photo at once and sharpens as it arrives.
 const VARIANTS = {
-  thumb:   { width: 300,  quality: 45 },
-  display: { width: 1400, quality: 78 }
+  thumb:   { width: 300,  quality: 60 },
+  display: { width: 2560, quality: 86 }
 };
+
+// One recipe for writing a derivative, shared with the display backfill.
+async function renderDerivative(buffer, name) {
+  const { width, quality } = VARIANTS[name];
+  return sharp(buffer, { failOn: 'none' })
+    .rotate()
+    .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
+    .jpeg({
+      quality,
+      mozjpeg: true,
+      progressive: true,
+      chromaSubsampling: name === 'display' ? '4:4:4' : '4:2:0'
+    })
+    .toBuffer();
+}
 
 // Supabase free tier caps uploads at 50 MB; Pro is far higher. 45 MB keeps
 // headroom for a large JPEG without tripping the smaller limit.
@@ -152,12 +172,7 @@ async function processAndUpload({ buffer, originalName, mimeType, leadId, upload
   const meta = await sharp(buffer, { failOn: 'none' }).rotate().metadata().catch(() => ({}));
 
   const derivative = async (name) => {
-    const { width, quality } = VARIANTS[name];
-    const out = await sharp(buffer, { failOn: 'none' })
-      .rotate()
-      .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality, mozjpeg: true })
-      .toBuffer();
+    const out = await renderDerivative(buffer, name);
     const key = `${prefix}/${photoId}/${name}.jpg`;
     await putObject(key, out, 'image/jpeg');
     return { key, size: out.length };
@@ -259,6 +274,10 @@ async function prepareForEdit(buffer, mimeType) {
     mimeType: 'image/jpeg',
     width: preparedMeta.width || null,
     height: preparedMeta.height || null,
+    // The uploaded photo's own size, upright - a retouch is delivered back
+    // at exactly this size (see tonalFinish targetSize)
+    originalWidth: (meta.orientation >= 5 ? meta.height : meta.width) || null,
+    originalHeight: (meta.orientation >= 5 ? meta.width : meta.height) || null,
     rotated: !!meta.orientation && meta.orientation > 1,
     resized: (meta.width || 0) > INPUT_MAX_EDGE || (meta.height || 0) > INPUT_MAX_EDGE
   };
@@ -375,5 +394,7 @@ module.exports = {
   downloadObject,
   prepareForEdit,
   backdropColour,
-  publicUrl
+  publicUrl,
+  renderDerivative,
+  putObject
 };

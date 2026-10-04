@@ -196,7 +196,7 @@ async function run({ photoId, leadId, userId }) {
     // the retouch from being recomposed, and a HEIC edited via its 1400px
     // derivative from being ordered at the original's dimensions.
     const input = await photoStorage.prepareForEdit(raw, inputMime);
-    const size = imageEdit.bestSizeFor(input.width, input.height) || 'auto';
+    const size = imageEdit.bestSizeFor(input.originalWidth || input.width, input.originalHeight || input.height) || 'auto';
 
     // Measured from the source so the model can be told the exact colour to
     // hold, rather than asked to "keep it the same" and quietly neutralising
@@ -239,7 +239,9 @@ async function run({ photoId, leadId, userId }) {
           preset: PRESET,
           backdrop,
           quality: QUALITY,
-          size
+          size,
+          outputWidth: input.originalWidth,
+          outputHeight: input.originalHeight
         });
         break;
       } catch (err) {

@@ -304,9 +304,16 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
     setUploadErrors([]);
     setUploadProgress({ done: 0, total: files.length });
 
+    // The batches keep going if the booker closes the modal or moves around
+    // the CRM (and the retouching runs on the server regardless), but closing
+    // or refreshing the tab would drop every photo not yet sent - so ask first.
+    const warnOnLeave = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warnOnLeave);
+
     const failures = [];
     let done = 0;
 
+    try {
     for (let i = 0; i < files.length; i += UPLOAD_BATCH_SIZE) {
       const batch = files.slice(i, i + UPLOAD_BATCH_SIZE);
       const form = new FormData();
@@ -328,6 +335,9 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
 
       done += batch.length;
       setUploadProgress({ done, total: files.length });
+    }
+    } finally {
+      window.removeEventListener('beforeunload', warnOnLeave);
     }
 
     setUploading(false);
