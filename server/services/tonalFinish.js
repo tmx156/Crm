@@ -209,10 +209,11 @@ async function whiteSweepGain(rgb, w, h) {
  * a DSLR file at ISO 200-400, breaks that up so the skin reads as
  * photographed. It sits in the midtones (skin, fabric) and fades to nothing
  * in clipped whites and deep blacks, so white and black sets stay clean.
- * Strength matches what the studio signed off on the Keiran Sherwin set.
+ * Off by default since Oct 2026 at the studio's request; set
+ * PHOTO_GRAIN_STRENGTH (e.g. 0.45) to bring it back.
  * In place on a raw RGB buffer.
  */
-const GRAIN = parseFloat(process.env.PHOTO_GRAIN_STRENGTH || '0.45');
+const GRAIN = parseFloat(process.env.PHOTO_GRAIN_STRENGTH || '0');
 
 /**
  * The backdrop, as a soft 0-255 mask: grown from the top and sides of the
