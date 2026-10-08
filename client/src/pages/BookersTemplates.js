@@ -3,6 +3,16 @@ import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSave, FiX, 
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+const isHtml = (text) => typeof text === 'string' && /<[a-z!][\s\S]*>/i.test(text);
+
+// Card snippets show readable text, not the markup of an HTML email.
+const toPlainText = (text) => {
+  if (!isHtml(text)) return text;
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  doc.querySelectorAll('style, script, title').forEach((el) => el.remove());
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+};
+
 const BookersTemplates = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -253,7 +263,7 @@ const BookersTemplates = () => {
                 </div>
                 <div className="text-gray-700 text-sm line-clamp-3">
                   {typeof (template.smsBody || template.emailBody) === 'string'
-                    ? (template.smsBody || template.emailBody)
+                    ? toPlainText(template.smsBody || template.emailBody)
                     : 'Template content'}
                 </div>
                 <div className="flex gap-2 mt-auto">
@@ -458,7 +468,7 @@ const BookersTemplates = () => {
         {/* Preview Modal */}
         {showPreview && previewData && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-lg w-full p-6">
+            <div className={`bg-white rounded-lg w-full p-6 max-h-[90vh] overflow-y-auto ${isHtml(previewData.emailBody) ? 'max-w-3xl' : 'max-w-lg'}`}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold">Preview: {previewData.name}</h3>
                 <button onClick={() => setShowPreview(false)} className="p-2 hover:bg-gray-100 rounded"><FiX /></button>
@@ -468,7 +478,17 @@ const BookersTemplates = () => {
                   <h4 className="font-semibold mb-1">Email</h4>
                   <div className="border rounded p-2 bg-gray-50">
                     <div className="font-bold mb-1">Subject: {previewData.subject}</div>
-                    <div className="whitespace-pre-line font-mono text-sm">{previewData.emailBody}</div>
+                    {isHtml(previewData.emailBody) ? (
+                      <iframe
+                        title="Email Preview"
+                        srcDoc={previewData.emailBody}
+                        className="w-full border border-gray-200 rounded bg-white"
+                        style={{ height: '500px' }}
+                        sandbox=""
+                      />
+                    ) : (
+                      <div className="whitespace-pre-line font-mono text-sm">{previewData.emailBody}</div>
+                    )}
                   </div>
                 </div>
               )}
