@@ -3,6 +3,8 @@ import { FiPlus, FiEdit, FiTrash2, FiEye, FiSend, FiMail, FiPhone, FiSettings, F
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+const isHtml = (text) => typeof text === 'string' && /<[a-z!][\s\S]*>/i.test(text);
+
 const Templates = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1178,7 +1180,17 @@ const Templates = () => {
                           {formData.emailBody && (
                             <div className="bg-white rounded-lg p-4 border border-gray-200">
                               <div className="text-sm font-semibold text-gray-600 mb-2">Email Preview:</div>
-                              <div className="text-sm text-gray-800 whitespace-pre-wrap">{formData.emailBody}</div>
+                              {isHtml(formData.emailBody) ? (
+                                <iframe
+                                  title="Email Live Preview"
+                                  srcDoc={formData.emailBody}
+                                  className="w-full border border-gray-200 rounded-lg bg-white"
+                                  style={{ height: '500px' }}
+                                  sandbox=""
+                                />
+                              ) : (
+                                <div className="text-sm text-gray-800 whitespace-pre-wrap">{formData.emailBody}</div>
+                              )}
                             </div>
                           )}
                           {formData.smsBody && (
@@ -1253,13 +1265,13 @@ const Templates = () => {
 
                       {/* Email Body - Rendered HTML */}
                       <div className="p-4 bg-white">
-                        {previewData.template.emailBody?.includes('<') && previewData.template.emailBody?.includes('>') ? (
+                        {isHtml(previewData.template.emailBody) ? (
                           <iframe
                             title="Email Preview"
                             srcDoc={previewData.template.emailBody}
                             className="w-full border border-gray-200 rounded-lg"
                             style={{ minHeight: '400px', maxHeight: '500px' }}
-                            sandbox="allow-same-origin"
+                            sandbox=""
                           />
                         ) : (
                           <div className="whitespace-pre-wrap text-sm text-gray-800 p-4 bg-gray-50 rounded-lg">
