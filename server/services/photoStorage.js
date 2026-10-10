@@ -305,7 +305,9 @@ async function backdropColour(buffer) {
   try {
     const { data, info } = await sharp(buffer, { failOn: 'none' }).rotate()
       .resize({ width: 600, withoutEnlargement: true })
-      .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      // sRGB forces 3 channels: a black-and-white upload is 1 channel, and the
+      // (y * w + x) * 3 indexing below would read it as the wrong pixels.
+      .removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
     const w = info.width, h = info.height;
     const pw = Math.max(6, Math.floor(w * 0.07));
     const ph = Math.max(6, Math.floor(h * 0.05));

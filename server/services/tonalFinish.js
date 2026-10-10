@@ -27,6 +27,25 @@
 
 const sharp = require('sharp');
 
+/**
+ * Raw pixels with their layout checked. Every buffer here is indexed by hand
+ * as (y * w + x) * channels, so a buffer with a different channel count or
+ * size than assumed reads the wrong pixels and stripes the whole photo. A
+ * mismatch throws instead; editImage then keeps the model's result as is.
+ */
+async function rawOf(pipeline, width, height, channels) {
+  const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
+  if (info.width !== width || info.height !== height || info.channels !== channels ||
+      data.length !== width * height * channels) {
+    throw new Error(`raw buffer is ${info.width}x${info.height}x${info.channels}, ` +
+      `expected ${width}x${height}x${channels}`);
+  }
+  return data;
+}
+
+// Where the white sweep lands the paper (see whiteSweepGain).
+const SWEEP_TARGET = 250;
+
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const chroma = (r, g, b) => Math.max(r, g, b) - Math.min(r, g, b);
@@ -79,12 +98,18 @@ function lumPercentile(data, p) {
  * alone; only the top end is pulled up, so a grey-ish white set becomes
  * white without the whole photo going flat and bright.
  */
-function highlightLut(whitePoint) {
+function highlightLut(whitePoint, landAt = 255) {
   const wp = clamp(whitePoint, 180, 255);
+  const land = clamp(landAt, wp, 255);
   const knee = wp * 0.62;
   const lut = new Uint8ClampedArray(256);
   for (let x = 0; x < 256; x++) {
-    lut[x] = x <= knee ? x : Math.round(knee + (x - knee) * (255 - knee) / (wp - knee));
+    if (x <= knee) lut[x] = x;
+    else if (x <= wp) lut[x] = Math.round(knee + (x - knee) * (land - knee) / (wp - knee));
+    // Shoulder: tones brighter than the white point (a white shirt against a
+    // greyish set) are eased into the top few levels instead of clipped, so
+    // the shirt keeps its folds and its outline against the backdrop.
+    else lut[x] = Math.round(land + (x - wp) * (255 - land) / Math.max(1, 255 - wp));
   }
   return lut;
 }
@@ -123,25 +148,34 @@ function shadowLut(blackPoint) {
  *
  * Worked out at low resolution and applied as a smooth gain map, so it
  * cannot introduce edges of its own.
+ *
+ * The region is found on `maskRgb` - the photo before the highlight curve -
+ * and nothing brighter than `ceiling` or darker than `floor` there joins it.
+ * On a greyish white set the subject's white shirt is brighter than the
+ * paper (and its shadows darker); without these bounds the fill crept into
+ * the shirt and the gain bleached it into the backdrop, so the person lost
+ * their outline and looked pasted on.
  */
-async function whiteSweepGain(rgb, w, h) {
+async function whiteSweepGain(rgb, w, h, { maskRgb = rgb, ceiling = 255, floor = 150 } = {}) {
   const LW = 320;
   const lh = Math.max(8, Math.round(h * LW / w));
-  const small = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } })
-    .resize(LW, lh, { fit: 'fill' }).raw().toBuffer();
+  const shrink = (buf) => rawOf(sharp(buf, { raw: { width: w, height: h, channels: 3 } })
+    .resize(LW, lh, { fit: 'fill' }), LW, lh, 3);
+  const small = await shrink(rgb);
+  const smallMask = maskRgb === rgb ? small : await shrink(maskRgb);
 
   const N = LW * lh;
   const L = new Float32Array(N), C = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     const k = i * 3;
-    L[i] = lum(small[k], small[k + 1], small[k + 2]);
-    C[i] = chroma(small[k], small[k + 1], small[k + 2]);
+    L[i] = lum(smallMask[k], smallMask[k + 1], smallMask[k + 2]);
+    C[i] = chroma(smallMask[k], smallMask[k + 1], smallMask[k + 2]);
   }
 
   // Region grow from bright, neutral pixels along the top and both sides.
   const inMask = new Uint8Array(N);
   const queue = [];
-  const seedOk = (i) => L[i] >= 225 && C[i] <= 16;
+  const seedOk = (i) => L[i] >= Math.min(225, ceiling - 20) && L[i] <= ceiling && C[i] <= 16;
   for (let x = 0; x < LW; x++) for (let y = 0; y < Math.round(lh * 0.1); y++) {
     const i = y * LW + x; if (seedOk(i) && !inMask[i]) { inMask[i] = 1; queue.push(i); }
   }
@@ -158,7 +192,7 @@ async function whiteSweepGain(rgb, w, h) {
       if (inMask[j]) continue;
       // Neutral, not dark, and no hard edge between the two pixels - that is
       // what stops the fill at a white shirt's outline or the edge of a box.
-      if (L[j] >= 150 && C[j] <= 18 && Math.abs(L[j] - L[i]) <= 5) { inMask[j] = 1; queue.push(j); }
+      if (L[j] >= floor && L[j] <= ceiling && C[j] <= 18 && Math.abs(L[j] - L[i]) <= 5) { inMask[j] = 1; queue.push(j); }
     }
   }
 
@@ -171,36 +205,72 @@ async function whiteSweepGain(rgb, w, h) {
   // Per channel, so a tinted paper (lilac, cream) is neutralised to white -
   // on the backdrop only. Doing it with a global per-channel curve also
   // pushed the person's skin orange on a lilac set.
-  const weight = Buffer.alloc(N);
-  const masked = [0, 1, 2].map(() => Buffer.alloc(N));
+  //
+  // All of this is done in floating point. An 8-bit gain map, scaled up,
+  // turns a smooth floor-to-wall gradient into visible steps - and with a
+  // separate map per colour the steps land on different rows, which showed
+  // as coloured horizontal lines across white boxes and paper.
+  const weight = new Float32Array(N);
+  const masked = [0, 1, 2].map(() => new Float32Array(N));
   for (let i = 0; i < N; i++) {
-    weight[i] = inMask[i] ? 255 : 0;
+    weight[i] = inMask[i] ? 1 : 0;
     for (let c = 0; c < 3; c++) masked[c][i] = inMask[i] ? small[i * 3 + c] : 0;
   }
-  const blur = (buf) => sharp(buf, { raw: { width: LW, height: lh, channels: 1 } }).blur(sigma).raw().toBuffer();
-  const [bR, bG, bB, bW] = await Promise.all([...masked.map(blur), blur(weight)]);
-  const bC = [bR, bG, bB];
+  const bW = gaussBlur(weight, LW, lh, sigma);
+  const bC = masked.map(m => gaussBlur(m, LW, lh, sigma));
+  const feather = gaussBlur(Float32Array.from(inMask), LW, lh, 1.5);
 
-  // Feathered mask for blending the gain in and out
-  const feather = await sharp(Buffer.from(inMask.map(v => v * 255)), { raw: { width: LW, height: lh, channels: 1 } })
-    .blur(1.5).raw().toBuffer();
-
-  const gain = Buffer.alloc(N * 3);
+  const gainLow = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
-    const m = feather[i] / 255;
     for (let c = 0; c < 3; c++) {
-      const shading = bW[i] > 8 ? (bC[c][i] * 255) / bW[i] : 255;
-      // Aim a touch past white so the paper clips clean - any faint banding
-      // the model left in it disappears, as it did with the old global curve
-      const g = clamp(260 / Math.max(shading, 1), 1, 1.45);
-      // Stored as (gain - 1) * 400 in a byte for the resize
-      gain[i * 3 + c] = Math.round(clamp((g - 1) * m * 400, 0, 255));
+      const shading = bW[i] > 0.03 ? bC[c][i] / bW[i] : 255;
+      // Near-white, not clipped: a real high-key set reads as clean white but
+      // still has a breath of tone, which is what lets a white shirt or pale
+      // skin keep its edge against it. Clipping it to 255 made people look
+      // cut out and pasted onto the page.
+      const g = clamp(SWEEP_TARGET / Math.max(shading, 1), 1, 1.45);
+      gainLow[i * 3 + c] = (g - 1) * feather[i];
     }
   }
 
-  // Three channels, interleaved like the image itself
-  return sharp(gain, { raw: { width: LW, height: lh, channels: 3 } })
-    .resize(w, h, { fit: 'fill', kernel: 'cubic' }).raw().toBuffer();
+  // Bilinear upscale to full size, still in floats
+  const full = new Float32Array(w * h * 3);
+  const sx = (LW - 1) / Math.max(1, w - 1), sy = (lh - 1) / Math.max(1, h - 1);
+  for (let y = 0; y < h; y++) {
+    const fy = y * sy, y0 = fy | 0, y1 = Math.min(lh - 1, y0 + 1), ty = fy - y0;
+    for (let x = 0; x < w; x++) {
+      const fx = x * sx, x0 = fx | 0, x1 = Math.min(LW - 1, x0 + 1), tx = fx - x0;
+      const a = (y0 * LW + x0) * 3, b = (y0 * LW + x1) * 3, c2 = (y1 * LW + x0) * 3, d = (y1 * LW + x1) * 3;
+      const k = (y * w + x) * 3;
+      for (let c = 0; c < 3; c++) {
+        const top = gainLow[a + c] + (gainLow[b + c] - gainLow[a + c]) * tx;
+        const bot = gainLow[c2 + c] + (gainLow[d + c] - gainLow[c2 + c]) * tx;
+        full[k + c] = top + (bot - top) * ty;
+      }
+    }
+  }
+  return full;
+}
+
+/** Separable gaussian blur on a float image (one channel). */
+function gaussBlur(src, w, h, sigma) {
+  const r = Math.ceil(sigma * 3);
+  const kernel = new Float32Array(r * 2 + 1);
+  let sum = 0;
+  for (let i = -r; i <= r; i++) { kernel[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma)); sum += kernel[i + r]; }
+  for (let i = 0; i < kernel.length; i++) kernel[i] /= sum;
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let i = -r; i <= r; i++) acc += src[y * w + Math.min(w - 1, Math.max(0, x + i))] * kernel[i + r];
+    tmp[y * w + x] = acc;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let i = -r; i <= r; i++) acc += tmp[Math.min(h - 1, Math.max(0, y + i)) * w + x] * kernel[i + r];
+    out[y * w + x] = acc;
+  }
+  return out;
 }
 
 /**
@@ -224,8 +294,8 @@ const GRAIN = parseFloat(process.env.PHOTO_GRAIN_STRENGTH || '0');
 async function backdropMask(rgb, w, h) {
   const LW = 320;
   const lh = Math.max(8, Math.round(h * LW / w));
-  const small = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } })
-    .resize(LW, lh, { fit: 'fill' }).blur(0.8).raw().toBuffer();
+  const small = await rawOf(sharp(rgb, { raw: { width: w, height: h, channels: 3 } })
+    .resize(LW, lh, { fit: 'fill' }).blur(0.8), LW, lh, 3);
   const N = LW * lh;
   const mask = new Uint8Array(N);
   const queue = [];
@@ -246,8 +316,11 @@ async function backdropMask(rgb, w, h) {
       if (!mask[j] && diff(i, j) <= 4) { mask[j] = 1; queue.push(j); }
     }
   }
-  return sharp(Buffer.from(mask.map(v => v * 255)), { raw: { width: LW, height: lh, channels: 1 } })
-    .blur(1.2).resize(w, h, { fit: 'fill' }).raw().toBuffer();
+  // extractChannel(0): sharp hands a 1-channel raw input back as 3 channels
+  // after blur/resize, and reading that as one channel samples the wrong
+  // pixels - the same mix-up that striped every retouch in the sister CRM.
+  return rawOf(sharp(Buffer.from(mask.map(v => v * 255)), { raw: { width: LW, height: lh, channels: 1 } })
+    .blur(1.2).resize(w, h, { fit: 'fill' }).extractChannel(0), w, h, 1);
 }
 
 async function cameraTexture(rgb, w, h) {
@@ -260,7 +333,7 @@ async function cameraTexture(rgb, w, h) {
     noise[i] = clamp(Math.round(128 + g * 40), 0, 255);
   }
   // A touch of blur so it reads as sensor grain, not digital speckle
-  const grain = await sharp(noise, { raw: { width: w, height: h, channels: 1 } }).blur(0.55).raw().toBuffer();
+  const grain = await rawOf(sharp(noise, { raw: { width: w, height: h, channels: 1 } }).blur(0.55).extractChannel(0), w, h, 1);
   const amp = 7.5 * GRAIN;
   for (let i = 0, k = 0; i < grain.length; i++, k += 3) {
     const L = lum(rgb[k], rgb[k + 1], rgb[k + 2]) / 255;
@@ -290,13 +363,17 @@ async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg', tar
     const meta = await sharp(buffer).metadata();
     if (meta.width !== targetSize.width || meta.height !== targetSize.height) {
       pipeline = pipeline
-        .resize(targetSize.width, targetSize.height, { fit: 'fill', kernel: 'lanczos3' })
-        .sharpen({ sigma: 0.7, m1: 0.5, m2: 1.0 });
+        // No sharpening after the upscale: it etched faint skin creases from
+        // the model into hard lines across foreheads on close-ups
+        .resize(targetSize.width, targetSize.height, { fit: 'fill', kernel: 'lanczos3' });
     }
   }
   const { data, info } = await pipeline.removeAlpha().toColourspace('srgb')
     .raw().toBuffer({ resolveWithObject: true });
   const { width: w, height: h } = info;
+  if (info.channels !== 3 || data.length !== w * h * 3) {
+    throw new Error(`expected 3-channel sRGB, got ${info.channels} channels`);
+  }
   const out = Buffer.from(data);
   const applied = { kind };
 
@@ -306,13 +383,18 @@ async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg', tar
     // any tint on the paper is taken out by the backdrop-only sweep below.
     // White point at the paper's LOWEST channel, so all three clip to white
     // and any banding the model left in the paper goes with it
-    const lut = highlightLut(Math.min(bd.r, bd.g, bd.b, 252) - 2);
+    // The paper lands just short of white here; the sweep below takes the
+    // paper (and only the paper) the rest of the way.
+    const lut = highlightLut(Math.min(bd.r, bd.g, bd.b, 252) - 2, 246);
     const deep = shadowLut(Math.min(lumPercentile(data, 0.002), 14));
     for (let k = 0; k < out.length; k++) out[k] = deep[lut[out[k]]];
-    const gain = await whiteSweepGain(out, w, h);
+    // Anything clearly brighter than the paper (a white shirt) or far darker
+    // (that shirt's shadows) is the subject, not backdrop - kept out.
+    const paperL = lum(bd.r, bd.g, bd.b);
+    const gain = await whiteSweepGain(out, w, h, { maskRgb: data, ceiling: paperL + 7, floor: Math.max(150, paperL - 30) });
     if (gain) {
       for (let k = 0; k < gain.length; k++) {
-        if (gain[k]) out[k] = clamp(Math.round(out[k] * (1 + gain[k] / 400)), 0, 255);
+        if (gain[k] > 0) out[k] = clamp(Math.round(out[k] * (1 + gain[k])), 0, 255);
       }
     }
     applied.backdropIn = [bd.r, bd.g, bd.b].map(Math.round);
@@ -345,4 +427,35 @@ async function finishTones(buffer, { sourceBackdrop = null, format = 'jpeg', tar
   return { buffer: encoded, kind, applied };
 }
 
-module.exports = { finishTones, classifyBackdrop };
+/**
+ * How much horizontal striping `candidate` has that `reference` did not.
+ *
+ * Both are compared at the candidate's size: the per-row mean of
+ * (candidate - reference) is taken, and each row is compared with the rows 4
+ * above and below. Retouching, tone curves and backdrop lifts change rows
+ * smoothly and score near 0; lines across the frame lift alternate rows and
+ * score high. The median keeps a real edge in the picture (a shoulder line,
+ * a chin) from counting - it moves only a handful of rows, stripes move all.
+ *
+ * Measured: clean finish 0.00-0.07, clean retouch vs its source ~0.16,
+ * the striped retouches 0.65-1.5.
+ */
+async function stripeScore(reference, candidate) {
+  const { width: w, height: h } = await sharp(candidate).metadata();
+  const grey = (buf) => rawOf(sharp(buf).rotate().resize(w, h, { fit: 'fill' })
+    .greyscale().extractChannel(0), w, h, 1);
+  const [a, b] = await Promise.all([grey(reference), grey(candidate)]);
+  const rows = new Float64Array(h);
+  for (let y = 0; y < h; y++) {
+    let s = 0;
+    for (let x = 0; x < w; x++) s += b[y * w + x] - a[y * w + x];
+    rows[y] = s / w;
+  }
+  const jumps = [];
+  for (let y = 4; y < h - 4; y++) jumps.push(Math.abs(rows[y] - (rows[y - 4] + rows[y + 4]) / 2));
+  if (!jumps.length) return 0;
+  jumps.sort((p, q) => p - q);
+  return jumps[Math.floor(jumps.length / 2)];
+}
+
+module.exports = { finishTones, classifyBackdrop, stripeScore };

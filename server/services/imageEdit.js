@@ -81,6 +81,13 @@ const OUTPUT_FORMAT = 'jpeg';
 // real JPEG encode.
 const OUTPUT_COMPRESSION = 100;
 
+// Stripe limits (tonalFinish.stripeScore). A clean finish adds 0.00-0.07 and a
+// clean retouch differs from its source by ~0.16; the striped retouches scored
+// 0.65-1.5. The model limit sits higher because a retouch legitimately changes
+// far more than the finish does.
+const STRIPE_LIMIT_FINISH = 0.25;
+const STRIPE_LIMIT_MODEL = 0.45;
+
 // 0-3 per the API. 3 is the smoothest preview; the final image can still
 // arrive before all three if the model finishes early.
 const PARTIAL_IMAGES = 3;
@@ -100,7 +107,8 @@ const MAX_PROMPT_LENGTH = 1200;
 
 // Decides whether a set is white paper, black, or a colour - the same test the
 // tonal finish uses, so the prompt and the finish always agree.
-const { classifyBackdrop, finishTones } = require('./tonalFinish');
+const { classifyBackdrop, finishTones, stripeScore } = require('./tonalFinish');
+const sharp = require('sharp');
 
 // API limits on a requested size: each edge a multiple of 16, aspect between
 // 1:3 and 3:1, and no larger than 3840x2160.
@@ -279,8 +287,10 @@ const PRESETS = {
       'and character still there. Do this however small the face is in the ' +
       'frame and whichever way up it is. ' +
       "Keep the person's own natural skin tone - do not tan, bronze or " +
-      'orange the skin. Clean up distracting flyaway hairs while keeping the ' +
-      'natural hair texture and hairstyle. Retouch any visible neck, ' +
+      'orange the skin. Remove only the few stray hairs that cross the face ' +
+      'or eyes; keep the natural soft, fine wisps along the outline of the ' +
+      'hair so the hairline and edges look real, never cut out or helmet-' +
+      'smooth. Keep the natural hair texture and hairstyle. Retouch any visible neck, ' +
       'decolletage, arms, hands and legs to match. On the neck and ' +
       'decolletage, fully smooth out the lines, folds, creases and crepey ' +
       'texture so that skin looks smooth and youthful like the face - this is ' +
@@ -305,7 +315,8 @@ const PRESETS = {
       'sophisticated, high-end colour grade suited to this particular ' +
       'photograph. Keep hands, fingers, limbs, face, jaw, neck and body ' +
       'proportions realistic, and keep the image free of generation ' +
-      'artifacts - no smeared or melted textures, no garbled lace or ' +
+      'artifacts - no thin etched lines, scratches or streaks drawn across ' +
+      'the skin or forehead, no smeared or melted textures, no garbled lace or ' +
       'patterns, no blotchy or muddy patches, no warped anatomy, extra or fused fingers, ' +
       'stretched features or altered facial identity. Keep the head angle, ' +
       'the direction the face is turned, whether the eyes are open or closed, ' +
@@ -789,6 +800,17 @@ async function editImage({
 
   if (!final) throw new Error('OpenAI finished without returning an image');
 
+  // Lines across the frame are never acceptable in a client's photo. If the
+  // model's own output has them, treat it like a failed attempt so the queue
+  // retries it, instead of saving it. (See stripeScore for the numbers.)
+  const modelStripes = await stripeScore(buffer, final).catch(() => 0);
+  if (modelStripes > STRIPE_LIMIT_MODEL) {
+    throw new ImageEditError(
+      `The retouch came back with lines across it (stripe score ${modelStripes.toFixed(2)}) - retrying`,
+      { retryable: true });
+  }
+  const modelOutput = final;
+
   // Pure whites, true blacks and a seamless floor are measured in, not left
   // to the model (services/tonalFinish.js). Never at the cost of the edit:
   // if the finish fails for any reason, the paid-for result is kept as is.
@@ -803,6 +825,21 @@ async function editImage({
     })).buffer;
   } catch (err) {
     console.warn('[image-edit] Tonal finish skipped:', err.message);
+  }
+
+  // Our own finish must never add lines either. If it did, discard it and
+  // keep the model's result, sized as the finish would have sized it.
+  if (final !== modelOutput) {
+    const finishStripes = await stripeScore(modelOutput, final).catch(() => 0);
+    if (finishStripes > STRIPE_LIMIT_FINISH) {
+      console.error(`[image-edit] Tonal finish added lines (stripe score ${finishStripes.toFixed(2)}) - ` +
+        'saving the unfinished retouch instead');
+      let fallback = sharp(modelOutput).rotate();
+      if (outputWidth && outputHeight) {
+        fallback = fallback.resize(outputWidth, outputHeight, { fit: 'fill', kernel: 'lanczos3' });
+      }
+      final = await fallback.toFormat(OUTPUT_FORMAT, { quality: 94 }).toBuffer();
+    }
   }
 
   return {
