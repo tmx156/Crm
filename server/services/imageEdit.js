@@ -772,6 +772,8 @@ async function editImage({
         // Limits can also be hit after the stream has opened.
         const limited = /rate limit|overloaded|try again/i.test(msg);
         throw new ImageEditError(msg, {
+          // 429 so callers treat it like any other account-wide limit.
+          status: limited ? 429 : null,
           retryable: limited,
           retryAfterMs: limited ? parseRetryAfter(null, msg) : null
         });

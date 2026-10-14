@@ -257,7 +257,10 @@ async function run({ photoId, leadId, userId }) {
         const ladder = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)];
         const wait = Math.min(Math.max(err.retryAfterMs || 0, ladder), MAX_WAIT_MS) +
           Math.floor(Math.random() * 3000);
-        imageEdit.noteRateLimit(wait);
+        // Only a 429 is account-wide. A striped result or a 5xx is about this
+        // one photo, and pausing every worker for it stalled whole drops.
+        if (err.status === 429) imageEdit.noteRateLimit(wait);
+        else await sleep(wait);
 
         console.warn(`[retouch] ${source.filename}: ${err.message} - retry ${attempt}/${MAX_ATTEMPTS - 1} in ${Math.round(wait / 1000)}s`);
         emit('photo_retouch_retrying', {

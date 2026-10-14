@@ -365,8 +365,9 @@ router.post('/:photoId', auth, async (req, res) => {
         if (!err.retryable || attempt >= MANUAL_MAX_ATTEMPTS) throw err;
         const ladder = MANUAL_BACKOFF_MS[Math.min(attempt - 1, MANUAL_BACKOFF_MS.length - 1)];
         const wait = Math.min(Math.max(err.retryAfterMs || 0, ladder), MANUAL_MAX_WAIT_MS);
-        imageEdit.noteRateLimit(wait);
-        announceWait(wait, 'OpenAI asked us to slow down');
+        // Only a 429 should also pause the auto-retouch workers.
+        if (err.status === 429) imageEdit.noteRateLimit(wait);
+        announceWait(wait, err.status === 429 ? 'OpenAI asked us to slow down' : 'Retrying');
         await waitAbortable(wait);
       }
     }
