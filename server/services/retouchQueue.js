@@ -62,11 +62,17 @@ const MAX_WAIT_MS = 5 * 60 * 1000;
 // When anything is told to back off, everything does: the limit is per
 // account, so another worker's next call - or a booker's manual retouch -
 // would only earn another 429. The clock lives in imageEdit so both share it.
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-async function waitForCooldown() {
+// Wakes early when the job is cancelled, so a cancel never waits out a backoff.
+const sleep = (ms, signal) => new Promise(resolve => {
+  if (signal?.aborted) return resolve();
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+});
+async function waitForCooldown(signal) {
   const wait = imageEdit.cooldownRemainingMs();
-  if (wait > 0) await sleep(wait);
+  if (wait > 0) await sleep(wait, signal);
 }
+const cancelledError = () => Object.assign(new Error('Edit cancelled'), { cancelled: true });
 
 const queue = [];
 let active = 0;
@@ -164,7 +170,10 @@ function drain() {
 async function run({ photoId, leadId, userId }) {
   const startedAt = Date.now();
   let editId = null;
-  running.set(photoId, { leadId, startedAt: new Date(startedAt).toISOString() });
+  // Aborted by cancelFor(); the request to OpenAI is dropped mid-flight.
+  const controller = new AbortController();
+  const { signal } = controller;
+  running.set(photoId, { leadId, startedAt: new Date(startedAt).toISOString(), controller });
 
   try {
     const { data: source, error } = await supabase
@@ -230,9 +239,11 @@ async function run({ photoId, leadId, userId }) {
     // means the API sends one image instead of four.
     let result;
     for (let attempt = 1; ; attempt++) {
-      await waitForCooldown();
+      await waitForCooldown(signal);
+      if (signal.aborted) throw cancelledError();
       try {
         result = await imageEdit.editImage({
+          signal,
           buffer: input.buffer,
           filename: source.filename || 'photo.jpg',
           mimeType: input.mimeType,
@@ -245,6 +256,7 @@ async function run({ photoId, leadId, userId }) {
         });
         break;
       } catch (err) {
+        if (signal.aborted) throw cancelledError();
         // No credit, bad key, refused prompt: waiting will not change the
         // answer, so fail now rather than burn seven minutes finding out.
         if (!err.retryable || attempt >= MAX_ATTEMPTS) {
@@ -260,7 +272,7 @@ async function run({ photoId, leadId, userId }) {
         // Only a 429 is account-wide. A striped result or a 5xx is about this
         // one photo, and pausing every worker for it stalled whole drops.
         if (err.status === 429) imageEdit.noteRateLimit(wait);
-        else await sleep(wait);
+        else await sleep(wait, signal);
 
         console.warn(`[retouch] ${source.filename}: ${err.message} - retry ${attempt}/${MAX_ATTEMPTS - 1} in ${Math.round(wait / 1000)}s`);
         emit('photo_retouch_retrying', {
@@ -270,6 +282,8 @@ async function run({ photoId, leadId, userId }) {
     }
 
     const base = (source.filename || 'photo').replace(/\.[^.]+$/, '');
+    // Cancelled just as the image came back - don't save it.
+    if (signal.aborted) throw cancelledError();
     const row = await photoStorage.processAndUpload({
       buffer: result.buffer,
       originalName: `${base}-edited.${imageEdit.OUTPUT_FORMAT}`,
@@ -313,6 +327,22 @@ async function run({ photoId, leadId, userId }) {
     emit('photo_retouch_done', { photo: saved, sourcePhotoId: source.id, leadId, ...stats() });
 
   } catch (err) {
+    if (err.cancelled || signal.aborted) {
+      console.log(`[retouch] Cancelled photo ${photoId}`);
+      if (editId) {
+        await supabase.from('photo_edits').update({
+          status: 'cancelled',
+          error_message: 'Edit cancelled',
+          duration_ms: Date.now() - startedAt,
+          updated_at: new Date().toISOString()
+        }).eq('id', editId).then(({ error }) => {
+          if (error) console.error('[retouch] Could not record cancel:', error.message);
+        });
+      }
+      emit('photo_retouch_cancelled', { photoId, leadId, ...stats() });
+      return;
+    }
+
     if (isRefusal(err.message)) {
       console.warn(`[retouch] OpenAI declined to edit photo ${photoId} (content filter) - left as the original, will not be retried`);
     } else {
@@ -402,6 +432,32 @@ async function findMissing({ leadId, since, neverAttempted = false } = {}) {
 }
 
 /**
+ * Stop every retouch for one appointment: drop the queued ones and abort the
+ * ones running. A running edit may already be billed by OpenAI; aborting
+ * only stops waiting for it and keeps the result out of the gallery.
+ *
+ * @returns {{dropped: number, aborted: number}}
+ */
+function cancelFor(leadId) {
+  let dropped = 0;
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (queue[i].leadId !== leadId) continue;
+    const [job] = queue.splice(i, 1);
+    dropped += 1;
+    emit('photo_retouch_cancelled', { photoId: job.photoId, leadId, ...stats() });
+  }
+  let aborted = 0;
+  for (const job of running.values()) {
+    if (job.leadId === leadId && !job.controller.signal.aborted) {
+      job.controller.abort();
+      aborted += 1;
+    }
+  }
+  if (dropped || aborted) console.log(`[retouch] Cancelled ${dropped} queued and ${aborted} running for lead ${leadId}`);
+  return { dropped, aborted };
+}
+
+/**
  * Queue every original in an appointment that still has no retouch - the
  * "Retouch missing" button. Includes ones that failed before.
  *
@@ -474,6 +530,7 @@ module.exports = {
   pendingFor,
   findMissing,
   requeueMissing,
+  cancelFor,
   resumeOnBoot,
   recoverStale
 };

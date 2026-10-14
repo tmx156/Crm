@@ -131,6 +131,28 @@ router.get('/missing', auth, async (req, res) => {
 });
 
 /**
+ * POST /api/photo-edit/retouch-cancel  { leadId }
+ * Stop the background retouches for an appointment - queued ones are
+ * dropped, running ones aborted. They count as missing again afterwards.
+ */
+router.post('/retouch-cancel', auth, async (req, res) => {
+  try {
+    if (!canEdit(req.user)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to edit photos' });
+    }
+    const { leadId } = req.body || {};
+    if (!leadId) return res.status(400).json({ success: false, message: 'leadId is required' });
+
+    const retouchQueue = require('../services/retouchQueue');
+    const result = retouchQueue.cancelFor(leadId);
+    res.json({ success: true, ...result, ...retouchQueue.stats() });
+  } catch (error) {
+    console.error('[photo-edit] Retouch cancel failed:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/photo-edit/retouch-missing  { leadId }
  * Queue every original in the appointment that still has no retouch,
  * including ones that failed earlier (e.g. to a rate limit).

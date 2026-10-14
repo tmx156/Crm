@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  FiImage, FiUpload, FiTrash2, FiCheck, FiSend, FiLoader, FiZap, FiPlay, FiDownload
+  FiImage, FiUpload, FiTrash2, FiCheck, FiSend, FiLoader, FiZap, FiPlay, FiDownload, FiX
 } from 'react-icons/fi';
 import axios from 'axios';
 import SendPhotosModal from './SendPhotosModal';
@@ -72,6 +72,7 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
   // an OpenAI rate limit) or were dropped by a restart. Drives "Retouch missing".
   const [missingRetouches, setMissingRetouches] = useState(0);
   const [requeuing, setRequeuing] = useState(false);
+  const [cancellingRetouches, setCancellingRetouches] = useState(false);
 
   // "Select all" has to reach photos beyond the page loaded in the grid
   const [selectingAll, setSelectingAll] = useState(false);
@@ -213,6 +214,19 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
     }
   };
 
+  // Stops this appointment's background retouches; they become "missing" again.
+  const cancelRetouches = async () => {
+    setCancellingRetouches(true);
+    try {
+      await axios.post('/api/photo-edit/retouch-cancel', { leadId });
+      await loadPending();
+    } catch (err) {
+      window.alert(err.response?.data?.message || 'Could not cancel the retouches');
+    } finally {
+      setCancellingRetouches(false);
+    }
+  };
+
   // A drop of 40 photos fires 40 "queued" events in a burst - refetch once.
   const schedulePendingRefresh = useCallback(() => {
     clearTimeout(pendingFetchTimer.current);
@@ -267,12 +281,14 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
     socket.on('photo_retouch_started', changed);
     socket.on('photo_retouch_done', done);
     socket.on('photo_retouch_failed', settled);
+    socket.on('photo_retouch_cancelled', settled);
 
     return () => {
       socket.off('photo_retouch_queued', changed);
       socket.off('photo_retouch_started', changed);
       socket.off('photo_retouch_done', done);
       socket.off('photo_retouch_failed', settled);
+      socket.off('photo_retouch_cancelled', settled);
     };
   }, [socket, leadId, folder, loadCounts, schedulePendingRefresh]);
 
@@ -505,6 +521,21 @@ const ClientPhotosPanel = ({ leadId, leadName, leadEmail, user }) => {
               <FiLoader className="h-2.5 w-2.5 animate-spin" />
               retouching {retouching}
             </span>
+          )}
+          {canEdit && retouching > 0 && (
+            <button
+              onClick={cancelRetouches}
+              disabled={cancellingRetouches}
+              title="Stop the retouches still running or waiting for this appointment"
+              className="ml-2 flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-700
+                         border border-red-200 rounded-full text-[10px] font-medium
+                         hover:bg-red-100 disabled:opacity-50 transition-colors"
+            >
+              {cancellingRetouches
+                ? <FiLoader className="h-2.5 w-2.5 animate-spin" />
+                : <FiX className="h-2.5 w-2.5" />}
+              Cancel
+            </button>
           )}
           {/* Originals with no retouch and nothing in flight: failed (usually
               an OpenAI rate limit) or dropped by a restart. One click re-queues
