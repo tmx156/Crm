@@ -229,29 +229,40 @@ function bestSizeFor(width, height, longEdge = TARGET_LONG_EDGE) {
  * erased lines, flattened shine into a matte mask, evened every tone and
  * drifted faces younger - DSC_0034 of Assunta Dragotti read as a different
  * woman. So: tidy, don't resurface.
+ *
+ * Tuned again against the studio's own external edits of Assunta: the
+ * first light-touch pass kept every crease and read older and harsher than
+ * those. They soften lines by roughly two-thirds, even the tone and give a
+ * satin glow, while the face stays hers.
  */
 const SKIN_RETOUCH =
-  'Retouch the skin with a light, natural touch, the way a careful ' +
-  'portrait retoucher works by hand - tidy it, do not resurface it. ' +
-  'Remove only temporary marks: spots, blemishes, small red patches, ' +
-  'shaving rash and stray hairs crossing the face. Keep moles, freckles, ' +
-  'scars and beauty marks. Soften the deepest lines only slightly - ' +
+  'Retouch the skin the way a skilled portrait retoucher does by hand: ' +
+  'clean, even and softly polished, but still clearly real skin. Remove ' +
+  'temporary marks - spots, blemishes, red patches, broken veins, shaving ' +
+  'rash and stray hairs crossing the face. Keep moles, freckles and beauty ' +
+  'marks. Even out blotchy or uneven skin tone and redness into one ' +
+  "smooth, healthy tone that matches the person's own complexion. Soften " +
   "crow's-feet, under-eye lines, forehead lines, smile lines and neck " +
-  'creases must all still be clearly visible, because they are part of ' +
-  "the person's face and age. Lighten under-eye darkness a little, but " +
-  'keep the shape of the under-eye. Keep the real skin texture and pores ' +
-  'everywhere - never airbrush, blur, smooth over or even out the skin, ' +
-  'and never make it look waxy, matte, plastic or porcelain. Keep the ' +
-  "skin's natural sheen and highlights on the forehead, nose and cheeks; " +
-  'only tone down a hard, greasy hot spot. Keep the natural colour ' +
-  'variation across the face - rosy cheeks, warmer and cooler areas - ' +
-  "and the person's own skin tone exactly: no tan, bronze, orange or " +
-  'pale wash. Leave the neck, chest, arms, hands and legs as they are ' +
-  'apart from removing obvious blemishes - keep their veins, creases, ' +
-  'knuckles and texture. The person must look exactly their own age and ' +
-  'exactly like themselves: never younger, never smoother than real ' +
-  'skin, and never with different eyes, brows, lips or face shape. Do ' +
-  'this however small the face is in the frame and whichever way up it is. ';
+  'creases by about two-thirds - they stay softly visible so the face ' +
+  'keeps its character, but they read as gentle, shallow folds, not deep, ' +
+  'dark or etched, and never sharper or darker than in the original. Light ' +
+  'the skin softly, like a large diffused beauty light, so its fine ' +
+  'texture is low in contrast and lines do not cast hard shadows. Clean ' +
+  'up under-eye darkness and puffiness so the eyes look rested, keeping ' +
+  'the shape of the under-eye. ' +
+  'Keep a fine, natural skin texture underneath - smooth and refined, ' +
+  'never blurred, waxy, plastic or porcelain, and never grainy, crepey or ' +
+  'over-sharpened. Give the skin a soft, satin glow: tone down greasy ' +
+  'shine and hot spots while keeping gentle highlights on the forehead, ' +
+  'nose and cheekbones. Keep a natural flush in the cheeks and lips; no ' +
+  'tan, bronze, orange, grey or pale wash. Tidy the neck, chest, arms and ' +
+  'hands the same gentle way - even tone, softened creases - keeping their ' +
+  'natural veins, knuckles and shape. Do not enlarge, brighten or recolour ' +
+  'the eyes beyond natural catchlights. The person must look exactly like ' +
+  'themselves, fresh and rested - the same age, never a younger, older or ' +
+  'different person, and never with different eyes, brows, lips or face ' +
+  'shape. Do this however small the face is in the frame and whichever way ' +
+  'up it is. ';
 
 const PRESETS = {
   // Derived from a real before/after set the studio delivered (Margaret
@@ -341,7 +352,7 @@ const PRESETS = {
       'the gaze and the expression exactly as photographed. The result ' +
       'should look like a premium TV or streaming-series poster or a fashion ' +
       'campaign: clean seamless backdrop, flattering professional light, ' +
-      'real, natural skin with its texture and lines, crisp clothing detail ' +
+      'clean, softly polished but real skin, crisp clothing detail ' +
       'and a sophisticated grade - with the person exactly as they are, ' +
       'just at their best.'
   },
