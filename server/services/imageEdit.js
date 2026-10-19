@@ -218,6 +218,41 @@ function bestSizeFor(width, height, longEdge = TARGET_LONG_EDGE) {
  * that is worse than an unretouched one - the client turns up to the casting
  * and does not match their card.
  */
+/**
+ * How skin is retouched - shared by 'magazine' and 'skin-retouch'.
+ *
+ * Oct 2026: rewritten from an "airbrush, remove every line" brief after a
+ * client complaint. Compared against the studio's own hand edits (Sigurd
+ * Bjornsen, Brid Andrews, Margaret Bennett): they keep crow's feet, smile
+ * lines and neck creases, keep the skin's natural sheen and colour
+ * variation, and leave arms and hands almost untouched. The airbrush brief
+ * erased lines, flattened shine into a matte mask, evened every tone and
+ * drifted faces younger - DSC_0034 of Assunta Dragotti read as a different
+ * woman. So: tidy, don't resurface.
+ */
+const SKIN_RETOUCH =
+  'Retouch the skin with a light, natural touch, the way a careful ' +
+  'portrait retoucher works by hand - tidy it, do not resurface it. ' +
+  'Remove only temporary marks: spots, blemishes, small red patches, ' +
+  'shaving rash and stray hairs crossing the face. Keep moles, freckles, ' +
+  'scars and beauty marks. Soften the deepest lines only slightly - ' +
+  "crow's-feet, under-eye lines, forehead lines, smile lines and neck " +
+  'creases must all still be clearly visible, because they are part of ' +
+  "the person's face and age. Lighten under-eye darkness a little, but " +
+  'keep the shape of the under-eye. Keep the real skin texture and pores ' +
+  'everywhere - never airbrush, blur, smooth over or even out the skin, ' +
+  'and never make it look waxy, matte, plastic or porcelain. Keep the ' +
+  "skin's natural sheen and highlights on the forehead, nose and cheeks; " +
+  'only tone down a hard, greasy hot spot. Keep the natural colour ' +
+  'variation across the face - rosy cheeks, warmer and cooler areas - ' +
+  "and the person's own skin tone exactly: no tan, bronze, orange or " +
+  'pale wash. Leave the neck, chest, arms, hands and legs as they are ' +
+  'apart from removing obvious blemishes - keep their veins, creases, ' +
+  'knuckles and texture. The person must look exactly their own age and ' +
+  'exactly like themselves: never younger, never smoother than real ' +
+  'skin, and never with different eyes, brows, lips or face shape. Do ' +
+  'this however small the face is in the frame and whichever way up it is. ';
+
 const PRESETS = {
   // Derived from a real before/after set the studio delivered (Margaret
   // Bennett, Sep 2026). Across 45 edits the recipe was always the same:
@@ -271,31 +306,14 @@ const PRESETS = {
       // TV / streaming-poster / fashion-campaign standard instead: the person
       // on their best day, flattered by light, skin and grade - never reshaped.
       'Retouch the person to the standard of a high-end TV or streaming-series ' +
-      'poster or a fashion campaign, for someone who does not usually ' +
-      'photograph well: they must look like themselves on their best day - ' +
-      'fresh, rested, well lit and polished - completely believable and ' +
-      'life-like, never like a different, younger or reshaped person. ' +
-      'Give the face and all visible skin a clear, professional airbrush ' +
-      'retouch, the kind a high-end retoucher does with frequency separation: ' +
-      'remove every blemish, spot, mark, red patch, broken capillary and ' +
-      'uneven pigmentation; even out the skin tone and blotchiness; smooth ' +
-      'rough or uneven texture, enlarged pores and shine; soften forehead ' +
-      'lines, fine lines and crow\'s-feet and lighten under-eye darkness and ' +
-      'puffiness, so the skin is visibly smoother and cleaner than in the ' +
-      'original - while still looking natural, with a fine, real skin ' +
-      'texture, never plastic, waxy or blurred, and with the person\'s age ' +
-      'and character still there. Do this however small the face is in the ' +
-      'frame and whichever way up it is. ' +
-      "Keep the person's own natural skin tone - do not tan, bronze or " +
-      'orange the skin. Remove only the few stray hairs that cross the face ' +
+      'poster or a fashion campaign: they must look like themselves on a good ' +
+      'day - well lit and polished, completely believable and life-like, ' +
+      'never like a different, younger or reshaped person. ' +
+      SKIN_RETOUCH +
+      'Remove only the few stray hairs that cross the face ' +
       'or eyes; keep the natural soft, fine wisps along the outline of the ' +
       'hair so the hairline and edges look real, never cut out or helmet-' +
-      'smooth. Keep the natural hair texture and hairstyle. Retouch any visible neck, ' +
-      'decolletage, arms, hands and legs to match. On the neck and ' +
-      'decolletage, fully smooth out the lines, folds, creases and crepey ' +
-      'texture so that skin looks smooth and youthful like the face - this is ' +
-      'the one place where lines are removed, not just softened - as a ' +
-      'skin-surface retouch only, keeping the same shape and outline. ' +
+      'smooth. Keep the natural hair texture and hairstyle. ' +
       'Do not reshape anything: keep the exact shape, size and outline of ' +
       'the head and skull, hairline, forehead, ears, eyes, nose, mouth, lips, ' +
       'jaw, chin, neck and body, and the same proportions between them - no ' +
@@ -308,8 +326,8 @@ const PRESETS = {
       // Finish
       'Improve overall photographic quality: balance highlights, midtones ' +
       'and shadows while keeping dimension, with rich deep blacks and clean ' +
-      'whites; improve skin luminosity without making it flat, plastic, ' +
-      'overexposed or excessively airbrushed; enhance garment texture, ' +
+      "whites; keep the skin's natural luminosity and shading, never flat, " +
+      'plastic or overexposed; enhance garment texture, ' +
       'fabric detail, jewellery and accessories while keeping them realistic; ' +
       'keep the highlight direction and natural shadow placement; and apply a ' +
       'sophisticated, high-end colour grade suited to this particular ' +
@@ -323,7 +341,7 @@ const PRESETS = {
       'the gaze and the expression exactly as photographed. The result ' +
       'should look like a premium TV or streaming-series poster or a fashion ' +
       'campaign: clean seamless backdrop, flattering professional light, ' +
-      'polished but real skin, refreshed under-eyes, crisp clothing detail ' +
+      'real, natural skin with its texture and lines, crisp clothing detail ' +
       'and a sophisticated grade - with the person exactly as they are, ' +
       'just at their best.'
   },
@@ -343,19 +361,8 @@ const PRESETS = {
     label: 'Skin retouch',
     description: 'Life-like skin retouch, no reshaping',
     prompt:
-      'Give the face and all visible skin a clear, professional airbrush ' +
-      'retouch, the kind a high-end retoucher does with frequency separation: ' +
-      'remove every blemish, spot, mark, red patch, broken capillary and ' +
-      'uneven pigmentation; even out the skin tone and blotchiness; smooth ' +
-      'rough or uneven texture, enlarged pores and shine; soften forehead ' +
-      'lines, fine lines and crow\'s-feet and lighten under-eye darkness and ' +
-      'puffiness, so the skin is visibly smoother and cleaner than in the ' +
-      'original - while still looking natural, with a fine, real skin ' +
-      'texture, never plastic, waxy or blurred, and with the person\'s age ' +
-      'and character still there. Do this however small the face is in the ' +
-      'frame and whichever way up it is. ' +
-      "Keep the person's own natural skin tone - no tan, bronze or orange. " +
-      'Keep moles and scars. Do not reshape anything: keep the exact shape, ' +
+      SKIN_RETOUCH +
+      'Do not reshape anything: keep the exact shape, ' +
       'size and outline of the head, hairline, face, features, jaw, neck and ' +
       'body, and the same framing and zoom. Do not change the expression, ' +
       'head angle, eyes, gaze, hair style, clothing, backdrop or lighting.'
