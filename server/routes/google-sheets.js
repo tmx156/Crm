@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getGoogleSheetsSync } = require('../utils/googleSheetsSync');
+const { getLeadSheetImporter } = require('../utils/leadSheetImporter');
 
 router.get('/status', (req, res) => {
   const sync = getGoogleSheetsSync();
@@ -8,6 +9,12 @@ router.get('/status', (req, res) => {
     return res.json({ enabled: false, message: 'Google Sheets sync not configured' });
   }
   res.json({ enabled: true, ...sync.getStatus() });
+});
+
+router.get('/lead-import/status', (req, res) => {
+  const importer = getLeadSheetImporter();
+  if (!importer) return res.json({ enabled: false });
+  res.json({ enabled: true, ...importer.getStatus() });
 });
 
 router.post('/sync', async (req, res) => {

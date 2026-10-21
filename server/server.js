@@ -61,6 +61,7 @@ const aiAssistantRoutes = require('./routes/ai-assistant');
 const scheduler = require('./utils/scheduler');
 const { startAllGmailPollers } = require('./utils/gmailPoller');
 const { startGoogleSheetsSync } = require('./utils/googleSheetsSync');
+const { startLeadSheetImporter } = require('./utils/leadSheetImporter');
 const googleSheetsRoutes = require('./routes/google-sheets');
 const photoRoutes = require('./routes/photos');
 const photoDeliveryRoutes = require('./routes/photo-delivery');
@@ -742,6 +743,16 @@ Promise.race([
       startGoogleSheetsSync(io);
     } catch (e) {
       console.error('❌ Failed to start Google Sheets sync:', e?.message || e);
+    }
+
+    // Lead sheet importer: pulls landing-page applications the webhook missed.
+    // Same rule as the scheduler: only one instance should run it, so a local dev
+    // server alongside production must set DISABLE_SCHEDULER or DISABLE_LEAD_SHEET_IMPORT.
+    if (String(process.env.DISABLE_SCHEDULER).toLowerCase() === 'true' ||
+        String(process.env.DISABLE_LEAD_SHEET_IMPORT).toLowerCase() === 'true') {
+      console.log('⏸️  Lead sheet importer DISABLED');
+    } else {
+      startLeadSheetImporter(io);
     }
 
     // ENABLED: Finance Reminder Service (now converted to Supabase)
