@@ -19,13 +19,13 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 const SHEET_ID = process.env.LEAD_SHEET_ID || '11QuB1V2KpKGF5Fj8UNQbLxwMNHmikjM-1Hm3PuBLtvY';
 const SHEET_TAB = process.env.LEAD_SHEET_TAB || 'Sheet1';
-const POLL_INTERVAL_MS = parseInt(process.env.LEAD_SHEET_POLL_MS) || 120000;
+const POLL_INTERVAL_MS = parseInt(process.env.LEAD_SHEET_POLL_MS) || 15000;
 // Only the tail of the sheet is read; ~50 applications a day, so this is days of slack.
 const TAIL_ROWS = 400;
 // Rows older than this are never imported, so a first run doesn't revive old applicants.
 const MAX_AGE_DAYS = 3;
 // Rows younger than this are left for the webhook, so the two don't race.
-const WEBHOOK_GRACE_MS = 2 * 60 * 1000;
+const WEBHOOK_GRACE_MS = 30 * 1000;
 
 // Sheet columns: created, Name, Age, Email, phone, postcode, Image_url, parent phone, source, note
 const COL = { created: 0, name: 1, age: 2, email: 3, phone: 4, postcode: 5, image: 6, parentPhone: 7, source: 8, note: 9 };
