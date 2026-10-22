@@ -20,13 +20,12 @@ import {
   FiChevronUp,
   FiMail,
   FiBookOpen,
-  FiTarget,
   FiDollarSign,
   FiTrendingUp,
   FiMessageSquare,
-  FiActivity,
   FiCpu,
-  FiBarChart
+  FiBarChart,
+  FiPieChart
 } from 'react-icons/fi';
 
 const Layout = ({ children }) => {
@@ -666,10 +665,9 @@ const Layout = ({ children }) => {
     { name: 'Sales', href: '/sales', icon: FiTrendingUp, adminOnly: true },
     { name: 'Finance', href: '/finance', icon: FiDollarSign, adminOnly: true },
     { name: 'Reports', href: '/reports', icon: FiBarChart2, adminOnly: true },
-    { name: 'Booker Analytics', href: '/booker-analytics', icon: FiActivity, adminOnly: true },
+    { name: 'Lead Report', href: '/lead-report', icon: FiPieChart, adminOnly: true },
     { name: 'Lead Analytics', href: '/lead-analytics', icon: FiBarChart, adminOnly: true },
     { name: 'AI Assistant', href: '/ai-assistant', icon: FiCpu, adminOnly: true },
-    { name: 'Retargeting', href: '/retargeting', icon: FiTarget, adminOnly: true },
     { name: 'Templates', href: '/templates', icon: FiMail, adminOnly: true },
     { name: 'Legacy Data', href: '/legacy', icon: FiUsers, adminOnly: true },
     { name: 'Users', href: '/users', icon: FiUser, adminOnly: true },
