@@ -51,6 +51,15 @@ function sheetTimestamp(value) {
   return `${m[3]}-${pad(m[2])}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
 }
 
+// "2026-10-21 03:42:20" UK wall-clock time -> UTC ISO string (handles BST/GMT).
+function ukTimeToUtc(ts) {
+  const m = String(ts || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const asUtc = Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  const shown = new Date(londonNow(asUtc - Date.now()).replace(' ', 'T') + 'Z').getTime();
+  return new Date(asUtc - (shown - asUtc)).toISOString();
+}
+
 // The forms the same UK mobile is stored under across the CRM's import paths.
 function phoneVariants(phone) {
   const raw = String(phone || '').trim();
@@ -245,4 +254,4 @@ function getLeadSheetImporter() {
   return instance;
 }
 
-module.exports = { startLeadSheetImporter, getLeadSheetImporter, LeadSheetImporter, phoneVariants, sheetTimestamp };
+module.exports = { startLeadSheetImporter, getLeadSheetImporter, LeadSheetImporter, phoneVariants, sheetTimestamp, ukTimeToUtc };

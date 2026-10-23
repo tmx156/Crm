@@ -2,14 +2,22 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const { auth, adminAuth } = require('../middleware/auth');
 const config = require('../config');
+const { LeadSheetImporter, phoneVariants, sheetTimestamp, ukTimeToUtc } = require('../utils/leadSheetImporter');
 
 const router = express.Router();
 
 const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey || config.supabase.serverKey);
 
-// Report on website leads only: the ones the webhook (and the sheet importer
-// that backs it up) create, which carry a "Website Lead: <ad>" note.
-const WEBSITE_NOTE = 'Website Lead%';
+// The report is built from the "Model Applications" sheet, the one record of
+// every website application with the time it was made and the ad it came from.
+// Each row is matched to its CRM lead (email, then phone) for status and
+// bookings, so leads that arrived by CSV upload count on the day they applied.
+// Nothing is written to the CRM.
+const SHEET_ID = process.env.LEAD_SHEET_ID || '11QuB1V2KpKGF5Fj8UNQbLxwMNHmikjM-1Hm3PuBLtvY';
+const SHEET_TAB = process.env.LEAD_SHEET_TAB || 'Sheet1';
+const SHEET_CACHE_MS = 60 * 1000;
+// Sheet columns: created, Name, Age, Email, phone, postcode, Image_url, parent phone, source, note
+const COL = { created: 0, name: 1, age: 2, email: 3, phone: 4, postcode: 5, source: 8, note: 9 };
 // Days run 8am to 8am UK time, to line up with the ad account's reporting day.
 const DAY_START_HOUR = 8;
 // Distances are from the studio, the same reference the upload pop-up uses.
@@ -49,13 +57,6 @@ function reportDayOf(date) {
   return p.hour < DAY_START_HOUR ? addDays(p.day, -1) : p.day;
 }
 
-// created_at is written as a UTC ISO string; some rows lack the trailing Z.
-function parseCreatedAt(value) {
-  if (!value) return null;
-  const s = String(value);
-  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z');
-}
-
 function haversineMiles(a, b) {
   const R = 3959;
   const toRad = x => x * Math.PI / 180;
@@ -93,28 +94,77 @@ async function lookupPostcodes(postcodes) {
   }
 }
 
-async function fetchLeads(startUtc, endUtc, select) {
-  const rows = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
-      .from('leads')
-      .select(select)
-      .ilike('notes', WEBSITE_NOTE)
-      .is('deleted_at', null)
-      .gte('created_at', startUtc.toISOString())
-      .lt('created_at', endUtc.toISOString())
-      .order('created_at', { ascending: false })
-      .range(from, from + 999);
-    if (error) throw error;
-    rows.push(...data);
-    if (data.length < 1000) break;
+let sheetsClient = null;
+let sheetCache = { at: 0, rows: [] };
+
+// Every application on the sheet, oldest first, with its UTC submit time.
+// Repeat applicants are marked on the sheet and left out, as they aren't new leads.
+async function loadApplications() {
+  if (Date.now() - sheetCache.at < SHEET_CACHE_MS) return sheetCache.rows;
+  if (!sheetsClient) {
+    const importer = new LeadSheetImporter(null);
+    await importer.authenticate();
+    sheetsClient = importer.sheets;
   }
+  const resp = await sheetsClient.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `'${SHEET_TAB}'!A2:J`
+  });
+  const rows = [];
+  for (const r of resp.data.values || []) {
+    const appliedAt = ukTimeToUtc(sheetTimestamp(r[COL.created]));
+    if (!appliedAt || !String(r[COL.name] || '').trim()) continue;
+    if (/REPEAT APPLICANT/i.test(String(r[COL.note] || ''))) continue;
+    const ageNum = parseInt(r[COL.age]);
+    rows.push({
+      appliedAt: new Date(appliedAt),
+      name: String(r[COL.name]).trim(),
+      age: Number.isFinite(ageNum) ? ageNum : null,
+      email: String(r[COL.email] || '').trim().toLowerCase(),
+      phone: String(r[COL.phone] || '').trim(),
+      postcode: String(r[COL.postcode] || '').trim(),
+      source: String(r[COL.source] || '').trim()
+    });
+  }
+  sheetCache = { at: Date.now(), rows };
   return rows;
 }
 
-function sourceOf(notes) {
-  const m = String(notes || '').match(/^Website Lead:\s*([^\n|]+)/i);
-  const src = m ? m[1].trim() : '';
+function applicationsBetween(apps, startUtc, endUtc) {
+  return apps.filter(a => a.appliedAt >= startUtc && a.appliedAt < endUtc);
+}
+
+// Finds the CRM lead for each application: email first, then any stored form
+// of the phone number. Unmatched applications come back without a lead.
+async function matchCrmLeads(apps) {
+  const select = 'id, email, phone, status, ever_booked, date_booked, deleted_at';
+  const found = [];
+  const emails = [...new Set(apps.map(a => a.email).filter(Boolean))];
+  for (let i = 0; i < emails.length; i += 100) {
+    const { data, error } = await supabase.from('leads').select(select).in('email', emails.slice(i, i + 100));
+    if (error) throw error;
+    found.push(...data);
+  }
+  const byEmail = new Map();
+  for (const l of found) if (l.email) byEmail.set(l.email.trim().toLowerCase(), l);
+
+  const needPhone = apps.filter(a => !byEmail.has(a.email));
+  const phones = [...new Set(needPhone.flatMap(a => phoneVariants(a.phone)))];
+  const byPhone = new Map();
+  for (let i = 0; i < phones.length; i += 100) {
+    const { data, error } = await supabase.from('leads').select(select).in('phone', phones.slice(i, i + 100));
+    if (error) throw error;
+    for (const l of data) for (const v of phoneVariants(l.phone)) byPhone.set(v, l);
+  }
+
+  return apps.map(a => {
+    const lead = byEmail.get(a.email) || phoneVariants(a.phone).map(v => byPhone.get(v)).find(Boolean) || null;
+    return { app: a, lead: lead && !lead.deleted_at ? lead : null };
+  });
+}
+
+function sourceOf(source) {
+  const src = String(source || '').trim();
   if (!src) return 'Unknown';
   return /^organic$/i.test(src) ? 'Organic' : src;
 }
@@ -169,37 +219,38 @@ router.get('/', auth, adminAuth, async (req, res) => {
     let dayCount = 0;
     for (let d = from; d <= to; d = addDays(d, 1)) dayCount++;
 
-    const leads = await fetchLeads(startUtc, endUtc, 'id, name, age, postcode, notes, status, created_at, ever_booked, date_booked');
+    const apps = await loadApplications();
+    const leads = await matchCrmLeads(applicationsBetween(apps, startUtc, endUtc).reverse());
     const prevStart = dayStartUtc(addDays(from, -dayCount));
-    const prevLeads = await fetchLeads(prevStart, startUtc, 'id');
+    const prevLeads = applicationsBetween(apps, prevStart, startUtc);
 
     // Daily counts for the chart: the last N days ending on `to`.
     const chartFrom = addDays(to, -(DAILY_CHART_DAYS - 1));
-    const chartLeads = await fetchLeads(dayStartUtc(chartFrom), endUtc, 'created_at');
-    const perDay = countBy(chartLeads, l => reportDayOf(parseCreatedAt(l.created_at)));
+    const chartLeads = applicationsBetween(apps, dayStartUtc(chartFrom), endUtc);
+    const perDay = countBy(chartLeads, a => reportDayOf(a.appliedAt));
     const daily = [];
     for (let d = chartFrom; d <= to; d = addDays(d, 1)) {
       daily.push({ day: d, count: perDay[d] || 0, selected: d >= from && d <= to });
     }
 
-    await lookupPostcodes([STUDIO_POSTCODE.replace(' ', ''), ...leads.map(l => normalisePostcode(l.postcode))]);
+    await lookupPostcodes([STUDIO_POSTCODE.replace(' ', ''), ...leads.map(l => normalisePostcode(l.app.postcode))]);
     const studio = postcodeCache.get(STUDIO_POSTCODE.replace(' ', ''));
 
-    const rows = leads.map(l => {
-      const loc = postcodeCache.get(normalisePostcode(l.postcode)) || null;
+    const rows = leads.map(({ app, lead }, i) => {
+      const loc = postcodeCache.get(normalisePostcode(app.postcode)) || null;
       const miles = loc && studio ? haversineMiles(studio, loc) : null;
-      const created = parseCreatedAt(l.created_at);
       return {
-        id: l.id,
-        name: l.name,
-        age: l.age,
-        postcode: l.postcode,
-        status: l.status,
-        source: sourceOf(l.notes),
+        id: lead ? lead.id : null,
+        key: lead ? lead.id : `sheet-${i}`,
+        name: app.name,
+        age: app.age,
+        postcode: app.postcode,
+        status: lead ? lead.status : 'Not in CRM',
+        source: sourceOf(app.source),
         area: loc ? loc.area : 'Unknown',
         miles: miles === null ? null : Math.round(miles * 10) / 10,
-        createdAt: created ? created.toISOString() : null,
-        booked: isBooked(l)
+        createdAt: app.appliedAt.toISOString(),
+        booked: lead ? isBooked(lead) : false
       };
     });
 
@@ -221,6 +272,7 @@ router.get('/', auth, adminAuth, async (req, res) => {
       range: { from, to, days: dayCount, startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(), today },
       summary: {
         total: rows.length,
+        inCrm: rows.filter(r => r.id).length,
         previousTotal: prevLeads.length,
         booked: rows.filter(r => r.booked).length,
         located: distances.length,

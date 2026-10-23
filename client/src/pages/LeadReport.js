@@ -139,7 +139,8 @@ const LeadReport = () => {
     { label: 'Within 50 miles', value: s.within50, sub: `${pct(s.within50, s.located)} of leads with a postcode`, subClass: 'text-gray-500' },
     { label: 'Over 150 miles', value: s.over150, sub: `${pct(s.over150, s.located)} probably too far to attend`, subClass: 'text-amber-700' },
     { label: 'Average age', value: s.avgAge === null ? '–' : s.avgAge, sub: 'Of leads who gave an age', subClass: 'text-gray-500' },
-    { label: 'Booked so far', value: s.booked, sub: `${pct(s.booked, s.total)} of these leads`, subClass: 'text-gray-500' }
+    { label: 'Booked so far', value: s.booked, sub: `${pct(s.booked, s.total)} of these leads`, subClass: 'text-gray-500' },
+    { label: 'In the CRM', value: s.inCrm, sub: s.total - s.inCrm ? `${s.total - s.inCrm} on the sheet but not in the CRM` : 'Every application matched', subClass: s.total - s.inCrm ? 'text-amber-700' : 'text-gray-500' }
   ] : [];
 
   const maxOf = (list) => Math.max(0, ...(list || []).map((x) => x.count));
@@ -212,7 +213,7 @@ const LeadReport = () => {
 
       {s && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {kpis.map((k) => (
               <div key={k.label} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-gray-600">{k.label}</span>
@@ -308,10 +309,12 @@ const LeadReport = () => {
                 </thead>
                 <tbody>
                   {data.leads.map((l) => (
-                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={l.key} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2.5 px-2 text-gray-600 whitespace-nowrap">{l.createdAt ? formatTime(l.createdAt) : '–'}</td>
                       <td className="py-2.5 px-2 font-medium">
-                        <Link to={`/leads/${l.id}`} className="text-blue-700 hover:text-blue-900">{l.name}</Link>
+                        {l.id
+                          ? <Link to={`/leads/${l.id}`} className="text-blue-700 hover:text-blue-900">{l.name}</Link>
+                          : <span className="text-gray-700">{l.name}</span>}
                       </td>
                       <td className="py-2.5 px-2">{l.age ?? '–'}</td>
                       <td className="py-2.5 px-2">{l.postcode || '–'}</td>
