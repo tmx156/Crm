@@ -29,7 +29,7 @@ function getArea(postcode) {
   return m[1];
 }
 
-const SHOWED_STATUSES = ['Arrived', 'Left', 'No Sale'];
+const SHOWED_STATUSES = ['Arrived', 'Attended', 'Left', 'No Sale'];
 
 const AGE_BRACKETS = ['0-18', '19-24', '25-34', '35-44', '45-54', '55-64', '65+', 'Unknown/Invalid'];
 
@@ -92,7 +92,7 @@ router.get('/summary', auth, adminAuth, async (req, res) => {
     );
 
     // "Arrived" leads: booked leads whose appointment (date_booked) falls in range
-    // and who showed up (Arrived/Left/No Sale) — matches booker-performance.js's
+    // and who showed up (Arrived/Attended/Left/No Sale) — matches booker-performance.js's
     // on-calendar outcome convention. This, not total leads created, is the
     // denominator for Conversion Rate.
     const arrivedLeads = await fetchAllPaginated('leads', 'id, status, booking_status, date_booked', q =>
