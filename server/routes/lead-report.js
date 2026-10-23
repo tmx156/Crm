@@ -73,8 +73,51 @@ function normalisePostcode(pc) {
   return String(pc || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-async function lookupPostcodes(postcodes) {
-  const missing = [...new Set(postcodes.filter(pc => pc && !postcodeCache.has(pc)))];
+const OUTCODE = /^[A-Z]{1,2}\d[A-Z\d]?$/;
+const PLACE_TYPES = ['City', 'Town', 'Village', 'Suburban Area', 'Hamlet'];
+
+async function getJson(url) {
+  const resp = await fetch(url);
+  return resp.ok ? resp.json() : null;
+}
+
+// Not every applicant types a full postcode: some give half of one ("LA1") or
+// a mistyped one, some just a town ("Lancaster"). Try the district, then the
+// place name, so they still get a distance.
+async function lookupFallback(raw) {
+  // A full address with the postcode inside it ("20 X Road, Wigan, WN2 4AB, UK").
+  const embedded = String(raw || '').toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/);
+  if (embedded) {
+    const json = await getJson(`https://api.postcodes.io/postcodes/${embedded[1]}${embedded[2]}`);
+    const r = json && json.result;
+    if (r) return { lat: r.latitude, lon: r.longitude, area: r.admin_district || r.region || 'Unknown' };
+  }
+  const tail = String(raw || '').toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?)\W*(?:UK)?\W*$/);
+  const pc = embedded ? embedded[1] : tail && /[,\s]/.test(String(raw).trim()) ? tail[1] : normalisePostcode(raw);
+  const outcode = OUTCODE.test(pc) ? pc : pc.length >= 5 && OUTCODE.test(pc.slice(0, -3)) ? pc.slice(0, -3) : null;
+  if (outcode) {
+    const json = await getJson(`https://api.postcodes.io/outcodes/${outcode}`);
+    const r = json && json.result;
+    if (r && r.latitude) return { lat: r.latitude, lon: r.longitude, area: (r.admin_district || [])[0] || 'Unknown' };
+  }
+  const name = String(raw || '').replace(/[^A-Za-z' -]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (name.length < 3) return null;
+  const json = await getJson(`https://api.postcodes.io/places?q=${encodeURIComponent(name)}&limit=20`);
+  const places = (json && json.result) || [];
+  const rank = p => (p.name_1 || '').toLowerCase() === name.toLowerCase() ? PLACE_TYPES.indexOf(p.local_type) + 1 || 9 : 99;
+  const best = places.filter(p => rank(p) < 99).sort((a, b) => rank(a) - rank(b))[0];
+  if (!best) return null;
+  return { lat: best.latitude, lon: best.longitude, area: best.district_borough || best.county_unitary || best.name_1 };
+}
+
+// Takes what the applicant typed; results are cached by normalisePostcode(raw).
+async function lookupPostcodes(rawPostcodes) {
+  const rawByKey = new Map();
+  for (const raw of rawPostcodes) {
+    const key = normalisePostcode(raw);
+    if (key && !postcodeCache.has(key) && !rawByKey.has(key)) rawByKey.set(key, raw);
+  }
+  const missing = [...rawByKey.keys()];
   for (let i = 0; i < missing.length; i += 100) {
     const batch = missing.slice(i, i + 100);
     try {
@@ -86,11 +129,21 @@ async function lookupPostcodes(postcodes) {
       const json = await resp.json();
       for (const item of json.result || []) {
         const r = item.result;
-        postcodeCache.set(item.query, r ? { lat: r.latitude, lon: r.longitude, area: r.admin_district || r.region || 'Unknown' } : null);
+        if (r) postcodeCache.set(item.query, { lat: r.latitude, lon: r.longitude, area: r.admin_district || r.region || 'Unknown' });
       }
     } catch (err) {
       console.warn('[LeadReport] Postcode lookup failed:', err.message);
     }
+  }
+  const unresolved = missing.filter(key => !postcodeCache.has(key));
+  for (let i = 0; i < unresolved.length; i += 10) {
+    await Promise.all(unresolved.slice(i, i + 10).map(async key => {
+      try {
+        postcodeCache.set(key, await lookupFallback(rawByKey.get(key)));
+      } catch (err) {
+        console.warn('[LeadReport] Place lookup failed:', err.message);
+      }
+    }));
   }
 }
 
@@ -273,7 +326,7 @@ router.get('/', auth, adminAuth, async (req, res) => {
     }
 
     const salesByLead = await loadSales(leads.map(m => m.lead.id));
-    await lookupPostcodes([STUDIO_POSTCODE.replace(' ', ''), ...leads.map(l => normalisePostcode(l.app.postcode))]);
+    await lookupPostcodes([STUDIO_POSTCODE, ...leads.map(l => l.app.postcode)]);
     const studio = postcodeCache.get(STUDIO_POSTCODE.replace(' ', ''));
 
     const rows = leads.map(({ app, lead }) => {
