@@ -134,33 +134,52 @@ function applicationsBetween(apps, startUtc, endUtc) {
   return apps.filter(a => a.appliedAt >= startUtc && a.appliedAt < endUtc);
 }
 
-// Finds the CRM lead for each application: email first, then any stored form
-// of the phone number. Unmatched applications come back without a lead.
+// Finds the live CRM lead for each application, by email then any stored form
+// of the phone number. Deleted leads are removed from the table outright, so an
+// application with no lead is one that was deleted or never arrived.
 async function matchCrmLeads(apps) {
-  const select = 'id, email, phone, status, ever_booked, date_booked, deleted_at';
-  const found = [];
-  const emails = [...new Set(apps.map(a => a.email).filter(Boolean))];
-  for (let i = 0; i < emails.length; i += 100) {
-    const { data, error } = await supabase.from('leads').select(select).in('email', emails.slice(i, i + 100));
-    if (error) throw error;
-    found.push(...data);
-  }
+  const select = 'id, email, phone, status, ever_booked, date_booked';
   const byEmail = new Map();
-  for (const l of found) if (l.email) byEmail.set(l.email.trim().toLowerCase(), l);
-
-  const needPhone = apps.filter(a => !byEmail.has(a.email));
-  const phones = [...new Set(needPhone.flatMap(a => phoneVariants(a.phone)))];
   const byPhone = new Map();
-  for (let i = 0; i < phones.length; i += 100) {
-    const { data, error } = await supabase.from('leads').select(select).in('phone', phones.slice(i, i + 100));
+  const add = l => {
+    if (l.email) byEmail.set(l.email.trim().toLowerCase(), l);
+    for (const v of phoneVariants(l.phone)) byPhone.set(v, l);
+  };
+  const find = a => byEmail.get(a.email) || phoneVariants(a.phone).map(v => byPhone.get(v)).find(Boolean) || null;
+  if (!apps.length) return [];
+
+  // Most leads reach the CRM within a few days of applying (webhook at once,
+  // CSV upload next morning), so one window read covers nearly all of them.
+  const times = apps.map(a => a.appliedAt.getTime());
+  const windowStart = new Date(Math.min(...times) - 2 * 864e5).toISOString();
+  const windowEnd = new Date(Math.max(...times) + 7 * 864e5).toISOString();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select(select)
+      .is('deleted_at', null)
+      .gte('created_at', windowStart)
+      .lt('created_at', windowEnd)
+      .order('id')
+      .range(from, from + 999);
     if (error) throw error;
-    for (const l of data) for (const v of phoneVariants(l.phone)) byPhone.set(v, l);
+    data.forEach(add);
+    if (data.length < 1000) break;
   }
 
-  return apps.map(a => {
-    const lead = byEmail.get(a.email) || phoneVariants(a.phone).map(v => byPhone.get(v)).find(Boolean) || null;
-    return { app: a, lead: lead && !lead.deleted_at ? lead : null };
-  });
+  // The rest (leads already in the CRM before they applied) are looked up directly.
+  const rest = apps.filter(a => !find(a));
+  const emails = [...new Set(rest.map(a => a.email).filter(Boolean))];
+  const phones = [...new Set(rest.flatMap(a => phoneVariants(a.phone)))];
+  for (const [column, values] of [['email', emails], ['phone', phones]]) {
+    for (let i = 0; i < values.length; i += 100) {
+      const { data, error } = await supabase.from('leads').select(select).is('deleted_at', null).in(column, values.slice(i, i + 100));
+      if (error) throw error;
+      data.forEach(add);
+    }
+  }
+
+  return apps.map(a => ({ app: a, lead: find(a) }));
 }
 
 function sourceOf(source) {
@@ -219,15 +238,24 @@ router.get('/', auth, adminAuth, async (req, res) => {
     let dayCount = 0;
     for (let d = from; d <= to; d = addDays(d, 1)) dayCount++;
 
-    const apps = await loadApplications();
-    const leads = await matchCrmLeads(applicationsBetween(apps, startUtc, endUtc).reverse());
     const prevStart = dayStartUtc(addDays(from, -dayCount));
-    const prevLeads = applicationsBetween(apps, prevStart, startUtc);
+    const chartFrom = addDays(to, -(DAILY_CHART_DAYS - 1));
+    const chartStart = dayStartUtc(chartFrom);
+
+    // Only applications whose lead is still in the CRM count anywhere, so a
+    // lead deleted from the CRM drops out of every figure.
+    const apps = await loadApplications();
+    // Someone who applied twice is one lead, counted at their first application.
+    const seen = new Set();
+    const matched = (await matchCrmLeads(applicationsBetween(apps, prevStart < chartStart ? prevStart : chartStart, endUtc)))
+      .filter(m => !m.lead || (!seen.has(m.lead.id) && seen.add(m.lead.id)));
+    const inRange = matched.filter(m => m.app.appliedAt >= startUtc && m.app.appliedAt < endUtc);
+    const leads = inRange.filter(m => m.lead).reverse();
+    const prevLeads = matched.filter(m => m.lead && m.app.appliedAt >= prevStart && m.app.appliedAt < startUtc);
 
     // Daily counts for the chart: the last N days ending on `to`.
-    const chartFrom = addDays(to, -(DAILY_CHART_DAYS - 1));
-    const chartLeads = applicationsBetween(apps, dayStartUtc(chartFrom), endUtc);
-    const perDay = countBy(chartLeads, a => reportDayOf(a.appliedAt));
+    const chartLeads = matched.filter(m => m.lead && m.app.appliedAt >= chartStart);
+    const perDay = countBy(chartLeads, m => reportDayOf(m.app.appliedAt));
     const daily = [];
     for (let d = chartFrom; d <= to; d = addDays(d, 1)) {
       daily.push({ day: d, count: perDay[d] || 0, selected: d >= from && d <= to });
@@ -236,21 +264,21 @@ router.get('/', auth, adminAuth, async (req, res) => {
     await lookupPostcodes([STUDIO_POSTCODE.replace(' ', ''), ...leads.map(l => normalisePostcode(l.app.postcode))]);
     const studio = postcodeCache.get(STUDIO_POSTCODE.replace(' ', ''));
 
-    const rows = leads.map(({ app, lead }, i) => {
+    const rows = leads.map(({ app, lead }) => {
       const loc = postcodeCache.get(normalisePostcode(app.postcode)) || null;
       const miles = loc && studio ? haversineMiles(studio, loc) : null;
       return {
-        id: lead ? lead.id : null,
-        key: lead ? lead.id : `sheet-${i}`,
+        id: lead.id,
+        key: lead.id,
         name: app.name,
         age: app.age,
         postcode: app.postcode,
-        status: lead ? lead.status : 'Not in CRM',
+        status: lead.status,
         source: sourceOf(app.source),
         area: loc ? loc.area : 'Unknown',
         miles: miles === null ? null : Math.round(miles * 10) / 10,
         createdAt: app.appliedAt.toISOString(),
-        booked: lead ? isBooked(lead) : false
+        booked: isBooked(lead)
       };
     });
 
@@ -272,7 +300,7 @@ router.get('/', auth, adminAuth, async (req, res) => {
       range: { from, to, days: dayCount, startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(), today },
       summary: {
         total: rows.length,
-        inCrm: rows.filter(r => r.id).length,
+        notInCrm: inRange.length - rows.length,
         previousTotal: prevLeads.length,
         booked: rows.filter(r => r.booked).length,
         located: distances.length,

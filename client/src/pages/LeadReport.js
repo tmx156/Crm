@@ -140,7 +140,7 @@ const LeadReport = () => {
     { label: 'Over 150 miles', value: s.over150, sub: `${pct(s.over150, s.located)} probably too far to attend`, subClass: 'text-amber-700' },
     { label: 'Average age', value: s.avgAge === null ? '–' : s.avgAge, sub: 'Of leads who gave an age', subClass: 'text-gray-500' },
     { label: 'Booked so far', value: s.booked, sub: `${pct(s.booked, s.total)} of these leads`, subClass: 'text-gray-500' },
-    { label: 'In the CRM', value: s.inCrm, sub: s.total - s.inCrm ? `${s.total - s.inCrm} on the sheet but not in the CRM` : 'Every application matched', subClass: s.total - s.inCrm ? 'text-amber-700' : 'text-gray-500' }
+    { label: 'Left out', value: s.notInCrm, sub: 'On the sheet but deleted from the CRM, so not counted', subClass: 'text-gray-500' }
   ] : [];
 
   const maxOf = (list) => Math.max(0, ...(list || []).map((x) => x.count));
@@ -312,9 +312,7 @@ const LeadReport = () => {
                     <tr key={l.key} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2.5 px-2 text-gray-600 whitespace-nowrap">{l.createdAt ? formatTime(l.createdAt) : '–'}</td>
                       <td className="py-2.5 px-2 font-medium">
-                        {l.id
-                          ? <Link to={`/leads/${l.id}`} className="text-blue-700 hover:text-blue-900">{l.name}</Link>
-                          : <span className="text-gray-700">{l.name}</span>}
+                        <Link to={`/leads/${l.id}`} className="text-blue-700 hover:text-blue-900">{l.name}</Link>
                       </td>
                       <td className="py-2.5 px-2">{l.age ?? '–'}</td>
                       <td className="py-2.5 px-2">{l.postcode || '–'}</td>
