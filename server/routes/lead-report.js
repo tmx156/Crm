@@ -182,6 +182,17 @@ async function matchCrmLeads(apps) {
   return apps.map(a => ({ app: a, lead: find(a) }));
 }
 
+// Total sale amount per lead id.
+async function loadSales(leadIds) {
+  const totals = new Map();
+  for (let i = 0; i < leadIds.length; i += 100) {
+    const { data, error } = await supabase.from('sales').select('lead_id, amount').in('lead_id', leadIds.slice(i, i + 100));
+    if (error) throw error;
+    for (const s of data) totals.set(s.lead_id, (totals.get(s.lead_id) || 0) + (Number(s.amount) || 0));
+  }
+  return totals;
+}
+
 function sourceOf(source) {
   const src = String(source || '').trim();
   if (!src) return 'Unknown';
@@ -261,6 +272,7 @@ router.get('/', auth, adminAuth, async (req, res) => {
       daily.push({ day: d, count: perDay[d] || 0, selected: d >= from && d <= to });
     }
 
+    const salesByLead = await loadSales(leads.map(m => m.lead.id));
     await lookupPostcodes([STUDIO_POSTCODE.replace(' ', ''), ...leads.map(l => normalisePostcode(l.app.postcode))]);
     const studio = postcodeCache.get(STUDIO_POSTCODE.replace(' ', ''));
 
@@ -278,7 +290,8 @@ router.get('/', auth, adminAuth, async (req, res) => {
         area: loc ? loc.area : 'Unknown',
         miles: miles === null ? null : Math.round(miles * 10) / 10,
         createdAt: app.appliedAt.toISOString(),
-        booked: isBooked(lead)
+        booked: isBooked(lead),
+        spent: salesByLead.get(lead.id) || 0
       };
     });
 
@@ -303,6 +316,8 @@ router.get('/', auth, adminAuth, async (req, res) => {
         notInCrm: inRange.length - rows.length,
         previousTotal: prevLeads.length,
         booked: rows.filter(r => r.booked).length,
+        bought: rows.filter(r => r.spent > 0).length,
+        revenue: Math.round(rows.reduce((sum, r) => sum + r.spent, 0) * 100) / 100,
         located: distances.length,
         avgMiles: avg(distances),
         medianMiles: distances.length ? distances[Math.floor(distances.length / 2)] : null,

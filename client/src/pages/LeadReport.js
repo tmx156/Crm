@@ -140,6 +140,7 @@ const LeadReport = () => {
     { label: 'Over 150 miles', value: s.over150, sub: `${pct(s.over150, s.located)} probably too far to attend`, subClass: 'text-amber-700' },
     { label: 'Average age', value: s.avgAge === null ? '–' : s.avgAge, sub: 'Of leads who gave an age', subClass: 'text-gray-500' },
     { label: 'Booked so far', value: s.booked, sub: `${pct(s.booked, s.total)} of these leads`, subClass: 'text-gray-500' },
+    { label: 'Bought so far', value: s.bought, sub: `£${Math.round(s.revenue).toLocaleString('en-GB')} spent · ${pct(s.bought, s.booked)} of booked`, subClass: 'text-emerald-700 font-semibold' },
     { label: 'Left out', value: s.notInCrm, sub: 'On the sheet but deleted from the CRM, so not counted', subClass: 'text-gray-500' }
   ] : [];
 
@@ -305,6 +306,7 @@ const LeadReport = () => {
                     <th className="py-2.5 px-2 font-semibold">Miles</th>
                     <th className="py-2.5 px-2 font-semibold">Ad</th>
                     <th className="py-2.5 px-2 font-semibold">Status</th>
+                    <th className="py-2.5 px-2 font-semibold">Bought</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -323,10 +325,15 @@ const LeadReport = () => {
                       </td>
                       <td className="py-2.5 px-2">{l.source}</td>
                       <td className="py-2.5 px-2">{l.status}</td>
+                      <td className="py-2.5 px-2">
+                        {l.spent > 0
+                          ? <span className="bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">£{Math.round(l.spent).toLocaleString('en-GB')}</span>
+                          : '–'}
+                      </td>
                     </tr>
                   ))}
                   {data.leads.length === 0 && (
-                    <tr><td colSpan={7} className="py-6 text-center text-gray-500">No website leads in this period yet.</td></tr>
+                    <tr><td colSpan={8} className="py-6 text-center text-gray-500">No website leads in this period yet.</td></tr>
                   )}
                 </tbody>
               </table>
