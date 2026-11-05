@@ -188,9 +188,14 @@ class LeadSheetImporter {
       this.io.emit('lead_updated', { lead, action: 'created', leadId: lead.id, timestamp: now });
       this.io.emit('stats_update_needed', { type: 'lead_created', leadId: lead.id, timestamp: now });
     }
-    fbCapi.trackLead(lead, { actionSource: 'website' }).catch(err => {
-      console.error('[FB CAPI] Unhandled error in trackLead (sheet import):', err.message);
-    });
+    // Same reason as the webhook: the public site already sent this lead to
+    // Meta with a deduplicable event_id, so a second Lead from here would be
+    // counted as another person. See server/routes/webhook.js.
+    if (process.env.FB_TRACK_LEAD_ON_INTAKE === 'true') {
+      fbCapi.trackLead(lead, { actionSource: 'website' }).catch(err => {
+        console.error('[FB CAPI] Unhandled error in trackLead (sheet import):', err.message);
+      });
+    }
     return lead;
   }
 

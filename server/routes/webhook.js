@@ -139,9 +139,22 @@ router.post('/leads', webhookAuth, async (req, res) => {
           if (error) console.warn('[FB CAPI] Could not store fbc/fbp on lead (run add_fb_tracking_columns migration):', error.message);
         });
     }
-    fbCapi.trackLead(lead, fbOptions).catch(err => {
-      console.error('[FB CAPI] Unhandled error in trackLead (webhook):', err.message);
-    });
+    // Meta Lead is NOT sent from here.
+    //
+    // The public site already sends a Lead to the same pixel from its own
+    // server, with an event_id its browser pixel reuses, so Meta merges the two
+    // into one conversion. This call sent a SECOND Lead with an event_id minted
+    // here (Lead_<leadId>_<timestamp>), which Meta could not match, so every
+    // website lead was counted twice: reported leads roughly doubled and
+    // reported cost per lead roughly halved.
+    //
+    // Booking and Purchase tracking are unaffected. Set
+    // FB_TRACK_LEAD_ON_INTAKE=true to restore this Lead event.
+    if (process.env.FB_TRACK_LEAD_ON_INTAKE === 'true') {
+      fbCapi.trackLead(lead, fbOptions).catch(err => {
+        console.error('[FB CAPI] Unhandled error in trackLead (webhook):', err.message);
+      });
+    }
 
     res.status(201).json({
       success: true,
