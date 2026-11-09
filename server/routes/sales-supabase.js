@@ -1,4 +1,5 @@
 const express = require('express');
+const { getUkDateRange } = require('../utils/ukDateRange');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const dbManager = require('../database-connection-manager');
@@ -281,10 +282,18 @@ router.get('/', auth, async (req, res) => {
       filters.eq = { user_id: req.user.id };
     }
 
-    // Date range filter
-    if (created_at_start && created_at_end) {
+    // Period filter (UK time). Falls back to explicit start/end if no period given.
+    const range = dateRange ? getUkDateRange(dateRange) : null;
+    if (range) {
+      filters.gte = { created_at: range.start.toISOString() };
+      filters.lt = { created_at: range.end.toISOString() };
+    } else if (created_at_start && created_at_end) {
       filters.gte = { created_at: created_at_start };
       filters.lte = { created_at: created_at_end };
+    }
+
+    if (paymentType && paymentType !== 'all') {
+      filters.eq = { ...(filters.eq || {}), payment_type: paymentType };
     }
 
     // Get sales
@@ -301,13 +310,21 @@ router.get('/', auth, async (req, res) => {
     const leadIds = [...new Set((sales || []).map(s => s.lead_id).filter(Boolean))];
     const userIds = [...new Set((sales || []).map(s => s.user_id).filter(Boolean))];
 
+    // Fetch leads in chunks so a long period doesn't make the request URL too long
+    const fetchLeads = async () => {
+      const out = [];
+      for (let i = 0; i < leadIds.length; i += 100) {
+        const chunk = await dbManager.query('leads', {
+          select: 'id, name, email, phone, status, booking_history',
+          in: { id: leadIds.slice(i, i + 100) }
+        });
+        out.push(...(chunk || []));
+      }
+      return out;
+    };
+
     const [leadsData, usersData] = await Promise.all([
-      leadIds.length > 0
-        ? dbManager.query('leads', {
-            select: 'id, name, email, phone, status, booking_history',
-            in: { id: leadIds }
-          })
-        : [],
+      fetchLeads(),
       userIds.length > 0
         ? dbManager.query('users', {
             select: 'id, name, email',
@@ -365,45 +382,15 @@ router.get('/stats', auth, async (req, res) => {
 
     // Apply date range filters if provided
     const { dateRange, paymentType } = req.query;
-    if (dateRange) {
-      const now = new Date();
-      let startDate, endDate;
+    // Same UK-time period as the sales list, so the cards match the table
+    const range = dateRange ? getUkDateRange(dateRange) : null;
+    if (range) {
+      filters.gte = { created_at: range.start.toISOString() };
+      filters.lt = { created_at: range.end.toISOString() };
+    }
 
-      switch (dateRange) {
-        case 'today':
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          endDate = new Date(now.setHours(23, 59, 59, 999));
-          break;
-        case 'this_week':
-          const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-          startDate = new Date(startOfWeek.setHours(0, 0, 0, 0));
-          endDate = new Date();
-          break;
-        case 'this_month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-          break;
-        case 'last_month':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-          break;
-        case 'this_quarter':
-          const quarterStart = Math.floor(now.getMonth() / 3) * 3;
-          startDate = new Date(now.getFullYear(), quarterStart, 1);
-          endDate = new Date();
-          break;
-        case 'this_year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date();
-          break;
-        default:
-          break;
-      }
-
-      if (startDate && endDate) {
-        filters.gte = { created_at: startDate.toISOString() };
-        filters.lte = { created_at: endDate.toISOString() };
-      }
+    if (paymentType && paymentType !== 'all') {
+      filters.eq = { ...(filters.eq || {}), payment_type: paymentType };
     }
 
     // Get sales with proper filtering
