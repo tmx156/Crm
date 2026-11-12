@@ -30,6 +30,7 @@ const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const photoStorage = require('./photoStorage');
 const imageEdit = require('./imageEdit');
+const teethPass = require('./teethPass');
 
 const supabase = createClient(config.supabase.url, config.supabase.serverKey);
 
@@ -283,6 +284,13 @@ async function run({ photoId, leadId, userId }) {
 
     const base = (source.filename || 'photo').replace(/\.[^.]+$/, '');
     // Cancelled just as the image came back - don't save it.
+    if (signal.aborted) throw cancelledError();
+
+    // In half- and full-length shots the main retouch leaves stained teeth
+    // as they were; a face-sized teeth-only pass catches those. Null means
+    // no visible teeth, nothing to do, or it failed - keep the retouch.
+    const withTeeth = await teethPass.apply(result.buffer, { signal });
+    if (withTeeth) result = { ...result, buffer: withTeeth, mimeType: 'image/jpeg' };
     if (signal.aborted) throw cancelledError();
     const row = await photoStorage.processAndUpload({
       buffer: result.buffer,

@@ -23,6 +23,7 @@ const { auth } = require('../middleware/auth');
 const config = require('../config');
 const photoStorage = require('../services/photoStorage');
 const imageEdit = require('../services/imageEdit');
+const teethPass = require('../services/teethPass');
 
 const router = express.Router();
 
@@ -395,6 +396,14 @@ router.post('/:photoId', auth, async (req, res) => {
     }
 
     if (closed) throw Object.assign(new Error('Edit cancelled'), { cancelled: true });
+
+    // Same teeth touch-up the auto-retouch gets, for the beauty presets.
+    if (preset === 'magazine' || preset === 'skin-retouch') {
+      send('status', { stage: 'editing', message: 'Checking teeth', editId });
+      const withTeeth = await teethPass.apply(result.buffer, { signal: abort.signal });
+      if (withTeeth) result = { ...result, buffer: withTeeth, mimeType: 'image/jpeg' };
+      if (closed) throw Object.assign(new Error('Edit cancelled'), { cancelled: true });
+    }
 
     send('status', { stage: 'saving', message: 'Saving the retouched photo' });
 

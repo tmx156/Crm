@@ -259,12 +259,14 @@ const SLIM_AND_TEETH =
  * came back as yellow as they went in.
  */
 const TEETH =
-  'FIRST PRIORITY - TEETH: if any teeth are visible, whiten them clearly. ' +
-  'Remove all yellow, brown, beige and grey staining so every tooth is an ' +
-  'even, clean, natural soft white with a hint of warm ivory - like freshly ' +
-  'cleaned, professionally whitened healthy teeth. The change must be ' +
-  'obvious next to the original, even when the teeth start very yellow. ' +
-  'Not pure white, glowing, chalky, blue-white or veneer-like, and keep the ' +
+  'FIRST PRIORITY - TEETH: if any teeth are visible - however small the ' +
+  'face is in the frame, even in a full-length shot - clean and whiten ' +
+  'them. Remove the yellow, brown and grey staining and lift them a few ' +
+  'shades from where they start, so the change is clearly visible, to a ' +
+  'natural, healthy off-white with warm ivory in it - the way real clean ' +
+  'teeth look, with slight natural variation between teeth. Never make ' +
+  'them perfect bright white unless they already are almost white: no ' +
+  'pure white, glowing, chalky, blue-white or veneer look. Keep the ' +
   'shape, size and position of every tooth. ';
 
 const SKIN_RETOUCH =
