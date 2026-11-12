@@ -234,6 +234,9 @@ function bestSizeFor(width, height, longEdge = TARGET_LONG_EDGE) {
  * first light-touch pass kept every crease and read older and harsher than
  * those. They soften lines by roughly two-thirds, even the tone and give a
  * satin glow, while the face stays hers.
+ *
+ * Nov 2026: the studio still saw neck lines and some face lines, so face
+ * lines now soften by about three-quarters and the neck most of all.
  */
 const SKIN_RETOUCH =
   'Retouch the skin the way a skilled portrait retoucher does by hand: ' +
@@ -242,10 +245,13 @@ const SKIN_RETOUCH =
   'rash and stray hairs crossing the face. Keep moles, freckles and beauty ' +
   'marks. Even out blotchy or uneven skin tone and redness into one ' +
   "smooth, healthy tone that matches the person's own complexion. Soften " +
-  "crow's-feet, under-eye lines, forehead lines, smile lines and neck " +
-  'creases by about two-thirds - they stay softly visible so the face ' +
-  'keeps its character, but they read as gentle, shallow folds, not deep, ' +
-  'dark or etched, and never sharper or darker than in the original. Light ' +
+  "crow's-feet, under-eye lines, forehead lines, frown lines and smile " +
+  'lines by about three-quarters - only a faint trace stays so the face ' +
+  'keeps its character; they read as soft, shallow folds, never deep, ' +
+  'dark or etched, and never sharper or darker than in the original. ' +
+  'Smooth the neck the most: neck rings, creases, crepey skin and ' +
+  'stringy cords should be almost gone, leaving a smooth, even neck with ' +
+  'only its natural shape and shading. Light ' +
   'the skin softly, like a large diffused beauty light, so its fine ' +
   'texture is low in contrast and lines do not cast hard shadows. Clean ' +
   'up under-eye darkness and puffiness so the eyes look rested, keeping ' +
@@ -255,7 +261,7 @@ const SKIN_RETOUCH =
   'over-sharpened. Give the skin a soft, satin glow: tone down greasy ' +
   'shine and hot spots while keeping gentle highlights on the forehead, ' +
   'nose and cheekbones. Keep a natural flush in the cheeks and lips; no ' +
-  'tan, bronze, orange, grey or pale wash. Tidy the neck, chest, arms and ' +
+  'tan, bronze, orange, grey or pale wash. Tidy the chest, arms and ' +
   'hands the same gentle way - even tone, softened creases - keeping their ' +
   'natural veins, knuckles and shape. Do not enlarge, brighten or recolour ' +
   'the eyes beyond natural catchlights. The person must look exactly like ' +
