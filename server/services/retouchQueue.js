@@ -385,6 +385,7 @@ async function run({ photoId, leadId, userId }) {
  */
 /** An edit OpenAI's safety system declined - see imageEdit describeFailure */
 const isRefusal = (message) => /safety system|OpenAI refused/i.test(message || '');
+const LOW_MODERATION_SINCE = '2026-11-12T12:00:00Z';
 
 async function findMissing({ leadId, since, neverAttempted = false } = {}) {
   let q = supabase
@@ -417,8 +418,11 @@ async function findMissing({ leadId, since, neverAttempted = false } = {}) {
   // read as sexual). The same photo gets the same answer every time, so
   // "Retouch missing" must not keep sending it - and repeated refusals count
   // against the account. Retouch these by hand or leave them as originals.
+  // Refusals from before the filter was lowered (imageEdit 'moderation')
+  // are worth one more try - most were ordinary cleavage or lying-down shots.
   const refused = new Set(edits
-    .filter(e => e.status === 'failed' && isRefusal(e.error_message))
+    .filter(e => e.status === 'failed' && isRefusal(e.error_message) &&
+      e.created_at >= LOW_MODERATION_SINCE)
     .map(e => e.source_photo_id));
 
   return originals.filter(p =>

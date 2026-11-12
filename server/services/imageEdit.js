@@ -778,6 +778,11 @@ async function editImage({
   // will quietly return a face that is not the client's. The 2.x models do
   // it automatically and reject the parameter.
   if (capabilities.inputFidelity) form.append('input_fidelity', 'high');
+  // 'auto' (the default) refuses ordinary portfolio shots - someone lying
+  // down, a dress with some cleavage, swimwear - as sexual. 'low' is
+  // OpenAI's own setting for less restrictive filtering; their usage
+  // policies still apply. IMAGE_MODERATION=auto turns it back.
+  form.append('moderation', process.env.IMAGE_MODERATION || 'low');
   form.append('output_format', OUTPUT_FORMAT);
   form.append('output_compression', String(OUTPUT_COMPRESSION));
   form.append('n', '1');
