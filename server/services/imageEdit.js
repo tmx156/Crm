@@ -251,13 +251,21 @@ const SLIM_AND_TEETH =
   'believable - the same build, height, posture and bone structure, the ' +
   'same face, cheekbones and features, only slightly leaner. Clothes follow ' +
   'the slimmer shape naturally, and the backdrop, straight lines, furniture ' +
-  'and anything near the body stay straight and undistorted. Whiten the ' +
-  'teeth so the difference is visible: take out yellow, beige and grey ' +
-  'staining and any darker teeth, and make every tooth an even, clean, ' +
-  'natural soft white with a hint of warm ivory - a shade less bright ' +
-  'than the whites of the eyes, like freshly cleaned healthy teeth, never ' +
-  'pure white, glowing, chalky, blue-white or veneer-like - keeping the ' +
-  "exact shape, size, gaps and position of every tooth. ";
+  'and anything near the body stay straight and undistorted. ';
+
+/**
+ * Put first in the prompt: buried at the end of the long magazine brief the
+ * model all but ignored it, and heavily stained teeth (Irene Clark, Nov 2026)
+ * came back as yellow as they went in.
+ */
+const TEETH =
+  'FIRST PRIORITY - TEETH: if any teeth are visible, whiten them clearly. ' +
+  'Remove all yellow, brown, beige and grey staining so every tooth is an ' +
+  'even, clean, natural soft white with a hint of warm ivory - like freshly ' +
+  'cleaned, professionally whitened healthy teeth. The change must be ' +
+  'obvious next to the original, even when the teeth start very yellow. ' +
+  'Not pure white, glowing, chalky, blue-white or veneer-like, and keep the ' +
+  'shape, size and position of every tooth. ';
 
 const SKIN_RETOUCH =
   'Retouch the skin the way a skilled portrait retoucher does by hand: ' +
@@ -315,6 +323,7 @@ const PRESETS = {
     label: 'Magazine finish',
     description: 'Life-like premium retouch, keeping the shoot\'s own mood - the house look',
     prompt:
+      TEETH +
       'This is a professional fashion and beauty retouch of one studio ' +
       'photograph. Return one finished edit of this exact photograph: same ' +
       'model, same pose, same clothing, same composition, camera angle and ' +
@@ -404,6 +413,7 @@ const PRESETS = {
     label: 'Skin retouch',
     description: 'Life-like skin retouch, gentle slimming, clean teeth',
     prompt:
+      TEETH +
       SKIN_RETOUCH +
       'Apart from that gentle slimming, do not reshape anything: keep the ' +
       'exact shape and size of the head, hairline, face and features, and ' +
