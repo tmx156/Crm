@@ -238,6 +238,25 @@ function bestSizeFor(width, height, longEdge = TARGET_LONG_EDGE) {
  * Nov 2026: the studio still saw neck lines and some face lines, so face
  * lines now soften by about three-quarters and the neck most of all.
  */
+/**
+ * Nov 2026: the studio asked for every retouch to take the person about a
+ * stone (6 kg) slimmer and give them clean - not bleached - teeth. Slimming
+ * is limited to soft tissue so the face and bone structure stay theirs.
+ */
+const SLIM_AND_TEETH =
+  'Make the person look about one stone (around 6 kg) slimmer, the way a ' +
+  'skilled retoucher does it: gently slim the waist, tummy, hips, thighs, ' +
+  'upper arms and back, and tighten a soft or double chin and the ' +
+  'under-jaw so the jawline is a little cleaner. Keep it subtle and ' +
+  'believable - the same build, height, posture and bone structure, the ' +
+  'same face, cheekbones and features, only slightly leaner. Clothes follow ' +
+  'the slimmer shape naturally, and the backdrop, straight lines, furniture ' +
+  'and anything near the body stay straight and undistorted. Whiten the ' +
+  'teeth a little so they look clean and healthy: remove yellowing and ' +
+  'stains to a natural, slightly warm off-white that matches the eye ' +
+  'whites - never bright, glowing, blue-white or veneer-like - keeping the ' +
+  "exact shape, size, gaps and position of every tooth. ";
+
 const SKIN_RETOUCH =
   'Retouch the skin the way a skilled portrait retoucher does by hand: ' +
   'clean, even and softly polished, but still clearly real skin. Remove ' +
@@ -268,7 +287,8 @@ const SKIN_RETOUCH =
   'themselves, fresh and rested - the same age, never a younger, older or ' +
   'different person, and never with different eyes, brows, lips or face ' +
   'shape. Do this however small the face is in the frame and whichever way ' +
-  'up it is. ';
+  'up it is. ' +
+  SLIM_AND_TEETH;
 
 const PRESETS = {
   // Derived from a real before/after set the studio delivered (Margaret
@@ -331,11 +351,10 @@ const PRESETS = {
       'or eyes; keep the natural soft, fine wisps along the outline of the ' +
       'hair so the hairline and edges look real, never cut out or helmet-' +
       'smooth. Keep the natural hair texture and hairstyle. ' +
-      'Do not reshape anything: keep the exact shape, size and outline of ' +
-      'the head and skull, hairline, forehead, ears, eyes, nose, mouth, lips, ' +
-      'jaw, chin, neck and body, and the same proportions between them - no ' +
-      'slimming, no jaw or neck sculpting, no enlarged eyes, no bigger or ' +
-      'rounder head. Do not distort garments, prints, seams, buttons, ' +
+      'Apart from that gentle slimming, do not reshape anything: keep the ' +
+      'exact shape, size and outline of the head and skull, hairline, ' +
+      'forehead, ears, eyes, nose, mouth, lips and bone structure - no ' +
+      'enlarged eyes, no bigger or rounder head, no face sculpting. Do not distort garments, prints, seams, buttons, ' +
       'jewellery, glasses, footwear, folds or fabric structure. ' +
       'Keep the framing exactly: the same crop and zoom, with the subject at ' +
       'exactly the same size and position in the frame - do not zoom in, do ' +
@@ -376,12 +395,12 @@ const PRESETS = {
   },
   'skin-retouch': {
     label: 'Skin retouch',
-    description: 'Life-like skin retouch, no reshaping',
+    description: 'Life-like skin retouch, gentle slimming, clean teeth',
     prompt:
       SKIN_RETOUCH +
-      'Do not reshape anything: keep the exact shape, ' +
-      'size and outline of the head, hairline, face, features, jaw, neck and ' +
-      'body, and the same framing and zoom. Do not change the expression, ' +
+      'Apart from that gentle slimming, do not reshape anything: keep the ' +
+      'exact shape and size of the head, hairline, face and features, and ' +
+      'the same framing and zoom. Do not change the expression, ' +
       'head angle, eyes, gaze, hair style, clothing, backdrop or lighting.'
   },
   'studio-lighting': {
