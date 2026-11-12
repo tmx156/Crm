@@ -252,9 +252,11 @@ const SLIM_AND_TEETH =
   'same face, cheekbones and features, only slightly leaner. Clothes follow ' +
   'the slimmer shape naturally, and the backdrop, straight lines, furniture ' +
   'and anything near the body stay straight and undistorted. Whiten the ' +
-  'teeth a little so they look clean and healthy: remove yellowing and ' +
-  'stains to a natural, slightly warm off-white that matches the eye ' +
-  'whites - never bright, glowing, blue-white or veneer-like - keeping the ' +
+  'teeth so the difference is clearly visible: take out all yellow, ' +
+  'beige and grey staining and any darker teeth, and make every tooth an ' +
+  'even, clean, fresh natural white, as bright as the whites of the eyes - ' +
+  'like freshly cleaned and professionally whitened teeth, but never ' +
+  'glowing, chalky, blue-white or veneer-like - keeping the ' +
   "exact shape, size, gaps and position of every tooth. ";
 
 const SKIN_RETOUCH =
