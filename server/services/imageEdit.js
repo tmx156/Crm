@@ -270,7 +270,12 @@ const SKIN_RETOUCH =
   'dark or etched, and never sharper or darker than in the original. ' +
   'Smooth the neck the most: neck rings, creases, crepey skin and ' +
   'stringy cords should be almost gone, leaving a smooth, even neck with ' +
-  'only its natural shape and shading. Light ' +
+  'only its natural shape and shading. Give the under-eyes special care: ' +
+  'smooth the fine crinkly lines, creases and crepey skin below the eyes ' +
+  'and at the outer corners almost completely, and lift dark circles, ' +
+  'bags and hollows so the area is smooth, even and bright - still with ' +
+  'its natural shape and soft shading, never flat, puffy or airbrushed ' +
+  'blank. Light ' +
   'the skin softly, like a large diffused beauty light, so its fine ' +
   'texture is low in contrast and lines do not cast hard shadows. Clean ' +
   'up under-eye darkness and puffiness so the eyes look rested, keeping ' +
