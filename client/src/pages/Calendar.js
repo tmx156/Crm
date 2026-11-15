@@ -37,6 +37,13 @@ const dayKey = (d) => {
 };
 const PHONE_QUERY = '(max-width: 639px)';
 
+// Order bookings the way the calendar lays them out: by time, then by title
+// (matches eventOrder on <FullCalendar>). Leads sharing a slot used to follow
+// database order instead, so the modal's next/previous skipped around.
+const compareEventsLikeCalendar = (a, b) =>
+  (new Date(a.start) - new Date(b.start)) ||
+  String(a.title || '').localeCompare(String(b.title || ''));
+
 const isBrowserReload = () => {
   try {
     const [entry] = window.performance?.getEntriesByType?.('navigation') || [];
@@ -891,7 +898,7 @@ const Calendar = () => {
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(ev);
     }
-    for (const list of map.values()) list.sort((a, b) => new Date(a.start) - new Date(b.start));
+    for (const list of map.values()) list.sort(compareEventsLikeCalendar);
     return map;
   }, [filteredEvents]);
 
@@ -1921,10 +1928,12 @@ const Calendar = () => {
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     
-    return events.filter(event => {
+    // Same list the calendar is drawing (Cancelled view + search applied),
+    // in the same order, so next/previous follows the slots on screen
+    return filteredEvents.filter(event => {
       const eventDate = new Date(event.start);
       return eventDate >= dayStart && eventDate < dayEnd;
-    }).sort((a, b) => new Date(a.start) - new Date(b.start));
+    }).sort(compareEventsLikeCalendar);
   };
 
   const navigateToPreviousBooking = () => {
@@ -2322,6 +2331,7 @@ const Calendar = () => {
           }}
           weekends={true}
           firstDay={1}
+          eventOrder="start,title"
           events={phoneMonth ? [] : filteredEvents}
           dayCellContent={phoneMonth ? renderPhoneDayCell : undefined}
           dayCellClassNames={phoneMonth ? (arg) => (dayKey(arg.date) === agendaDay ? ['fc-agenda-day'] : []) : undefined}
