@@ -582,6 +582,7 @@ router.get('/calendar', auth, async (req, res) => {
 
     // PERFORMANCE: Get pagination and date range from query params
     const { start, end, page = 1, limit = 200, offset = 0 } = req.query;
+    const cancelledOnly = req.query.cancelled === 'only';
 
     // Validate and cap limit - high cap to allow fetching ALL bookings in one request
     const validatedLimit = Math.min(parseInt(limit) || 10000, 10000);
@@ -628,9 +629,14 @@ router.get('/calendar', auth, async (req, res) => {
             is_confirmed, booking_status, has_sale,${etaSelect}${statsSelect}
             created_at, updated_at, postcode, notes, image_url, booking_account
           `)
-          .or('date_booked.not.is.null,status.eq.Booked')
-          .is('deleted_at', null)
-          .not('status', 'in', '(Cancelled,Rejected)')
+          .is('deleted_at', null);
+
+        // ?cancelled=only -> just the cancelled bookings (they keep their date_booked)
+        batchQuery = cancelledOnly
+          ? batchQuery.eq('status', 'Cancelled').not('date_booked', 'is', null)
+          : batchQuery.or('date_booked.not.is.null,status.eq.Booked').not('status', 'in', '(Cancelled,Rejected)');
+
+        batchQuery = batchQuery
           .order('date_booked', { ascending: true, nullsLast: true })
           .range(batchOffset, batchOffset + BATCH_SIZE - 1);
 
@@ -726,7 +732,7 @@ router.get('/calendar', auth, async (req, res) => {
       console.log('📅 Calendar API: Trying simplified fallback query...');
       try {
         // Single fallback query with timeout
-        const fallbackPromise = supabase
+        const fallbackBase = supabase
           .from('leads')
           .select(`
             id, name, phone, email, age, status, date_booked, booker_id,
@@ -734,8 +740,10 @@ router.get('/calendar', auth, async (req, res) => {
             created_at, updated_at, postcode, notes, image_url, booking_account
           `)
           .not('date_booked', 'is', null)
-          .is('deleted_at', null)
-          .not('status', 'in', '(Cancelled,Rejected)') // ✅ Exclude cancelled/rejected from fallback
+          .is('deleted_at', null);
+        const fallbackPromise = (cancelledOnly
+          ? fallbackBase.eq('status', 'Cancelled')
+          : fallbackBase.not('status', 'in', '(Cancelled,Rejected)')) // ✅ Exclude cancelled/rejected from fallback
           .order('date_booked', { ascending: true })
           .limit(parseInt(limit));
         

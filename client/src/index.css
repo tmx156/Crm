@@ -560,3 +560,39 @@
   object-fit: contain;
   transition: transform 0.3s ease;
 }
+
+/* Phone month view (Calendar.js): each day shows a booking count and the
+   chosen day is listed under the grid, so cells are tap targets, not chips. */
+.fc-phone-month .fc-daygrid-day-frame {
+  min-height: 58px !important;
+  cursor: pointer;
+}
+.fc-phone-month .fc-daygrid-day-top {
+  justify-content: center;
+}
+.fc-phone-month .fc-daygrid-day-number {
+  width: 100%;
+  padding: 6px 0 0 !important;
+}
+.fc-phone-month .fc-daygrid-day-events {
+  display: none;
+}
+.fc-phone-month .fc-day-today .phone-day-num {
+  background: #334155;
+  color: #fff;
+  border-radius: 9999px;
+  padding: 3px 5px;
+  margin-top: -3px;
+}
+.fc-phone-month .fc-daygrid-day.fc-agenda-day {
+  background: #eef2ff;
+  box-shadow: inset 0 0 0 2px #6366f1;
+}
+
+/* Calendar "Cancelled" toolbar button - red while showing cancelled only */
+.fc .fc-cancelled-button.fc-button-active,
+.fc .fc-cancelled-button.fc-button-active:hover {
+  background-color: #f43f5e;
+  border-color: #f43f5e;
+  color: #fff;
+}

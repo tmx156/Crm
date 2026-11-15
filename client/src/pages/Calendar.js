@@ -29,6 +29,14 @@ import { getOptimizedImageUrl } from '../utils/imageUtils';
 const CALENDAR_VIEW_STATE_KEY = 'calendarViewState';
 const CALENDAR_OPEN_LEAD_KEY = 'calendarOpenLeadId';
 
+// Local calendar day, 'YYYY-MM-DD' (toISOString would shift late bookings
+// into the next day in BST).
+const dayKey = (d) => {
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+const PHONE_QUERY = '(max-width: 639px)';
+
 const isBrowserReload = () => {
   try {
     const [entry] = window.performance?.getEntriesByType?.('navigation') || [];
@@ -129,6 +137,22 @@ const Calendar = () => {
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [isBookingInProgress, setIsBookingInProgress] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  // "Cancelled" toolbar button: show only cancelled bookings on their day
+  const [showCancelled, setShowCancelled] = useState(false);
+  const [cancelledEvents, setCancelledEvents] = useState([]);
+
+  // Phone month view: a day cell is ~50px wide, too narrow for booking chips,
+  // so each day shows a count and the chosen day is listed under the grid.
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia(PHONE_QUERY).matches);
+  const [viewType, setViewType] = useState(null);
+  const [agendaDay, setAgendaDay] = useState(() => dayKey(new Date()));
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_QUERY);
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const phoneMonth = isPhone && viewType === 'dayGridMonth';
   
   // Reject lead modal state
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -781,6 +805,117 @@ const Calendar = () => {
 
   // Kept for callers that only need the text
   const getAccountLabel = (email) => getAccountTag(email)?.label || null;
+
+  // Load cancelled bookings whenever the Cancelled view is switched on
+  useEffect(() => {
+    if (!showCancelled) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await axios.get(`/api/leads/calendar?cancelled=only&limit=10000&t=${Date.now()}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+          timeout: 15000
+        });
+        if (!alive) return;
+        const list = (res.data.leads || [])
+          .filter(lead => lead && lead.id && lead.status === 'Cancelled' && lead.date_booked && !lead.deleted_at)
+          .map(lead => {
+            const start = new Date(lead.date_booked);
+            if (isNaN(start.getTime())) return null;
+            const end = new Date(start.getTime() + 15 * 60000);
+            let bookingHistory = lead.booking_history || [];
+            if (!Array.isArray(bookingHistory)) {
+              try { bookingHistory = typeof bookingHistory === 'string' ? JSON.parse(bookingHistory) : []; }
+              catch (e) { bookingHistory = []; }
+            }
+            const colour = getEventColor('Cancelled', false, false);
+            return {
+              id: lead.id,
+              title: `${lead.name} - Cancelled`,
+              start: start.toISOString(),
+              end: end.toISOString(),
+              allDay: false,
+              backgroundColor: colour,
+              borderColor: colour,
+              extendedProps: {
+                lead: { ...lead, bookingHistory },
+                phone: lead.phone,
+                status: lead.status,
+                displayStatus: 'Cancelled',
+                etaAt: null,
+                booker: lead.booker?.name || lead.booker_name || 'N/A',
+                isConfirmed: lead.is_confirmed || false
+              }
+            };
+          })
+          .filter(Boolean);
+        setCancelledEvents(list);
+      } catch (err) {
+        console.error('📅 Failed to load cancelled bookings:', err.message);
+      }
+    })();
+    return () => { alive = false; };
+    // `events` is a dependency so a status change (e.g. un-cancelling a lead
+    // from this view) reloads the list instead of leaving it stale.
+  }, [showCancelled, getEventColor, events]);
+
+  // Highlight the Cancelled toolbar button while it is on
+  useEffect(() => {
+    document.querySelectorAll('.fc-cancelled-button').forEach(btn => {
+      btn.classList.toggle('fc-button-active', showCancelled);
+    });
+  }, [showCancelled, viewType]);
+
+  const filteredEvents = React.useMemo(() => {
+    const source = showCancelled ? cancelledEvents : events;
+    if (!searchTerm) return source;
+    const search = searchTerm.toLowerCase();
+    return source.filter(event => {
+      const leadName = event.extendedProps?.lead?.name || event.title || '';
+      const leadPhone = event.extendedProps?.phone || '';
+      const leadEmail = event.extendedProps?.lead?.email || '';
+      return (
+        leadName.toLowerCase().includes(search) ||
+        leadPhone.includes(search) ||
+        leadEmail.toLowerCase().includes(search)
+      );
+    });
+  }, [events, cancelledEvents, showCancelled, searchTerm]);
+
+  // Bookings per local day, in time order - drives the phone month view
+  const eventsByDay = React.useMemo(() => {
+    const map = new Map();
+    for (const ev of filteredEvents) {
+      if (!ev.start) continue;
+      const k = dayKey(ev.start);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(ev);
+    }
+    for (const list of map.values()) list.sort((a, b) => new Date(a.start) - new Date(b.start));
+    return map;
+  }, [filteredEvents]);
+
+  // Phone month cell: day number, booking count, and a strip split by status colour
+  const renderPhoneDayCell = useCallback((arg) => {
+    const list = eventsByDay.get(dayKey(arg.date)) || [];
+    const byColour = {};
+    for (const ev of list) byColour[ev.backgroundColor] = (byColour[ev.backgroundColor] || 0) + 1;
+    return (
+      <div className="flex flex-col items-center w-full leading-none">
+        <span className="phone-day-num">{arg.date.getDate()}</span>
+        {list.length > 0 && (
+          <>
+            <span className="mt-1 text-[11px] font-bold text-indigo-700">{list.length}</span>
+            <span className="mt-1 flex w-full max-w-[34px] h-1 rounded-full overflow-hidden bg-gray-200">
+              {Object.entries(byColour).map(([colour, n]) => (
+                <span key={colour} style={{ background: colour, flexGrow: n }} />
+              ))}
+            </span>
+          </>
+        )}
+      </div>
+    );
+  }, [eventsByDay]);
 
   // PERFORMANCE: Memoize eventContent so FullCalendar doesn't re-render all cells on every parent render
   const renderEventContent = useCallback((arg) => {
@@ -2161,16 +2296,23 @@ const Calendar = () => {
       </div>
 
       {/* Calendar */}
-      <div className="mobile-card overflow-x-auto">
+      <div className={`mobile-card overflow-x-auto ${phoneMonth ? 'fc-phone-month' : ''}`}>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView={initialCalendarStateRef.current?.view || 'dayGridMonth'}
           initialDate={initialCalendarStateRef.current?.date ? new Date(initialCalendarStateRef.current.date) : new Date()}
           headerToolbar={{
-            left: window.innerWidth < 640 ? 'prev,next today,dayGridMonth' : 'prev,next today',
+            left: window.innerWidth < 640 ? 'prev,next today,dayGridMonth cancelled' : 'prev,next today',
             center: 'title',
-            right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay'
+            right: window.innerWidth < 640 ? '' : 'dayGridMonth,timeGridWeek,timeGridDay cancelled'
+          }}
+          customButtons={{
+            cancelled: {
+              text: showCancelled ? '✕ Cancelled' : 'Cancelled',
+              hint: 'Show only cancelled bookings',
+              click: () => setShowCancelled(v => !v)
+            }
           }}
           buttonText={{
             today: 'Today',
@@ -2180,24 +2322,27 @@ const Calendar = () => {
           }}
           weekends={true}
           firstDay={1}
-          events={events.filter(event => {
-            if (!searchTerm) return true;
-            const search = searchTerm.toLowerCase();
-            const leadName = event.extendedProps?.lead?.name || event.title || '';
-            const leadPhone = event.extendedProps?.phone || '';
-            const leadEmail = event.extendedProps?.lead?.email || '';
-            return (
-              leadName.toLowerCase().includes(search) ||
-              leadPhone.includes(search) ||
-              leadEmail.toLowerCase().includes(search)
-            );
-          })}
-          dateClick={handleDateTimeClick}
+          events={phoneMonth ? [] : filteredEvents}
+          dayCellContent={phoneMonth ? renderPhoneDayCell : undefined}
+          dayCellClassNames={phoneMonth ? (arg) => (dayKey(arg.date) === agendaDay ? ['fc-agenda-day'] : []) : undefined}
+          dateClick={(info) => {
+            // Phone month: tapping a day lists it below instead of leaving the month
+            if (phoneMonth) { setAgendaDay(dayKey(info.date)); return; }
+            handleDateTimeClick(info);
+          }}
           eventClick={handleEventClick}
           height="auto"
           eventDisplay="block"
           datesSet={(dateInfo) => {
             console.log('📅 View initialized:', dateInfo.view.type, dateInfo.startStr, 'to', dateInfo.endStr);
+            setViewType(dateInfo.view.type);
+            const { currentStart, currentEnd } = dateInfo.view;
+            const inMonth = (k) => { const d = new Date(`${k}T12:00:00`); return d >= currentStart && d < currentEnd; };
+            setAgendaDay(prev => {
+              if (inMonth(prev)) return prev;
+              const today = dayKey(new Date());
+              return inMonth(today) ? today : dayKey(currentStart);
+            });
             try {
               localStorage.setItem(CALENDAR_VIEW_STATE_KEY, JSON.stringify({
                 view: dateInfo.view.type,
@@ -2263,6 +2408,68 @@ const Calendar = () => {
           eventWillUnmount={handleEventWillUnmount}
         />
       </div>
+
+      {/* Phone month view: the chosen day's bookings, in time order */}
+      {phoneMonth && (() => {
+        const list = eventsByDay.get(agendaDay) || [];
+        const dayDate = new Date(`${agendaDay}T12:00:00`);
+        return (
+          <div className="mobile-card mt-3 p-0 overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-200 bg-gray-50">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900">
+                  {dayDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {list.length ? `${list.length} booking${list.length === 1 ? '' : 's'}` : 'No bookings'}
+                </p>
+              </div>
+              <button
+                onClick={() => calendarRef.current?.getApi().changeView('timeGridDay', agendaDay)}
+                className="flex-shrink-0 flex items-center gap-1 px-3 py-2 rounded-lg bg-slate-700 text-white text-xs font-medium active:bg-slate-900"
+              >
+                <FiClock className="h-3.5 w-3.5" />
+                Day view / book
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {list.map(ev => {
+                const lead = ev.extendedProps?.lead || {};
+                const status = ev.extendedProps?.displayStatus || ev.extendedProps?.status;
+                const tag = getAccountTag(lead.booking_account);
+                const eta = status === 'On The Way' ? formatEtaTime(ev.extendedProps?.etaAt) : '';
+                const unread = lead.id && leadsWithUnreadEmails.has(lead.id);
+                return (
+                  <button
+                    key={ev.id}
+                    onClick={() => handleEventClick({ event: ev })}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-gray-100"
+                  >
+                    <span className="self-stretch w-1 rounded-full flex-shrink-0" style={{ background: ev.backgroundColor }} />
+                    <span className="w-[4.5rem] flex-shrink-0 text-sm font-semibold text-gray-900 tabular-nums">
+                      {new Date(ev.start).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-gray-900 truncate">{lead.name || ev.title}</span>
+                      <span className="flex items-center gap-1.5 mt-0.5 text-xs">
+                        <span className="font-semibold truncate" style={{ color: ev.backgroundColor }}>{status}</span>
+                        {tag && (
+                          <span className="px-1 rounded text-white font-bold flex-shrink-0" style={{ fontSize: '9px', background: tag.color }}>
+                            {tag.label}
+                          </span>
+                        )}
+                        {eta && <span className="font-bold flex-shrink-0" style={{ color: '#c026d3' }}>ETA {eta}</span>}
+                      </span>
+                    </span>
+                    {unread && <FiMail className="h-4 w-4 text-blue-500 flex-shrink-0 animate-pulse" />}
+                    <FiChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
 
 
